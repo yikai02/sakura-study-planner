@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>小櫻讀書計劃表 🌸 YPT 專注計時 × Numbers 統計儀表板</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- Top Navigation & Active YPT Timer Bar -->
+  <header class="top-navbar">
+    <div class="brand-area">
+      <div class="sakura-logo" aria-hidden="true">🌸</div>
+      <div class="brand-title">
+        <h1>
+          小櫻讀書計劃表
+          <span class="brand-badge">11/1 (Day 85) – 1/24 (Day 1)</span>
+        </h1>
+        <p class="brand-subtitle">YPT 真實專注計時模式 × Numbers 讀書計劃與即時統計儀表板</p>
+      </div>
+    </div>
+
+    <!-- Floating Active Timer Banner (shown when a slot is running or paused) -->
+    <div id="activeTimerBanner" class="active-timer-banner hidden">
+      <span class="live-dot"></span>
+      <div class="active-timer-info">
+        <span id="bannerSlotLabel">11月1日 早上</span>
+        <span id="bannerSubjectPill" class="subj-pill" data-subj="經濟">經濟</span>
+        <span id="bannerClock" class="active-timer-clock">00:00:00</span>
+      </div>
+      <div class="ypt-btn-group">
+        <button id="bannerToggleBtn" class="ypt-btn btn-pause" type="button">暫停 ⏸</button>
+        <button id="bannerStopBtn" class="ypt-btn btn-stop" type="button">結束 ⏹</button>
+        <button id="bannerJumpBtn" class="btn btn-xs" type="button">定位 ↵</button>
+      </div>
+    </div>
+
+    <!-- Right Actions: Save Status, Layout Switch, Load Pre-planned, Export/Import JSON, Reset -->
+    <div class="top-actions">
+      <div class="save-indicator" id="saveIndicator" title="所有變更皆自動儲存於瀏覽器 localStorage">
+        <span class="dot"></span>
+        <span id="saveStatusText">已自動儲存</span>
+      </div>
+      <button id="toggleLayoutBtn" class="btn btn-subtle" type="button" title="切換「上下全寬檢視」或「左右並排（Numbers 經典檢視）」">切換左右並排 ◫</button>
+      <button id="toggleDashboardBtn" class="btn btn-subtle" type="button">收合統計面板 ▲</button>
+      <button id="loadPdfPlanBtn" class="btn" type="button" title="載入原 Numbers 表中 11/1~12/7 已預排好的科目與範圍（時間與打勾皆保持歸零）">帶入原表預排範圍</button>
+      <button id="exportJsonBtn" class="btn" type="button">匯出 JSON</button>
+      <label for="importJsonInput" class="btn" style="margin:0;">匯入 JSON</label>
+      <input id="importJsonInput" type="file" accept=".json,application/json" style="display:none;" />
+      <button id="resetAllBtn" class="btn btn-danger-outline" type="button">全新重置</button>
+    </div>
+  </header>
+
+  <main class="app-container" id="appContainer">
+
+    <!-- Section 1: Overall KPI Overview & Editable 3-Phase Settings -->
+    <section class="overview-strip">
+      <!-- Overall KPI Card -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title"><span class="icon">✦</span> 85天衝刺總覽（11月1日 ～ 1月24日）</div>
+            <div class="card-subtitle">所有時間與紀錄從零開始計算・共 85 天（255 個讀書時段）</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="kpi-grid">
+            <div class="kpi-box">
+              <span class="kpi-label">累計真實讀書總時長</span>
+              <span class="kpi-value" id="kpiTotalStudyTime">0小時 0分</span>
+              <span class="kpi-sub" id="kpiActiveDaysSub">有效讀書天數：0 / 85 天</span>
+            </div>
+            <div class="kpi-box">
+              <span class="kpi-label">總完成時段 / 完成率</span>
+              <span class="kpi-value" id="kpiTotalCompletion">0 / 255 (0%)</span>
+              <span class="kpi-sub" id="kpiAvgSlotPerDay">每日平均完成：0.00 時段</span>
+            </div>
+            <div class="kpi-box">
+              <span class="kpi-label">每日平均讀書總時長</span>
+              <span class="kpi-value" id="kpiDailyMeanTime">0小時 0分</span>
+              <span class="kpi-sub" id="kpiDailyMeanAllSub">全85天日均：0小時 0分</span>
+            </div>
+            <div class="kpi-box">
+              <span class="kpi-label">每日總讀書時間中位數</span>
+              <span class="kpi-value" id="kpiDailyMedianTime">0小時 0分</span>
+              <span class="kpi-sub">排除極端值之單日總時長中位數</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Editable 3 Phases Configuration Card -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title"><span class="icon">🌸</span> 三階段衝刺區間設定（點擊即可編輯階段名稱與 Day 範圍）</div>
+            <div class="card-subtitle">預設：第一階段 Day 85-61、第二階段 Day 60-31、第三階段 Day 30-1</div>
+          </div>
+          <button id="restoreDefaultPhasesBtn" class="btn btn-xs btn-subtle" type="button">還原預設階段</button>
+        </div>
+        <div class="card-body">
+          <div class="phases-config-grid" id="phasesConfigContainer">
+            <!-- Dynamically rendered by app.js -->
+          </div>
+          <div id="phaseWarning" class="phase-warning" style="display:none;"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workspace Split Wrapper (supports stacked or side-by-side Numbers layout) -->
+    <div id="workspaceSplit" class="workspace-split">
+
+      <!-- Core Feature 2 - Real-time Linked 5 Statistical Tables & Goal Dashboard -->
+      <section id="dashboardSection" class="dashboard-section">
+        <div class="section-header-bar">
+          <div class="section-title-group">
+            <h2>📊 即時連動統計量表與目標儀表板</h2>
+            <span class="section-note">💡 主表格選擇「個經」或「總經」時，於統計表中自動歸類並匯總至「經濟」科目下計算</span>
+          </div>
+        </div>
+
+        <!-- Row 1: Table 1 (Sakura Phase Goals) & Table 2 (Completion Rate Table) -->
+        <div class="dashboard-grid-top">
+          <!-- Table 1: 小櫻目標（分階段目標表） -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><span class="icon">🎯</span> 1. 小櫻目標（分階段目標表）</div>
+                <div class="card-subtitle">橫軸為三個倒數階段，縱軸為 經濟、統計、財管、其他（點擊儲存格可直接編輯）</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="stat-table" id="goalTable">
+                  <!-- Rendered by app.js -->
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table 2: 完成率表單 -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><span class="icon">✅</span> 2. 完成率表單</div>
+                <div class="card-subtitle">依三階段分別統計：總完成度（累計打勾數）、總完成率、每日平均完成度</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="stat-table" id="completionTable">
+                  <!-- Rendered by app.js -->
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: Table 3 (Subject Study Counts & %) & Table 4 (Subject Study Time & %) -->
+        <div class="dashboard-grid-middle">
+          <!-- Table 3: 各科讀書次數 & 百分比表 -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><span class="icon">🔢</span> 3. 各科讀書次數 &amp; 百分比表</div>
+                <div class="card-subtitle">統計科目：經濟(含個經/總經)、統計、財管、英文、上課（有實際讀書紀錄或打勾的時段數與佔比）</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="stat-table" id="subjectCountTable">
+                  <!-- Rendered by app.js -->
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table 4: 各科讀書時間 & 百分比表 -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><span class="icon">⏱️</span> 4. 各科讀書時間 &amp; 百分比表</div>
+                <div class="card-subtitle">統計科目：經濟(含個經/總經)、統計、財管、英文、上課之累計真實讀書時間與佔比（%）</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="stat-table" id="subjectTimeTable">
+                  <!-- Rendered by app.js -->
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Table 5 (Advanced Time Statistics: Mean & Median) -->
+        <div class="dashboard-grid-bottom">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><span class="icon">📈</span> 5. 進階時間統計量表（平均數 &amp; 中位數）</div>
+                <div class="card-subtitle">計算各科單次讀書平均真實時長、單次讀書時間中位數（有效紀錄 &gt; 0 由小到大排序），以及每日平均讀書總時長與每日總讀書時間中位數</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="stat-table" id="advancedStatTable">
+                  <!-- Rendered by app.js -->
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Core Feature 1 - Daily Study Plan & YPT Real-time Timer Table (Main Workspace) -->
+      <section class="card schedule-main-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title"><span class="icon">🗓️</span> 每日讀書計劃與 YPT 真實計時表格（11/1 Day 85 ➔ 1/24 Day 1）</div>
+            <div class="card-subtitle">
+              每個時段配有「開始 ▶ / 暫停 ⏸ / 繼續 ▶ / 結束 ⏹」計時器（系統時間戳記 Date.now() 差值計算，背景執行不掉秒），並支援直接點擊手動輸入或修改開始時間、結束時間與真實讀書時長
+            </div>
+          </div>
+        </div>
+
+        <!-- Filter Tabs & Search Tools -->
+        <div class="schedule-controls">
+          <div class="filter-tabs" id="phaseFilterTabs">
+            <button class="filter-tab active" data-filter="all" type="button">全部顯示 (85天)</button>
+            <button class="filter-tab" data-filter="phase-0" type="button" id="filterTabPhase0">第一階段 (Day 85-61)</button>
+            <button class="filter-tab" data-filter="phase-1" type="button" id="filterTabPhase1">第二階段 (Day 60-31)</button>
+            <button class="filter-tab" data-filter="phase-2" type="button" id="filterTabPhase2">第三階段 (Day 30-1)</button>
+            <button class="filter-tab" data-filter="has-record" type="button">已有紀錄 / 已打勾</button>
+          </div>
+
+          <div class="schedule-right-tools">
+            <select id="subjectFilterSelect" class="search-input" style="min-width: 120px;">
+              <option value="">所有科目</option>
+              <option value="個經">個經</option>
+              <option value="總經">總經</option>
+              <option value="經濟">經濟 (含個/總經)</option>
+              <option value="統計">統計</option>
+              <option value="財管">財管</option>
+              <option value="英文">英文</option>
+              <option value="上課">上課</option>
+              <option value="其他">其他</option>
+            </select>
+            <input id="searchScheduleInput" type="search" class="search-input" placeholder="搜尋日期、行事曆、範圍任務..." />
+            <button id="jumpToTodayOrTopBtn" class="btn btn-xs btn-primary" type="button">跳至今日 / 起點</button>
+          </div>
+        </div>
+
+        <!-- Main 85-Day Table -->
+        <div class="main-table-wrapper" id="mainTableWrapper">
+          <table class="plan-table" id="planTable">
+            <thead>
+              <tr>
+                <th rowspan="2" class="sticky-col-1">Date<br><span style="font-weight:400;font-size:11px;color:var(--text-secondary);">日期 / 星期</span></th>
+                <th rowspan="2" class="sticky-col-2">Day<br><span style="font-weight:400;font-size:11px;color:var(--text-secondary);">倒數天數</span></th>
+                <th rowspan="2">行事曆<br><span style="font-weight:400;font-size:11px;color:var(--text-secondary);">重要行程 / 期中考 / 死線備註</span></th>
+                <th class="slot-header-morning">☀️ 早上（08:30 ~ 12:00）</th>
+                <th class="slot-header-afternoon">🌤️ 下午（13:30 ~ 17:30）</th>
+                <th class="slot-header-evening">🌙 晚上（19:00 ~ 23:30）</th>
+                <th colspan="3" class="summary-header">🌸 每日自動彙總</th>
+              </tr>
+              <tr class="sub-header">
+                <th>科目 / 範圍任務 / YPT 計時器 / 開始・結束・真實時長 / 完成</th>
+                <th>科目 / 範圍任務 / YPT 計時器 / 開始・結束・真實時長 / 完成</th>
+                <th>科目 / 範圍任務 / YPT 計時器 / 開始・結束・真實時長 / 完成</th>
+                <th>每日完成</th>
+                <th>每日完成率</th>
+                <th>每日讀書時間</th>
+              </tr>
+            </thead>
+            <tbody id="planTableBody">
+              <!-- 85 Days Rows Rendered by app.js -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
