@@ -4,6 +4,16 @@
  */
 
 const STORAGE_KEY = 'sakura_study_planner_v1';
+const CLOUD_CONFIG_KEY = 'sakura_firebase_sync_config_v1';
+
+// 雲端同步全域變數
+let cloudDb = null;
+let cloudDocRef = null;
+let cloudUnsubscribe = null;
+let cloudDebounceTimer = null;
+let isCloudConnected = false;
+let isRemoteUpdating = false;
+let currentCloudConfig = null;
 
 // 主表格下拉選單科目選項
 const SUBJECT_OPTIONS = ['', '個經', '總經', '經濟', '統計', '財管', '英文', '上課', '其他'];
@@ -342,25 +352,74 @@ function normalizeTimeInput(str) {
 }
 
 /**
- * 儲存狀態至 localStorage
+ * 儲存狀態至 localStorage，若已連線雲端則自動防抖上傳至 Firestore
  */
-function saveState(showIndicator = true) {
+function saveState(showIndicator = true, syncToCloud = true) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
     if (showIndicator) {
-      const statusEl = document.getElementById('saveStatusText');
-      if (statusEl) {
-        const now = new Date();
-        const hh = String(now.getHours()).padStart(2, '0');
-        const mm = String(now.getMinutes()).padStart(2, '0');
-        const ss = String(now.getSeconds()).padStart(2, '0');
-        statusEl.textContent = `已自動儲存 (${hh}:${mm}:${ss})`;
-      }
+      updateSaveStatusDisplay();
     }
   } catch (err) {
     console.error('Failed to save state:', err);
     showToast('⚠️ 儲存失敗：瀏覽器儲存空間可能已滿');
   }
+
+  // 自動同步至雲端（Google 文件級即時推播）
+  if (syncToCloud && isCloudConnected && cloudDocRef && !isRemoteUpdating) {
+    queueCloudSync();
+  }
+}
+
+function updateSaveStatusDisplay(cloudStatusMessage = null) {
+  const statusEl = document.getElementById('saveStatusText');
+  const dotEl = document.getElementById('saveIndicatorDot');
+  if (!statusEl) return;
+
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+
+  if (cloudStatusMessage) {
+    statusEl.textContent = cloudStatusMessage;
+  } else if (isCloudConnected) {
+    statusEl.textContent = `☁️ 雲端已同步 (${hh}:${mm}:${ss})`;
+    if (dotEl) dotEl.style.background = '#2E7350';
+  } else {
+    statusEl.textContent = `已本機儲存 (${hh}:${mm}:${ss})`;
+    if (dotEl) dotEl.style.background = '#4E8C6F';
+  }
+}
+
+/**
+ * 雲端防抖上傳（延遲 500ms 批次上傳連續輸入，避免頻繁寫入）
+ */
+function queueCloudSync() {
+  if (cloudDebounceTimer) {
+    clearTimeout(cloudDebounceTimer);
+  }
+  updateSaveStatusDisplay('☁️ 雲端同步中...');
+  setCloudNavbarStatus('syncing');
+
+  cloudDebounceTimer = setTimeout(async () => {
+    if (!cloudDocRef) return;
+    try {
+      await cloudDocRef.set({
+        appState: JSON.parse(JSON.stringify(appState)),
+        updatedAt: Date.now(),
+        clientDevice: navigator.userAgent
+      }, { merge: true });
+
+      updateSaveStatusDisplay();
+      setCloudNavbarStatus('connected');
+    } catch (err) {
+      console.error('Failed to sync to cloud:', err);
+      updateSaveStatusDisplay('⚠️ 雲端同步失敗');
+      setCloudNavbarStatus('error');
+      showToast('⚠️ 雲端同步失敗：請檢查 Firebase 權限規則或網路連線');
+    }
+  }, 500);
 }
 
 /**
@@ -2108,6 +2167,493 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
+/* ==========================================================================
+   Google Firebase 雲端即時同步核心模組（Google 文件模式）
+   ========================================================================== */
+
+/**
+ * 智慧解析使用者貼上的 Firebase 設定（支援完整 JS 物件宣告、JSON 或單純鍵值）
+ */
+function parseFirebaseConfigText(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+
+  // 嘗試 1：直接 JSON.parse
+  try {
+    const obj = JSON.parse(trimmed);
+    if (obj && obj.apiKey && obj.projectId) return obj;
+  } catch (e) {
+    // 忽略，繼續嘗試正規表達式提取
+  }
+
+  // 嘗試 2：提取 JS 物件中的各大欄位
+  const fields = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId', 'measurementId'];
+  const extracted = {};
+
+  fields.forEach(f => {
+    // 匹配如: apiKey: "AIzaSy..." 或 "apiKey": 'AIzaSy...'
+    const reg = new RegExp(`["']?${f}["']?\\s*:\\s*["']([^"']+)["']`, 'i');
+    const match = reg.exec(trimmed);
+    if (match && match[1]) {
+      extracted[f] = match[1].trim();
+    }
+  });
+
+  if (extracted.apiKey && extracted.projectId) {
+    return extracted;
+  }
+
+  return null;
+}
+
+/**
+ * 初始化雲端同步（檢查網址 Hash 或本機 localStorage）
+ */
+async function initCloudSyncFromStorageOrHash() {
+  setupCloudSyncEventListeners();
+
+  // 1. 檢查是否從手機/另一台裝置點開帶有 #sync=... 的專屬同步網址
+  const hash = window.location.hash || '';
+  if (hash.startsWith('#sync=')) {
+    try {
+      const b64 = decodeURIComponent(hash.slice(6));
+      const jsonStr = decodeURIComponent(escape(atob(b64)));
+      const payload = JSON.parse(jsonStr);
+
+      if (payload && payload.c && payload.r) {
+        localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify({
+          enabled: true,
+          roomId: payload.r,
+          firebaseConfig: payload.c
+        }));
+        // 清除網址 hash 保持網址簡潔
+        if (window.history && window.history.replaceState) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+        showToast('🌸 已透過專屬連結自動啟用跨裝置雲端同步！');
+      }
+    } catch (err) {
+      console.error('Failed to parse sync hash:', err);
+    }
+  }
+
+  // 2. 讀取本機儲存之雲端設定
+  try {
+    const raw = localStorage.getItem(CLOUD_CONFIG_KEY);
+    if (!raw) {
+      setCloudNavbarStatus('disconnected');
+      renderCloudModalState();
+      return;
+    }
+    const config = JSON.parse(raw);
+    if (config && config.enabled && config.firebaseConfig && config.roomId) {
+      currentCloudConfig = config;
+      await connectToFirebase(config.firebaseConfig, config.roomId, true);
+    } else {
+      setCloudNavbarStatus('disconnected');
+      renderCloudModalState();
+    }
+  } catch (err) {
+    console.error('Init cloud sync error:', err);
+    setCloudNavbarStatus('disconnected');
+    renderCloudModalState();
+  }
+}
+
+/**
+ * 連線至 Google Firebase Firestore 並監聽即時變更
+ */
+async function connectToFirebase(firebaseConfig, roomId, isInitial = false) {
+  if (typeof window.firebase === 'undefined') {
+    console.warn('Firebase SDK not loaded.');
+    setCloudNavbarStatus('error');
+    return false;
+  }
+
+  try {
+    setCloudNavbarStatus('syncing');
+
+    // 若先前已有監聽，先取消
+    if (cloudUnsubscribe) {
+      cloudUnsubscribe();
+      cloudUnsubscribe = null;
+    }
+
+    // 初始化 Firebase App（若尚未初始化或切換專案）
+    let app;
+    const appName = 'sakuraPlannerApp';
+    const existing = window.firebase.apps.find(a => a.name === appName);
+    if (existing) {
+      app = existing;
+    } else {
+      app = window.firebase.initializeApp(firebaseConfig, appName);
+    }
+
+    cloudDb = app.firestore();
+
+    // 嘗試啟用離線持久化（離線亦可順暢使用）
+    try {
+      await cloudDb.enablePersistence({ synchronizeTabs: true });
+    } catch (persistErr) {
+      // 若瀏覽器已開啟多個分頁可能引發衝突，忽略即可
+    }
+
+    const cleanRoomId = (roomId || 'sakura_yikai').trim().replace(/[^a-zA-Z0-9_\u4e00-\u9fa5-]/g, '_');
+    cloudDocRef = cloudDb.collection('sakura_study_plans').doc(cleanRoomId);
+
+    // 啟動 Firestore 即時推播監聽（如同 Google 文件多裝置連動）
+    cloudUnsubscribe = cloudDocRef.onSnapshot({ includeMetadataChanges: true }, (docSnapshot) => {
+      isCloudConnected = true;
+      setCloudNavbarStatus('connected');
+      renderCloudModalState();
+
+      // 若雲端尚無此房間紀錄，自動將當前本機資料上傳作為初始基準
+      if (!docSnapshot.exists) {
+        saveState(true, true);
+        return;
+      }
+
+      // 若這次 snapshot 只是當前本機裝置尚未寫入成功的暫存，跳過以避免覆蓋正在打字的文字
+      if (docSnapshot.metadata.hasPendingWrites) {
+        return;
+      }
+
+      const data = docSnapshot.data();
+      if (!data || !data.appState) return;
+
+      const remoteState = normalizeState(data.appState);
+      if (!remoteState) return;
+
+      const curStr = JSON.stringify(appState);
+      const remStr = JSON.stringify(remoteState);
+      if (curStr === remStr) return;
+
+      // 收到來自另一台手機或電腦的即時修改！
+      isRemoteUpdating = true;
+      appState = remoteState;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+      } catch (e) {}
+
+      // 保留當前使用者正在打字焦點
+      const activeEl = document.activeElement;
+      const activeId = activeEl ? activeEl.id : null;
+      const selStart = activeEl && 'selectionStart' in activeEl ? activeEl.selectionStart : null;
+      const selEnd = activeEl && 'selectionEnd' in activeEl ? activeEl.selectionEnd : null;
+
+      renderPhasesConfig();
+      renderMainScheduleTable();
+      renderFullDashboard();
+      updateActiveTimerBanner();
+
+      if (activeId) {
+        const restored = document.getElementById(activeId);
+        if (restored) {
+          restored.focus();
+          if (selStart !== null && 'setSelectionRange' in restored) {
+            try { restored.setSelectionRange(selStart, selEnd); } catch (e) {}
+          }
+        }
+      }
+
+      isRemoteUpdating = false;
+      updateSaveStatusDisplay();
+      showToast('🌸 收到來自其他裝置的即時更新！');
+    }, (err) => {
+      console.error('Firestore listener error:', err);
+      isCloudConnected = false;
+      setCloudNavbarStatus('error');
+      renderCloudModalState();
+      showToast('⚠️ 雲端即時連線中斷：' + (err.message || '請確認 Firestore 權限規則'));
+    });
+
+    isCloudConnected = true;
+    currentCloudConfig = { enabled: true, roomId: cleanRoomId, firebaseConfig };
+    localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify(currentCloudConfig));
+    setCloudNavbarStatus('connected');
+    renderCloudModalState();
+
+    if (!isInitial) {
+      showToast('🟢 雲端即時同步已連線！（Google 文件模式已啟動）');
+    }
+    return true;
+  } catch (err) {
+    console.error('Firebase connect failed:', err);
+    isCloudConnected = false;
+    setCloudNavbarStatus('error');
+    renderCloudModalState();
+    showToast('⚠️ 連線失敗：' + (err.message || '請確認 Firebase 設定內容'));
+    return false;
+  }
+}
+
+/**
+ * 中斷雲端連線（切回純本機模式）
+ */
+function disconnectFromFirebase() {
+  if (cloudUnsubscribe) {
+    cloudUnsubscribe();
+    cloudUnsubscribe = null;
+  }
+  isCloudConnected = false;
+  currentCloudConfig = null;
+  localStorage.removeItem(CLOUD_CONFIG_KEY);
+  setCloudNavbarStatus('disconnected');
+  renderCloudModalState();
+  updateSaveStatusDisplay();
+  showToast('🟡 已切換為純本機模式（停止雲端同步）');
+}
+
+/**
+ * 手動強制將本機所有資料推送到雲端
+ */
+async function forcePushToCloud() {
+  if (!cloudDocRef) return;
+  try {
+    setCloudNavbarStatus('syncing');
+    await cloudDocRef.set({
+      appState: JSON.parse(JSON.stringify(appState)),
+      updatedAt: Date.now(),
+      forcedBy: 'user_push'
+    });
+    setCloudNavbarStatus('connected');
+    updateSaveStatusDisplay();
+    showToast('☁️ 已強制將目前本機進度完整推送到雲端！');
+  } catch (err) {
+    console.error('Force push error:', err);
+    showToast('⚠️ 強制推送失敗：' + err.message);
+  }
+}
+
+/**
+ * 手動強制自雲端拉取最新資料覆蓋本機
+ */
+async function forcePullFromCloud() {
+  if (!cloudDocRef) return;
+  try {
+    setCloudNavbarStatus('syncing');
+    const doc = await cloudDocRef.get();
+    if (!doc.exists) {
+      showToast('ℹ️ 雲端目前尚無儲存進度');
+      setCloudNavbarStatus('connected');
+      return;
+    }
+    const data = doc.data();
+    if (!data || !data.appState) return;
+    const remote = normalizeState(data.appState);
+    if (!remote) {
+      showToast('⚠️ 雲端資料格式不合');
+      return;
+    }
+    appState = remote;
+    saveState(true, false);
+    renderPhasesConfig();
+    renderMainScheduleTable();
+    renderFullDashboard();
+    updateActiveTimerBanner();
+    setCloudNavbarStatus('connected');
+    showToast('☁️ 已自雲端成功抓取最新進度覆蓋本機！');
+  } catch (err) {
+    console.error('Force pull error:', err);
+    showToast('⚠️ 強制抓取失敗：' + err.message);
+  }
+}
+
+/**
+ * 更新導覽列「雲端同步」按鈕與狀態燈號
+ */
+function setCloudNavbarStatus(status) {
+  const btn = document.getElementById('cloudSyncBtn');
+  const textEl = document.getElementById('cloudStatusText');
+  if (!btn || !textEl) return;
+
+  btn.classList.remove('connected', 'syncing', 'error');
+
+  if (status === 'connected') {
+    btn.classList.add('connected');
+    textEl.textContent = '雲端已連線';
+  } else if (status === 'syncing') {
+    btn.classList.add('syncing');
+    textEl.textContent = '同步中...';
+  } else if (status === 'error') {
+    btn.classList.add('error');
+    textEl.textContent = '連線異常';
+  } else {
+    textEl.textContent = '雲端同步';
+  }
+}
+
+/**
+ * 渲染彈窗內部的連線狀態、房間代碼、手機 QR Code 與專屬連結
+ */
+function renderCloudModalState() {
+  const strip = document.getElementById('cloudStatusStrip');
+  const titleEl = document.getElementById('modalStatusTitle');
+  const descEl = document.getElementById('modalStatusDesc');
+  const roomPill = document.getElementById('modalRoomPill');
+  const roomText = document.getElementById('modalRoomPillText');
+  const mobileSection = document.getElementById('syncMobileSection');
+  const manualSection = document.getElementById('manualSyncSection');
+  const disconnectBtn = document.getElementById('disconnectCloudBtn');
+  const shareInput = document.getElementById('syncShareUrlInput');
+  const qrContainer = document.getElementById('syncQrCodeContainer');
+
+  if (!strip) return;
+
+  if (isCloudConnected && currentCloudConfig) {
+    strip.classList.add('connected');
+    if (titleEl) titleEl.textContent = '🟢 雲端即時同步中（Google 文件模式）';
+    if (descEl) descEl.textContent = '任何裝置上的修改、計時、打勾皆會於毫秒內自動同步至所有已連線設備！';
+    if (roomPill && roomText) {
+      roomPill.classList.remove('hidden');
+      roomText.textContent = currentCloudConfig.roomId;
+    }
+    if (disconnectBtn) disconnectBtn.classList.remove('hidden');
+    if (manualSection) manualSection.classList.remove('hidden');
+    if (mobileSection) mobileSection.classList.remove('hidden');
+
+    // 產生跨裝置一鍵同步專屬網址
+    const payload = {
+      r: currentCloudConfig.roomId,
+      c: currentCloudConfig.firebaseConfig
+    };
+    try {
+      const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+      const shareUrl = `${window.location.origin}${window.location.pathname}#sync=${encodeURIComponent(b64)}`;
+      if (shareInput) shareInput.value = shareUrl;
+
+      // 產生 QR Code
+      if (qrContainer && typeof window.QRCode !== 'undefined') {
+        qrContainer.innerHTML = '';
+        new window.QRCode(qrContainer, {
+          text: shareUrl,
+          width: 110,
+          height: 110,
+          colorDark: '#3A3335',
+          colorLight: '#FFFFFF',
+          correctLevel: window.QRCode.CorrectLevel.M
+        });
+      }
+    } catch (e) {
+      console.error('QR code generation error:', e);
+    }
+  } else {
+    strip.classList.remove('connected');
+    if (titleEl) titleEl.textContent = '尚未連線雲端資料庫';
+    if (descEl) descEl.textContent = '目前運作於本機模式（僅儲存於當前瀏覽器）。完成下方設定後即可開啟跨裝置即時同步！';
+    if (roomPill) roomPill.classList.add('hidden');
+    if (disconnectBtn) disconnectBtn.classList.add('hidden');
+    if (manualSection) manualSection.classList.add('hidden');
+    if (mobileSection) mobileSection.classList.add('hidden');
+  }
+}
+
+/**
+ * 綁定雲端同步彈窗互動事件
+ */
+function setupCloudSyncEventListeners() {
+  const modal = document.getElementById('cloudSyncModal');
+  const openBtn = document.getElementById('cloudSyncBtn');
+  const closeBtn = document.getElementById('closeCloudModalBtn');
+  const saveBtn = document.getElementById('saveAndConnectCloudBtn');
+  const disconnectBtn = document.getElementById('disconnectCloudBtn');
+  const forcePushBtn = document.getElementById('forcePushCloudBtn');
+  const forcePullBtn = document.getElementById('forcePullCloudBtn');
+  const copyUrlBtn = document.getElementById('copySyncUrlBtn');
+  const configTextarea = document.getElementById('firebaseConfigInput');
+  const roomInput = document.getElementById('syncRoomIdInput');
+
+  if (openBtn && modal) {
+    openBtn.addEventListener('click', () => {
+      // 填入目前已儲存之設定（若有）
+      if (currentCloudConfig) {
+        if (roomInput) roomInput.value = currentCloudConfig.roomId || 'sakura_yikai';
+        if (configTextarea && !configTextarea.value.trim()) {
+          configTextarea.value = JSON.stringify(currentCloudConfig.firebaseConfig, null, 2);
+        }
+      }
+      renderCloudModalState();
+      modal.classList.remove('hidden');
+    });
+  }
+
+  if (closeBtn && modal) {
+    closeBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+    });
+  }
+
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+      }
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const rawText = configTextarea ? configTextarea.value : '';
+      const parsedConfig = parseFirebaseConfigText(rawText);
+      const roomId = (roomInput ? roomInput.value : 'sakura_yikai').trim() || 'sakura_yikai';
+
+      if (!parsedConfig) {
+        showToast('⚠️ 無法解析 Firebase 設定，請確認有複製包含 apiKey 與 projectId 的完整內容');
+        return;
+      }
+
+      saveBtn.disabled = true;
+      saveBtn.textContent = '連線測試中...';
+      const ok = await connectToFirebase(parsedConfig, roomId, false);
+      saveBtn.disabled = false;
+      saveBtn.textContent = '✨ 儲存設定並立即連線同步';
+
+      if (ok) {
+        renderCloudModalState();
+      }
+    });
+  }
+
+  if (disconnectBtn) {
+    disconnectBtn.addEventListener('click', () => {
+      if (window.confirm('確定要中斷雲端連線嗎？（將切回純本機模式，雲端上的進度不會被刪除）')) {
+        disconnectFromFirebase();
+      }
+    });
+  }
+
+  if (forcePushBtn) {
+    forcePushBtn.addEventListener('click', () => {
+      if (window.confirm('確定要以目前本機畫面上的進度「強制覆蓋」雲端紀錄嗎？')) {
+        forcePushToCloud();
+      }
+    });
+  }
+
+  if (forcePullBtn) {
+    forcePullBtn.addEventListener('click', () => {
+      if (window.confirm('確定要自雲端下載最新進度「強制覆蓋」目前本機畫面嗎？')) {
+        forcePullFromCloud();
+      }
+    });
+  }
+
+  if (copyUrlBtn) {
+    const shareInput = document.getElementById('syncShareUrlInput');
+    copyUrlBtn.addEventListener('click', async () => {
+      if (!shareInput || !shareInput.value) return;
+      try {
+        await navigator.clipboard.writeText(shareInput.value);
+        showToast('📋 已複製專屬同步網址！傳至手機或平板打開即可自動連線');
+      } catch (err) {
+        shareInput.select();
+        document.execCommand('copy');
+        showToast('📋 已複製專屬同步網址！');
+      }
+    });
+  }
+}
+
 function showToast(message) {
   const container = document.getElementById('toastContainer');
   if (!container) return;
@@ -2134,6 +2680,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateActiveTimerBanner();
   setupEventListeners();
   startGlobalTimerTicker();
+  initCloudSyncFromStorageOrHash();
 
   // 切回分頁時立即以 Date.now() 對齊顯示（背景分頁的 setInterval 會被瀏覽器降速）
   document.addEventListener('visibilitychange', () => {

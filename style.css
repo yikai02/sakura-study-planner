@@ -1329,3 +1329,387 @@ body {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Cloud Sync Button & Top Bar Enhancements */
+.btn-cloud {
+  background: linear-gradient(135deg, #FFF6F8 0%, #FFFFFF 100%);
+  border: 1.5px solid var(--sakura-border);
+  color: var(--sakura-deep);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-cloud:hover {
+  background: var(--bg-sakura-soft);
+  border-color: var(--sakura-primary);
+  color: var(--sakura-deep);
+  transform: translateY(-1px);
+}
+
+.btn-cloud.connected {
+  border-color: #A9DFC4;
+  background: #F0FAF4;
+  color: #2E7350;
+}
+
+.cloud-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #C5BCB9;
+  display: inline-block;
+  transition: all 0.25s ease;
+}
+
+.btn-cloud.connected .cloud-dot {
+  background-color: #2E7350;
+  box-shadow: 0 0 0 2px rgba(46, 115, 80, 0.2);
+  animation: pulseGreen 2s infinite ease-in-out;
+}
+
+.btn-cloud.syncing .cloud-dot {
+  background-color: #D98A3C;
+  animation: pulseAmber 1s infinite ease-in-out;
+}
+
+@keyframes pulseGreen {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+@keyframes pulseAmber {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+/* Modal Overlay & Card (Sakura Theme) */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(58, 51, 53, 0.48);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-overlay.hidden {
+  display: none;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-card {
+  background: #FFFFFF;
+  border-radius: var(--radius-xl);
+  max-width: 680px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 40px rgba(58, 51, 53, 0.16);
+  border: 1px solid var(--sakura-border);
+  display: flex;
+  flex-direction: column;
+  animation: modalScale 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalScale {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header {
+  padding: 16px 22px;
+  background: linear-gradient(180deg, var(--bg-sakura-soft) 0%, #FFFFFF 100%);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-title-group h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+
+.modal-close-btn:hover {
+  background: var(--bg-sakura-tint);
+  color: var(--sakura-deep);
+}
+
+.modal-body {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Cloud Status Strip Inside Modal */
+.cloud-status-strip {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cloud-status-strip.connected {
+  background: #F0FAF4;
+  border-color: #B8DEC6;
+}
+
+.cloud-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-pulse-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #A09795;
+  flex-shrink: 0;
+}
+
+.cloud-status-strip.connected .status-pulse-dot {
+  background: #2E7350;
+  box-shadow: 0 0 0 3px rgba(46, 115, 80, 0.2);
+}
+
+.status-main-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cloud-status-strip.connected .status-main-title {
+  color: #2E7350;
+}
+
+.status-sub-desc {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.room-pill {
+  font-size: 11.5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-medium);
+  color: var(--text-secondary);
+}
+
+.room-pill.hidden, .sync-mobile-card.hidden, .manual-sync-strip.hidden, .btn.hidden {
+  display: none !important;
+}
+
+/* Mobile QR Code & Link Card */
+.sync-mobile-card {
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, #FFF6F8 0%, #FFFFFF 100%);
+  border: 1.5px solid var(--sakura-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sync-card-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--sakura-deep);
+}
+
+.sync-card-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.qrcode-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.qrcode-box {
+  background: #FFFFFF;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--sakura-border);
+  width: 126px;
+  height: 126px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.qrcode-box img {
+  display: block;
+}
+
+.sync-link-actions {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sync-share-url-input {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-medium);
+  font-size: 11.5px;
+  font-family: "SF Mono", monospace;
+  background: #FFFFFF;
+  color: var(--text-secondary);
+}
+
+/* Form Styles */
+.cloud-setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.form-tip {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.link-external {
+  color: var(--sakura-deep);
+  text-decoration: none;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.link-external:hover {
+  text-decoration: underline;
+}
+
+.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-medium);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: #FFFFFF;
+  transition: border-color 0.15s;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  border-color: var(--sakura-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(223, 118, 139, 0.15);
+}
+
+.form-textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-medium);
+  font-size: 12px;
+  font-family: "SF Mono", "Menlo", monospace;
+  line-height: 1.45;
+  color: var(--text-primary);
+  background: #FAFAFA;
+  resize: vertical;
+}
+
+.form-help-block {
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--sakura-primary);
+  padding: 8px 12px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.form-help-block ol {
+  margin: 4px 0 0 16px;
+}
+
+.modal-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.manual-sync-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
