@@ -8,7 +8,7 @@
 </head>
 <body>
 
-  <!-- Top Navigation & Active YPT Timer Bar -->
+  <!-- Top Navigation & Floating Active YPT Timer Bar -->
   <header class="top-navbar">
     <div class="brand-area">
       <div class="sakura-logo" aria-hidden="true">🌸</div>
@@ -17,9 +17,29 @@
           小櫻讀書計劃表
           <span class="brand-badge">11/1 (Day 85) – 1/24 (Day 1)</span>
         </h1>
-        <p class="brand-subtitle">YPT 真實專注計時模式 × Numbers 讀書計劃與即時統計儀表板</p>
+        <p class="brand-subtitle">YPT 專注計時模式 × Numbers 讀書計劃與即時統計儀表板</p>
       </div>
     </div>
+
+    <!-- 4 Main Navigation Tab Buttons -->
+    <nav class="main-tabs-nav" id="mainTabsNav" aria-label="主要分頁導航">
+      <button class="tab-nav-btn active" data-tab="quick-timer" type="button" title="YPT 快捷科目計時">
+        <span class="tab-icon">⚡</span>
+        <span class="tab-text">快捷計時</span>
+      </button>
+      <button class="tab-nav-btn" data-tab="daily-plan" type="button" title="每日詳細時段規劃與專注紀錄">
+        <span class="tab-icon">📖</span>
+        <span class="tab-text">今日專注</span>
+      </button>
+      <button class="tab-nav-btn" data-tab="calendar-schedule" type="button" title="85天完整行程與讀書總表">
+        <span class="tab-icon">🗓️</span>
+        <span class="tab-text">行事曆</span>
+      </button>
+      <button class="tab-nav-btn" data-tab="statistics-dashboard" type="button" title="5大連動統計量表與衝刺指標">
+        <span class="tab-icon">📊</span>
+        <span class="tab-text">統計列表</span>
+      </button>
+    </nav>
 
     <!-- Floating Active Timer Banner (shown when a slot is running or paused) -->
     <div id="activeTimerBanner" class="active-timer-banner hidden">
@@ -32,200 +52,171 @@
       <div class="ypt-btn-group">
         <button id="bannerToggleBtn" class="ypt-btn btn-pause" type="button">暫停 ⏸</button>
         <button id="bannerStopBtn" class="ypt-btn btn-stop" type="button">結束 ⏹</button>
-        <button id="bannerJumpBtn" class="btn btn-xs" type="button">定位 ↵</button>
+        <button id="bannerJumpBtn" class="btn btn-xs" type="button">前往計時 ↵</button>
       </div>
     </div>
 
-    <!-- Right Actions: Save Status, Room Sync, Layout Switch, Load Pre-planned, Export/Import JSON, Reset -->
+    <!-- Right Actions: Save Status, Room Sync, Settings Modal Open -->
     <div class="top-actions">
       <div class="save-indicator" id="saveIndicator" title="所有變更皆自動儲存於瀏覽器 localStorage">
         <span class="dot" id="saveIndicatorDot"></span>
         <span id="saveStatusText">已自動儲存</span>
       </div>
-      <button id="roomSyncBtn" class="btn btn-cloud" type="button" title="開啟免註冊・多人即時同步讀書房（免Google帳號、免兩階段驗證）">
+      <button id="roomSyncBtn" class="btn btn-cloud" type="button" title="開啟免註冊・多人即時同步讀書房">
         <span class="cloud-dot" id="roomDot"></span>
         <span class="cloud-icon">🌸</span>
         <span id="roomStatusText">多人同步房</span>
       </button>
-      <button id="toggleLayoutBtn" class="btn btn-subtle" type="button" title="切換「上下全寬檢視」或「左右並排（Numbers 經典檢視）」">切換左右並排 ◫</button>
-      <button id="toggleDashboardBtn" class="btn btn-subtle" type="button">收合統計面板 ▲</button>
-      <button id="loadPdfPlanBtn" class="btn" type="button" title="載入原 Numbers 表中 11/1~12/7 已預排好的科目與範圍（時間與打勾皆保持歸零）">帶入原表預排範圍</button>
-      <button id="exportJsonBtn" class="btn" type="button">匯出 JSON</button>
-      <label for="importJsonInput" class="btn" style="margin:0;">匯入 JSON</label>
-      <input id="importJsonInput" type="file" accept=".json,application/json" style="display:none;" />
-      <button id="resetAllBtn" class="btn btn-danger-outline" type="button">全新重置</button>
+      <button id="openSettingsModalBtn" class="btn btn-subtle" type="button" title="開啟設定、衝刺階段與備份工具">
+        <span>⚙️ 設定與工具</span>
+      </button>
     </div>
   </header>
 
+  <!-- Main Container with 4 Tab Views -->
   <main class="app-container" id="appContainer">
 
-    <!-- Section 1: Overall KPI Overview & Editable 3-Phase Settings -->
-    <section class="overview-strip">
-      <!-- Overall KPI Card -->
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title"><span class="icon">✦</span> 85天衝刺總覽（11月1日 ～ 1月24日）</div>
-            <div class="card-subtitle">所有時間與紀錄從零開始計算・共 85 天（255 個讀書時段）</div>
+    <!-- =========================================================================
+         分頁 1：⚡ 快捷計時（YPT 模式：一鍵點選科目即依當下時間判定早/中/晚並開始計時）
+         ========================================================================= -->
+    <section id="tabQuickTimer" class="tab-view active">
+      <div class="quick-timer-wrapper">
+        <!-- Date & Today Summary Header -->
+        <div class="quick-header-card">
+          <div class="quick-date-info">
+            <span class="quick-day-badge" id="quickDayBadge">Day 85</span>
+            <span class="quick-date-title" id="quickDateTitle">11月1日（週日）</span>
+            <span class="quick-phase-tag" id="quickPhaseTag">第一階段</span>
+            <button id="quickSwitchDayBtn" class="btn btn-xs btn-subtle" type="button" title="切換選取的日期">切換日期 ▾</button>
+          </div>
+          <div class="quick-today-stat">
+            <span class="quick-stat-label">今日累計專注時長</span>
+            <span class="quick-stat-val" id="quickTodayTotalTime">0小時 0分</span>
           </div>
         </div>
-        <div class="card-body">
-          <div class="kpi-grid">
-            <div class="kpi-box">
-              <span class="kpi-label">累計真實讀書總時長</span>
-              <span class="kpi-value" id="kpiTotalStudyTime">0小時 0分</span>
-              <span class="kpi-sub" id="kpiActiveDaysSub">有效讀書天數：0 / 85 天</span>
-            </div>
-            <div class="kpi-box">
-              <span class="kpi-label">總完成時段 / 完成率</span>
-              <span class="kpi-value" id="kpiTotalCompletion">0 / 255 (0%)</span>
-              <span class="kpi-sub" id="kpiAvgSlotPerDay">每日平均完成：0.00 時段</span>
-            </div>
-            <div class="kpi-box">
-              <span class="kpi-label">每日平均讀書總時長</span>
-              <span class="kpi-value" id="kpiDailyMeanTime">0小時 0分</span>
-              <span class="kpi-sub" id="kpiDailyMeanAllSub">全85天日均：0小時 0分</span>
-            </div>
-            <div class="kpi-box">
-              <span class="kpi-label">每日總讀書時間中位數</span>
-              <span class="kpi-value" id="kpiDailyMedianTime">0小時 0分</span>
-              <span class="kpi-sub">排除極端值之單日總時長中位數</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Editable 3 Phases Configuration Card -->
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title"><span class="icon">🌸</span> 三階段衝刺區間設定（點擊即可編輯階段名稱與 Day 範圍）</div>
-            <div class="card-subtitle">預設：第一階段 Day 85-61、第二階段 Day 60-31、第三階段 Day 30-1</div>
+        <!-- Big Focus Clock Card -->
+        <div class="card quick-timer-card">
+          <div class="quick-timer-body">
+            <div class="quick-active-badge-bar">
+              <span class="quick-status-dot" id="quickStatusDot"></span>
+              <span class="quick-status-text" id="quickStatusText">🌸 點選下方科目，一鍵立即開始專注計時</span>
+            </div>
+
+            <div class="quick-clock-display" id="quickClockDisplay">00:00:00</div>
+
+            <div class="quick-slot-hint" id="quickSlotHint">
+              💡 時段判定規則：早上 05:00~12:00 ｜ 下午 12:00~19:00 ｜ 晚上 19:00~05:00（以開始時間為準）
+            </div>
+
+            <!-- Dynamic Control Buttons (Pause / Resume / Stop) -->
+            <div class="quick-actions-row" id="quickActionsRow" style="display: none;">
+              <button id="quickPauseResumeBtn" class="btn btn-lg btn-pause" type="button">暫停 ⏸</button>
+              <button id="quickStopBtn" class="btn btn-lg btn-stop" type="button">結束專注並記錄 ⏹</button>
+            </div>
           </div>
-          <button id="restoreDefaultPhasesBtn" class="btn btn-xs btn-subtle" type="button">還原預設階段</button>
         </div>
-        <div class="card-body">
-          <div class="phases-config-grid" id="phasesConfigContainer">
-            <!-- Dynamically rendered by app.js -->
+
+        <!-- Quick Subject Buttons (YPT Style) -->
+        <div class="card quick-subjects-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title"><span class="icon">⚡</span> 快捷科目選擇（像 YPT 一樣，點選科目即刻開始計時）</div>
+              <div class="card-subtitle">
+                系統以「開始時間」為最重要依據：09:00 開始即歸為早上時段，即使 13:00 結束依然屬於早上！
+              </div>
+            </div>
           </div>
-          <div id="phaseWarning" class="phase-warning" style="display:none;"></div>
+          <div class="card-body">
+            <div class="quick-subjects-grid" id="quickSubjectsGrid">
+              <!-- Dynamically populated by app.js: 經濟, 統計, 財管, 英文, 上課, 其他 -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Today's 3 Slots Status Overview -->
+        <div class="card quick-slots-preview-card">
+          <div class="card-header">
+            <div class="card-title"><span class="icon">📋</span> 今日三時段進度一覽</div>
+            <button id="quickJumpToDailyBtn" class="btn btn-xs btn-subtle" type="button">在每日專注中編輯詳細任務與筆記 ➔</button>
+          </div>
+          <div class="card-body">
+            <div class="quick-slots-grid" id="quickSlotsGrid">
+              <!-- Rendered by app.js: 3 slot summary cards -->
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- Workspace Split Wrapper (supports stacked or side-by-side Numbers layout) -->
-    <div id="workspaceSplit" class="workspace-split">
 
-      <!-- Core Feature 2 - Real-time Linked 5 Statistical Tables & Goal Dashboard -->
-      <section id="dashboardSection" class="dashboard-section">
-        <div class="section-header-bar">
-          <div class="section-title-group">
-            <h2>📊 即時連動統計量表與目標儀表板</h2>
-            <span class="section-note">💡 主表格選擇「個經」或「總經」時，於統計表中自動歸類並匯總至「經濟」科目下計算</span>
+    <!-- =========================================================================
+         分頁 2：📖 今日專注（每天計時使用：單日專注看板、詳細時段、任務筆記）
+         ========================================================================= -->
+    <section id="tabDailyPlan" class="tab-view">
+      <div class="daily-plan-wrapper">
+        <!-- Day Navigation Bar -->
+        <div class="daily-nav-card">
+          <button id="dailyPrevDayBtn" class="btn btn-subtle" type="button">◀ 前一天</button>
+          <div class="daily-current-day-box">
+            <span class="daily-day-badge" id="dailyDayBadge">Day 85</span>
+            <span class="daily-date-heading" id="dailyDateHeading">11月1日（週日）</span>
+            <span class="daily-phase-badge" id="dailyPhaseBadge">第一階段</span>
+            <select id="dailyDaySelect" class="search-input" style="min-width: 140px;"></select>
+          </div>
+          <div class="daily-nav-right">
+            <button id="dailyTodayBtn" class="btn btn-primary" type="button">跳至今日</button>
+            <button id="dailyNextDayBtn" class="btn btn-subtle" type="button">後一天 ▶</button>
           </div>
         </div>
 
-        <!-- Row 1: Table 1 (Sakura Phase Goals) & Table 2 (Completion Rate Table) -->
-        <div class="dashboard-grid-top">
-          <!-- Table 1: 小櫻目標（分階段目標表） -->
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">🎯</span> 1. 小櫻目標（分階段目標表）</div>
-                <div class="card-subtitle">橫軸為三個倒數階段，縱軸為 經濟、統計、財管、其他（點擊儲存格可直接編輯）</div>
-              </div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive">
-                <table class="stat-table" id="goalTable">
-                  <!-- Rendered by app.js -->
-                </table>
-              </div>
-            </div>
+        <!-- Day Calendar & Notes Card -->
+        <div class="card daily-calendar-card">
+          <div class="card-header">
+            <div class="card-title"><span class="icon">🗓️</span> 今日行事曆 / 備考備忘行程</div>
+            <span class="card-subtitle">學校報告、期中考、模擬考死線等重要行程（直接輸入自動同步）</span>
           </div>
-
-          <!-- Table 2: 完成率表單 -->
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">✅</span> 2. 完成率表單</div>
-                <div class="card-subtitle">依三階段分別統計：總完成度（累計打勾數）、總完成率、每日平均完成度</div>
-              </div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive">
-                <table class="stat-table" id="completionTable">
-                  <!-- Rendered by app.js -->
-                </table>
-              </div>
-            </div>
+          <div class="card-body">
+            <input type="text" id="dailyCalendarInput" class="daily-calendar-input" placeholder="輸入今日重要行事曆或備考行程備註..." />
           </div>
         </div>
 
-        <!-- Row 2: Table 3 (Subject Study Counts & %) & Table 4 (Subject Study Time & %) -->
-        <div class="dashboard-grid-middle">
-          <!-- Table 3: 各科讀書次數 & 百分比表 -->
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">🔢</span> 3. 各科讀書次數 &amp; 百分比表</div>
-                <div class="card-subtitle">統計科目：經濟(含個經/總經)、統計、財管、英文、上課（有實際讀書紀錄或打勾的時段數與佔比）</div>
-              </div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive">
-                <table class="stat-table" id="subjectCountTable">
-                  <!-- Rendered by app.js -->
-                </table>
-              </div>
-            </div>
-          </div>
+        <!-- 3 Time Slots Detailed Cards (Morning, Afternoon, Evening) -->
+        <div class="daily-slots-container" id="dailySlotsContainer">
+          <!-- Rendered by app.js: 3 full cards for morning, afternoon, evening -->
+        </div>
 
-          <!-- Table 4: 各科讀書時間 & 百分比表 -->
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">⏱️</span> 4. 各科讀書時間 &amp; 百分比表</div>
-                <div class="card-subtitle">統計科目：經濟(含個經/總經)、統計、財管、英文、上課之累計真實讀書時間與佔比（%）</div>
-              </div>
+        <!-- Daily Summary Footer Card -->
+        <div class="card daily-summary-card">
+          <div class="daily-summary-grid">
+            <div class="daily-sum-box">
+              <span class="sum-label">今日完成時段</span>
+              <span class="sum-val" id="dailyDoneCount">0 / 3</span>
             </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive">
-                <table class="stat-table" id="subjectTimeTable">
-                  <!-- Rendered by app.js -->
-                </table>
-              </div>
+            <div class="daily-sum-box">
+              <span class="sum-label">今日時段完成率</span>
+              <span class="sum-val" id="dailyDoneRate">0%</span>
+            </div>
+            <div class="daily-sum-box">
+              <span class="sum-label">今日總讀書時間</span>
+              <span class="sum-val" id="dailyTotalTime">0小時 0分</span>
             </div>
           </div>
         </div>
+      </div>
+    </section>
 
-        <!-- Row 3: Table 5 (Advanced Time Statistics: Mean & Median) -->
-        <div class="dashboard-grid-bottom">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">📈</span> 5. 進階時間統計量表（平均數 &amp; 中位數）</div>
-                <div class="card-subtitle">計算各科單次讀書平均真實時長、單次讀書時間中位數（有效紀錄 &gt; 0 由小到大排序），以及每日平均讀書總時長與每日總讀書時間中位數</div>
-              </div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive">
-                <table class="stat-table" id="advancedStatTable">
-                  <!-- Rendered by app.js -->
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      <!-- Core Feature 1 - Daily Study Plan & YPT Real-time Timer Table (Main Workspace) -->
-      <section class="card schedule-main-card">
+    <!-- =========================================================================
+         分頁 3：🗓️ 行事曆大表（85天完整行程與時程檢視）
+         ========================================================================= -->
+    <section id="tabCalendarSchedule" class="tab-view">
+      <div class="card schedule-main-card">
         <div class="card-header">
           <div>
-            <div class="card-title"><span class="icon">🗓️</span> 每日讀書計劃與 YPT 真實計時表格（11/1 Day 85 ➔ 1/24 Day 1）</div>
+            <div class="card-title"><span class="icon">🗓️</span> 85天完整讀書計劃與 YPT 計時總表（11/1 Day 85 ➔ 1/24 Day 1）</div>
             <div class="card-subtitle">
-              每個時段配有「開始 ▶ / 暫停 ⏸ / 繼續 ▶ / 結束 ⏹」計時器（系統時間戳記 Date.now() 差值計算，背景執行不掉秒），並支援直接點擊手動輸入或修改開始時間、結束時間與真實讀書時長
+              時段區間：早上（05:00~12:00）、下午（12:00~19:00）、晚上（19:00~05:00）｜ 點選任一天可切換至單日專注模式
             </div>
           </div>
         </div>
@@ -265,9 +256,9 @@
                 <th rowspan="2" class="sticky-col-1">Date<br><span style="font-weight:400;font-size:11px;color:var(--text-secondary);">日期 / 星期</span></th>
                 <th rowspan="2" class="sticky-col-2">Day<br><span style="font-weight:400;font-size:11px;color:var(--text-secondary);">倒數天數</span></th>
                 <th rowspan="2">行事曆<br><span style="font-weight:400;font-size:11px;color:var(--text-secondary);">重要行程 / 期中考 / 死線備註</span></th>
-                <th class="slot-header-morning">☀️ 早上（08:30 ~ 12:00）</th>
-                <th class="slot-header-afternoon">🌤️ 下午（13:30 ~ 17:30）</th>
-                <th class="slot-header-evening">🌙 晚上（19:00 ~ 23:30）</th>
+                <th class="slot-header-morning">☀️ 早上（05:00 ~ 12:00）</th>
+                <th class="slot-header-afternoon">🌤️ 下午（12:00 ~ 19:00）</th>
+                <th class="slot-header-evening">🌙 晚上（19:00 ~ 05:00）</th>
                 <th colspan="3" class="summary-header">🌸 每日自動彙總</th>
               </tr>
               <tr class="sub-header">
@@ -284,13 +275,197 @@
             </tbody>
           </table>
         </div>
-      </section>
+      </div>
+    </section>
 
-    </div>
+
+    <!-- =========================================================================
+         分頁 4：📊 統計列表（Numbers 即時連動 5 大統計量表與衝刺指標）
+         ========================================================================= -->
+    <section id="tabStatisticsDashboard" class="tab-view">
+      <!-- Overall 85-Day KPI Card -->
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="card-header">
+          <div>
+            <div class="card-title"><span class="icon">✦</span> 85天衝刺總覽（11月1日 ～ 1月24日）</div>
+            <div class="card-subtitle">所有時間與紀錄從零開始計算・共 85 天（255 個讀書時段）</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="kpi-grid">
+            <div class="kpi-box">
+              <span class="kpi-label">累計真實讀書總時長</span>
+              <span class="kpi-value" id="kpiTotalStudyTime">0小時 0分</span>
+              <span class="kpi-sub" id="kpiActiveDaysSub">有效讀書天數：0 / 85 天</span>
+            </div>
+            <div class="kpi-box">
+              <span class="kpi-label">總完成時段 / 完成率</span>
+              <span class="kpi-value" id="kpiTotalCompletion">0 / 255 (0%)</span>
+              <span class="kpi-sub" id="kpiAvgSlotPerDay">每日平均完成：0.00 時段</span>
+            </div>
+            <div class="kpi-box">
+              <span class="kpi-label">每日平均讀書總時長</span>
+              <span class="kpi-value" id="kpiDailyMeanTime">0小時 0分</span>
+              <span class="kpi-sub" id="kpiDailyMeanAllSub">全85天日均：0小時 0分</span>
+            </div>
+            <div class="kpi-box">
+              <span class="kpi-label">每日總讀書時間中位數</span>
+              <span class="kpi-value" id="kpiDailyMedianTime">0小時 0分</span>
+              <span class="kpi-sub">排除極端值之單日總時長中位數</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Core 5 Statistical Tables -->
+      <section id="dashboardSection" class="dashboard-section" style="display: block;">
+        <div class="section-header-bar">
+          <div class="section-title-group">
+            <h2>📊 即時連動統計量表與小櫻目標儀表板</h2>
+            <span class="section-note">💡 主表格選擇「個經」或「總經」時，於統計表中自動歸類並匯總至「經濟」科目下計算</span>
+          </div>
+        </div>
+
+        <!-- Row 1: Table 1 (Sakura Phase Goals) & Table 2 (Completion Rate Table) -->
+        <div class="dashboard-grid-top">
+          <!-- Table 1: 小櫻目標（分階段目標表） -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><span class="icon">🎯</span> 1. 小櫻目標（分階段目標表）</div>
+                <div class="card-subtitle">橫軸為三個倒數階段，縱軸為 經濟、統計、財管、其他（點擊儲存格可直接編輯）</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="stat-table" id="goalTable"></table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table 2: 完成率表單 -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><span class="icon">✅</span> 2. 完成率表單</div>
+                <div class="card-subtitle">依三階段分別統計：總完成度（累計打勾數）、總完成率、每日平均完成度</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="stat-table" id="completionTable"></table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: Table 3 (Subject Study Counts & %) & Table 4 (Subject Study Time & %) -->
+        <div class="dashboard-grid-middle">
+          <!-- Table 3: 各科讀書次數 & 百分比表 -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><span class="icon">🔢</span> 3. 各科讀書次數 &amp; 百分比表</div>
+                <div class="card-subtitle">統計科目：經濟(含個經/總經)、統計、財管、英文、上課（實際讀書或打勾時段與佔比）</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="stat-table" id="subjectCountTable"></table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Table 4: 各科讀書時間 & 百分比表 -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><span class="icon">⏱️</span> 4. 各科讀書時間 &amp; 百分比表</div>
+                <div class="card-subtitle">統計科目：經濟(含個經/總經)、統計、財管、英文、上課之累計讀書時間與佔比（%）</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="stat-table" id="subjectTimeTable"></table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 3: Table 5 (Advanced Time Statistics: Mean & Median) -->
+        <div class="dashboard-grid-bottom">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title"><span class="icon">📈</span> 5. 進階時間統計量表（平均數 &amp; 中位數）</div>
+                <div class="card-subtitle">各科單次讀書平均真實時長、中位數，以及每日平均讀書總時長與中位數</div>
+              </div>
+            </div>
+            <div class="card-body" style="padding: 0;">
+              <div class="table-responsive">
+                <table class="stat-table" id="advancedStatTable"></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
 
   </main>
 
-  <!-- Multi-user Real-time Sync Room Modal (Zero-config, No Google 2FA, Multi-person collaboration) -->
+  <!-- =========================================================================
+       彈窗：⚙️ 設定、衝刺階段與備份管理工具（保持主畫面乾淨不凌亂）
+       ========================================================================= -->
+  <div id="settingsModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon">⚙️</span>
+          <h3 id="settingsModalTitle">設定、衝刺階段與備份管理</h3>
+        </div>
+        <button id="closeSettingsModalBtn" class="modal-close-btn" type="button" aria-label="關閉彈窗">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- 3-Phase Settings Section -->
+        <div class="settings-section">
+          <div class="settings-sec-title">🌸 三階段衝刺區間設定</div>
+          <p class="settings-sec-desc">點擊可直接修改階段名稱與 Day 起訖天數（預設：Day 85-61、Day 60-31、Day 30-1）</p>
+          <div class="phases-config-grid" id="phasesConfigContainer" style="margin-top: 10px;">
+            <!-- Dynamically rendered by app.js -->
+          </div>
+          <div id="phaseWarning" class="phase-warning" style="display:none; margin-top: 8px;"></div>
+          <div style="margin-top: 8px;">
+            <button id="restoreDefaultPhasesBtn" class="btn btn-xs btn-subtle" type="button">還原預設階段設定</button>
+          </div>
+        </div>
+
+        <!-- Tools & Backup Actions Section -->
+        <div class="settings-section" style="margin-top: 20px;">
+          <div class="settings-sec-title">💾 備份、匯出與數據操作</div>
+          <p class="settings-sec-desc">所有資料平時皆已自動存在瀏覽器與雲端房間，您也可以手動備份 JSON 檔案：</p>
+          <div class="settings-btn-grid" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
+            <button id="exportJsonBtn" class="btn" type="button">匯出 JSON 備份檔</button>
+            <label for="importJsonInput" class="btn" style="margin:0; cursor:pointer;">匯入 JSON 備份檔</label>
+            <input id="importJsonInput" type="file" accept=".json,application/json" style="display:none;" />
+            <button id="loadPdfPlanBtn" class="btn" type="button" title="載入原 Numbers 表中已預排好的科目與範圍">帶入原表預排範圍</button>
+            <button id="toggleLayoutBtn" class="btn btn-subtle" type="button">切換行事曆左右並排 ◫</button>
+          </div>
+        </div>
+
+        <!-- Danger Zone Section -->
+        <div class="settings-section danger-zone" style="margin-top: 20px; border-top: 1px dashed var(--border-medium); padding-top: 15px;">
+          <div class="settings-sec-title" style="color: #C0392B;">⚠️ 危險區域</div>
+          <p class="settings-sec-desc">全新重置將清除本機所有讀書紀錄並歸零，請謹慎操作：</p>
+          <div style="margin-top: 10px;">
+            <button id="resetAllBtn" class="btn btn-danger-outline" type="button">全新重置所有讀書紀錄</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Multi-user Real-time Sync Room Modal -->
   <div id="roomSyncModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="roomModalTitle">
     <div class="modal-card">
       <div class="modal-header">
@@ -302,21 +477,19 @@
       </div>
 
       <div class="modal-body">
-        <!-- Live Connection Status Strip -->
         <div class="cloud-status-strip" id="roomStatusStrip">
           <div class="cloud-status-indicator">
             <span class="status-pulse-dot" id="roomStatusDot"></span>
             <div>
               <div class="status-main-title" id="roomStatusTitle">尚未加入共同房間（個人單機模式）</div>
               <div class="status-sub-desc" id="roomStatusDesc">
-                免登入 Google 帳號、免兩階段驗證！只要設定共同房號，不同人、不同手機或電腦皆可隨時進入，任何人打勾修改皆會即時推播給所有人！
+                免登入 Google 帳號、免兩階段驗證！只要輸入相同房號，不同人、不同手機或電腦皆可隨時進入，自動同步最新進度！
               </div>
             </div>
           </div>
           <span class="room-pill hidden" id="currentRoomPill">房號：<strong id="currentRoomPillText">-</strong></span>
         </div>
 
-        <!-- Section: Share & Connect mobile / friends (shown when in a room) -->
         <div class="sync-mobile-card hidden" id="roomShareSection">
           <div class="sync-card-title">📱 朋友 / 手機一鍵加入專屬網址與 QR Code</div>
           <p class="sync-card-desc">
@@ -331,7 +504,6 @@
           </div>
         </div>
 
-        <!-- Room Settings Form -->
         <div class="cloud-setup-form">
           <div class="form-group">
             <label for="roomInputId" class="form-label">
@@ -361,7 +533,6 @@
             />
           </div>
 
-          <!-- Action Buttons -->
           <div class="modal-actions-row">
             <button id="joinRoomBtn" class="btn btn-primary" type="button">
               ✨ 進入房間連線同步
@@ -371,7 +542,6 @@
             </button>
           </div>
 
-          <!-- Manual Push / Pull buttons -->
           <div class="manual-sync-strip hidden" id="roomManualSyncSection">
             <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">手動同步操作：</span>
             <button id="roomForcePushBtn" class="btn btn-xs" type="button" title="將目前畫面上的完整進度廣播給房間內所有人">
@@ -391,7 +561,6 @@
             </ul>
           </div>
         </div>
-
       </div>
     </div>
   </div>
@@ -400,7 +569,6 @@
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-
   <script src="app.js"></script>
 </body>
 </html>

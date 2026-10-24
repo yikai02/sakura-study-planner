@@ -25,12 +25,37 @@ const STAT_SUBJECTS = ['經濟', '統計', '財管', '英文', '上課'];
 // 小櫻目標表之縱軸科目
 const GOAL_SUBJECTS = ['經濟', '統計', '財管', '其他'];
 
-// 三大時段定義
+// 三大時段定義（依使用者設定：早上 05:00~12:00、下午 12:00~19:00、晚上 19:00~05:00）
 const SLOT_KEYS = [
-  { key: 'morning', label: '早上', timeRange: '08:30~12:00' },
-  { key: 'afternoon', label: '下午', timeRange: '13:30~17:30' },
-  { key: 'evening', label: '晚上', timeRange: '19:00~23:30' }
+  { key: 'morning', label: '早上', timeRange: '05:00~12:00', icon: '☀️' },
+  { key: 'afternoon', label: '下午', timeRange: '12:00~19:00', icon: '🌤️' },
+  { key: 'evening', label: '晚上', timeRange: '19:00~05:00', icon: '🌙' }
 ];
+
+/**
+ * 依開始時間判定歸屬時段（最重要依據）
+ * 早上: 05:00 ~ 12:00
+ * 下午: 12:00 ~ 19:00
+ * 晚上: 19:00 ~ 05:00
+ */
+function getSlotKeyFromStartTime(timeInput = new Date()) {
+  let hr = 0;
+  if (typeof timeInput === 'string' && timeInput.includes(':')) {
+    hr = parseInt(timeInput.split(':')[0], 10) || 0;
+  } else if (timeInput instanceof Date) {
+    hr = timeInput.getHours();
+  } else {
+    hr = (new Date()).getHours();
+  }
+
+  if (hr >= 5 && hr < 12) {
+    return 'morning';
+  } else if (hr >= 12 && hr < 19) {
+    return 'afternoon';
+  } else {
+    return 'evening';
+  }
+}
 
 // 預設三階段設定 (Day 85-61, Day 60-31, Day 30-1)
 const DEFAULT_PHASES = [
@@ -1136,6 +1161,489 @@ function renderAdvancedStatTable(stats) {
 }
 
 /* ==========================================================================
+   全新分頁導航與視圖管理模組（快捷計時、今日專注、行事曆、統計列表）
+   ========================================================================== */
+
+let currentActiveTab = 'quick-timer';
+let currentActiveDayCountdown = 85;
+
+function initCurrentActiveDay() {
+  const now = new Date();
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  const match = appState.days.find(item => item.dateDisplay === `${m}月${d}日`);
+  if (match) {
+    currentActiveDayCountdown = match.dayCountdown;
+  } else {
+    currentActiveDayCountdown = 85;
+  }
+}
+
+function getTodayDayCountdown() {
+  const now = new Date();
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  const match = appState.days.find(item => item.dateDisplay === `${m}月${d}日`);
+  return match ? match.dayCountdown : 85;
+}
+
+function switchMainTab(tabId) {
+  currentActiveTab = tabId;
+  const navBtns = document.querySelectorAll('.tab-nav-btn');
+  navBtns.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabId);
+  });
+
+  const views = {
+    'quick-timer': document.getElementById('tabQuickTimer'),
+    'daily-plan': document.getElementById('tabDailyPlan'),
+    'calendar-schedule': document.getElementById('tabCalendarSchedule'),
+    'statistics-dashboard': document.getElementById('tabStatisticsDashboard')
+  };
+
+  Object.keys(views).forEach(key => {
+    if (views[key]) {
+      views[key].classList.toggle('active', key === tabId);
+    }
+  });
+
+  if (tabId === 'quick-timer') {
+    renderQuickTimerView();
+  } else if (tabId === 'daily-plan') {
+    renderDailyPlanView();
+  } else if (tabId === 'calendar-schedule') {
+    renderMainScheduleTable();
+  } else if (tabId === 'statistics-dashboard') {
+    renderAllStatistics();
+  }
+}
+
+function changeDailyPlanDay(targetDayCountdown) {
+  if (targetDayCountdown > 85) targetDayCountdown = 85;
+  if (targetDayCountdown < 1) targetDayCountdown = 1;
+  currentActiveDayCountdown = targetDayCountdown;
+  renderDailyPlanView();
+  renderQuickTimerView();
+}
+
+/* ==========================================================================
+   分頁 1：⚡ 快捷計時（YPT 模式）渲染與邏輯
+   ========================================================================== */
+
+function getDayTotalEffectiveMinutes(day) {
+  if (!day) return 0;
+  return SLOT_KEYS.reduce((acc, { key }) => acc + getSlotEffectiveMinutes(day[key]), 0);
+}
+
+function renderQuickTimerView() {
+  const day = appState.days.find(d => d.dayCountdown === currentActiveDayCountdown);
+  if (!day) return;
+
+  const quickDayBadge = document.getElementById('quickDayBadge');
+  const quickDateTitle = document.getElementById('quickDateTitle');
+  const quickPhaseTag = document.getElementById('quickPhaseTag');
+  const quickTodayTotalTime = document.getElementById('quickTodayTotalTime');
+
+  if (quickDayBadge) quickDayBadge.textContent = `Day ${day.dayCountdown}`;
+  if (quickDateTitle) quickDateTitle.textContent = `${day.dateDisplay}（${day.weekdayDisplay}）`;
+  if (quickPhaseTag) {
+    const phaseIdx = getPhaseIndexForDay(day.dayCountdown);
+    const p = appState.phases[phaseIdx] || DEFAULT_PHASES[phaseIdx];
+    quickPhaseTag.textContent = p.name;
+  }
+  if (quickTodayTotalTime) {
+    quickTodayTotalTime.textContent = formatMinutesToHM(getDayTotalEffectiveMinutes(day));
+  }
+
+  updateQuickTimerDom();
+  renderQuickSubjectsGrid(day);
+  renderQuickSlotsOverview(day);
+}
+
+function updateQuickTimerDom() {
+  const clockEl = document.getElementById('quickClockDisplay');
+  const dotEl = document.getElementById('quickStatusDot');
+  const textEl = document.getElementById('quickStatusText');
+  const actionsRow = document.getElementById('quickActionsRow');
+  const pauseResumeBtn = document.getElementById('quickPauseResumeBtn');
+
+  if (!clockEl || !textEl) return;
+
+  const active = findActiveTimerSlot();
+  if (active) {
+    const liveMs = getSlotLiveMs(active.slot);
+    clockEl.textContent = formatMsToClock(liveMs);
+
+    const isRunning = active.slot.timerStatus === 'running';
+    if (dotEl) {
+      dotEl.className = 'quick-status-dot ' + (isRunning ? 'running' : 'paused');
+    }
+
+    const slotObj = SLOT_KEYS.find(k => k.key === active.slotKey);
+    const slotLabel = slotObj ? `${slotObj.icon} ${slotObj.label}時段` : active.slotLabel;
+
+    if (isRunning) {
+      textEl.innerHTML = `⏱️ 正在專注：<strong style="color:var(--sakura-deep);font-size:15px;">${escapeHtml(active.slot.subject || '自訂科目')}</strong>（依開始時間 ${active.slot.startTime || ''} 歸於 ${slotLabel}）`;
+    } else {
+      textEl.innerHTML = `⏸️ 專注已暫停：<strong style="color:var(--timer-paused);">${escapeHtml(active.slot.subject || '自訂科目')}</strong>（休息不計入專注時長）`;
+    }
+
+    if (actionsRow) actionsRow.style.display = 'flex';
+    if (pauseResumeBtn) {
+      pauseResumeBtn.textContent = isRunning ? '暫停 ⏸' : '繼續 ▶';
+      pauseResumeBtn.className = 'btn btn-lg ' + (isRunning ? 'btn-pause' : 'btn-resume');
+    }
+  } else {
+    clockEl.textContent = '00:00:00';
+    if (dotEl) dotEl.className = 'quick-status-dot';
+    textEl.textContent = '🌸 點選下方科目，一鍵立即開始專注計時';
+    if (actionsRow) actionsRow.style.display = 'none';
+  }
+}
+
+function renderQuickSubjectsGrid(day) {
+  const container = document.getElementById('quickSubjectsGrid');
+  if (!container) return;
+
+  const active = findActiveTimerSlot();
+  const activeSubject = (active && active.slot.timerStatus === 'running') ? active.slot.subject : null;
+
+  const subjTodayMinutes = {};
+  SLOT_KEYS.forEach(({ key }) => {
+    const s = day[key];
+    if (s.subject) {
+      const cat = mapSubjectToStatCategory(s.subject);
+      subjTodayMinutes[cat] = (subjTodayMinutes[cat] || 0) + getSlotEffectiveMinutes(s);
+      subjTodayMinutes[s.subject] = (subjTodayMinutes[s.subject] || 0) + getSlotEffectiveMinutes(s);
+    }
+  });
+
+  const subjects = [
+    { name: '經濟', icon: '🌸', colorVar: '--subj-econ-border' },
+    { name: '統計', icon: '📊', colorVar: '--subj-stat-border' },
+    { name: '財管', icon: '📈', colorVar: '--subj-fin-border' },
+    { name: '英文', icon: '📖', colorVar: '--subj-eng-border' },
+    { name: '上課', icon: '🏫', colorVar: '--subj-class-border' },
+    { name: '其他', icon: '📝', colorVar: '--subj-other-border' }
+  ];
+
+  container.innerHTML = subjects.map(s => {
+    const isThisRunning = activeSubject === s.name;
+    const mins = subjTodayMinutes[s.name] || 0;
+    const timeText = mins > 0 ? `今日已讀 ${formatMinutesToHM(mins)}` : '今日未讀';
+    return `
+      <button
+        type="button"
+        class="quick-subj-btn ${isThisRunning ? 'active-running' : ''}"
+        data-quick-subject="${s.name}"
+        style="border-color: ${isThisRunning ? 'var(--sakura-primary)' : `var(${s.colorVar})`};"
+      >
+        <span class="quick-subj-icon">${s.icon}</span>
+        <span class="quick-subj-name">${s.name}</span>
+        <span class="quick-subj-time">${isThisRunning ? '⏱️ 計時中...' : timeText}</span>
+      </button>
+    `;
+  }).join('');
+}
+
+function renderQuickSlotsOverview(day) {
+  const container = document.getElementById('quickSlotsGrid');
+  if (!container) return;
+
+  const active = findActiveTimerSlot();
+
+  container.innerHTML = SLOT_KEYS.map(({ key, label, timeRange, icon }) => {
+    const s = day[key];
+    const isThisActive = active && active.day.dayCountdown === day.dayCountdown && active.slotKey === key;
+    const isRunning = s.timerStatus === 'running';
+    const isPaused = s.timerStatus === 'paused';
+    const effMins = getSlotEffectiveMinutes(s);
+
+    let statusBadge = '';
+    if (isRunning) {
+      statusBadge = '<span class="quick-slot-badge" style="background:#FFF0F3;color:#D9536F;">⏱️ 計時中</span>';
+    } else if (isPaused) {
+      statusBadge = '<span class="quick-slot-badge" style="background:#FFF7ED;color:#D98A3C;">⏸️ 暫停中</span>';
+    } else if (s.completed) {
+      statusBadge = '<span class="quick-slot-badge" style="background:#EDF8F2;color:#2E7350;">✅ 已完成</span>';
+    } else if (effMins > 0) {
+      statusBadge = '<span class="quick-slot-badge" style="background:#F2EDEC;color:#6E6568;">已記錄</span>';
+    } else {
+      statusBadge = '<span class="quick-slot-badge" style="background:#F4EFEA;color:#9E9497;">尚未開始</span>';
+    }
+
+    const timeDetails = s.startTime || s.endTime ? `${s.startTime || '--:--'} ~ ${s.endTime || '--:--'}` : timeRange;
+
+    return `
+      <div class="quick-slot-card ${isThisActive ? 'is-active' : ''}">
+        <div class="quick-slot-header">
+          <span class="quick-slot-title">${icon} ${label} (${timeRange})</span>
+          ${statusBadge}
+        </div>
+        <div class="quick-slot-details">
+          <div><strong>科目：</strong>${escapeHtml(s.subject || '（未選）')}</div>
+          ${s.task ? `<div><strong>任務：</strong>${escapeHtml(s.task)}</div>` : ''}
+          <div><strong>時間：</strong>${timeDetails}（共 ${formatMinutesToHM(effMins)}）</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function handleQuickSubjectClick(subjectName) {
+  const targetDayCountdown = currentActiveDayCountdown;
+  const day = appState.days.find(d => d.dayCountdown === targetDayCountdown);
+  if (!day) return;
+
+  const active = findActiveTimerSlot();
+  if (active && active.slot.timerStatus === 'running') {
+    if (active.slot.subject === subjectName && active.day.dayCountdown === targetDayCountdown) {
+      handleYptTimerAction('ypt-pause', active.day.dayCountdown, active.slotKey);
+      renderQuickTimerView();
+      return;
+    } else {
+      handleYptTimerAction('ypt-pause', active.day.dayCountdown, active.slotKey);
+    }
+  }
+
+  // 依當前「開始時間」判定時段（以開始時間作為最重要依據）
+  const now = new Date();
+  const slotKey = getSlotKeyFromStartTime(now);
+  const slot = day[slotKey];
+
+  slot.subject = subjectName;
+  if (!slot.startTime || slot.timerStatus === 'idle' || slot.timerStatus === 'ended') {
+    slot.startTime = getCurrentTimeHM();
+  }
+
+  handleYptTimerAction('ypt-start', day.dayCountdown, slotKey);
+  renderQuickTimerView();
+}
+
+/* ==========================================================================
+   分頁 2：📖 今日專注（每天計時使用）渲染與邏輯
+   ========================================================================== */
+
+function renderDailyPlanView() {
+  const day = appState.days.find(d => d.dayCountdown === currentActiveDayCountdown);
+  if (!day) return;
+
+  const badgeEl = document.getElementById('dailyDayBadge');
+  const headingEl = document.getElementById('dailyDateHeading');
+  const phaseBadgeEl = document.getElementById('dailyPhaseBadge');
+  const calendarInput = document.getElementById('dailyCalendarInput');
+  const selectEl = document.getElementById('dailyDaySelect');
+
+  if (badgeEl) badgeEl.textContent = `Day ${day.dayCountdown}`;
+  if (headingEl) headingEl.textContent = `${day.dateDisplay}（${day.weekdayDisplay}）`;
+  if (phaseBadgeEl) {
+    const phaseIdx = getPhaseIndexForDay(day.dayCountdown);
+    const p = appState.phases[phaseIdx] || DEFAULT_PHASES[phaseIdx];
+    phaseBadgeEl.textContent = p.name;
+  }
+  if (calendarInput && document.activeElement !== calendarInput) {
+    calendarInput.value = day.calendar || '';
+  }
+
+  if (selectEl) {
+    selectEl.innerHTML = appState.days.map(d => `
+      <option value="${d.dayCountdown}" ${d.dayCountdown === day.dayCountdown ? 'selected' : ''}>
+        Day ${d.dayCountdown} - ${d.dateDisplay} (${d.weekdayDisplay})
+      </option>
+    `).join('');
+  }
+
+  renderDailySlotsDetailed(day);
+
+  const doneCount = SLOT_KEYS.filter(({ key }) => day[key].completed).length;
+  const rate = Math.round((doneCount / 3) * 100);
+  const totalMins = getDayTotalEffectiveMinutes(day);
+
+  const doneCountEl = document.getElementById('dailyDoneCount');
+  const doneRateEl = document.getElementById('dailyDoneRate');
+  const totalTimeEl = document.getElementById('dailyTotalTime');
+
+  if (doneCountEl) doneCountEl.textContent = `${doneCount} / 3`;
+  if (doneRateEl) doneRateEl.textContent = `${rate}%`;
+  if (totalTimeEl) totalTimeEl.textContent = formatMinutesToHM(totalMins);
+}
+
+function renderDailySlotsDetailed(day) {
+  const container = document.getElementById('dailySlotsContainer');
+  if (!container) return;
+
+  container.innerHTML = SLOT_KEYS.map(({ key, label, timeRange, icon }) => {
+    const s = day[key];
+    const isThisRunning = s.timerStatus === 'running';
+    const isThisPaused = s.timerStatus === 'paused';
+    const effMins = getSlotEffectiveMinutes(s);
+    const liveMs = getSlotLiveMs(s);
+
+    const durHr = Math.floor(effMins / 60);
+    const durMin = effMins % 60;
+
+    const [defStart, defEnd] = timeRange.split('~');
+
+    const subjectOptionsHtml = SUBJECT_OPTIONS.map(opt => `
+      <option value="${escapeHtml(opt)}" ${s.subject === opt ? 'selected' : ''}>${escapeHtml(opt || '— 選擇科目 —')}</option>
+    `).join('');
+
+    return `
+      <div class="daily-slot-card ${s.completed ? 'completed' : ''} ${isThisRunning ? 'running' : ''}" id="daily-card-${day.dayCountdown}-${key}">
+        <div class="daily-slot-card-header">
+          <div class="daily-slot-card-title">
+            <span>${icon} ${label}時段</span>
+            <span class="daily-slot-time-range">(${timeRange})</span>
+          </div>
+          <div class="slot-done-wrap">
+            <label class="done-checkbox-label">
+              <input
+                type="checkbox"
+                class="done-checkbox daily-done-checkbox"
+                data-day="${day.dayCountdown}"
+                data-slot="${key}"
+                ${s.completed ? 'checked' : ''}
+              />
+              <span class="done-text">${s.completed ? '已完成' : '標記完成'}</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="daily-slot-card-body">
+          <div class="daily-field-group">
+            <label class="daily-field-label">讀書科目：</label>
+            <select class="subject-select daily-subject-select" data-day="${day.dayCountdown}" data-slot="${key}">
+              ${subjectOptionsHtml}
+            </select>
+          </div>
+
+          <div class="daily-field-group">
+            <label class="daily-field-label">範圍 / 任務目標：</label>
+            <input
+              type="text"
+              class="task-input daily-task-input"
+              data-day="${day.dayCountdown}"
+              data-slot="${key}"
+              value="${escapeHtml(s.task)}"
+              placeholder="例如：Ch14完、700題＋計量、複習實戰書..."
+            />
+          </div>
+
+          <!-- YPT 計時控制列 -->
+          <div class="daily-timer-strip">
+            <div class="ypt-btn-group">
+              <button
+                type="button"
+                class="ypt-btn btn-start"
+                data-action="ypt-start"
+                data-day="${day.dayCountdown}"
+                data-slot="${key}"
+                ${isThisRunning ? 'disabled' : ''}
+              >${s.timerStatus === 'ended' ? '重新計時 ▶' : '開始 ▶'}</button>
+
+              <button
+                type="button"
+                class="ypt-btn btn-pause"
+                data-action="ypt-pause"
+                data-day="${day.dayCountdown}"
+                data-slot="${key}"
+                ${!isThisRunning ? 'disabled' : ''}
+              >暫停 ⏸</button>
+
+              <button
+                type="button"
+                class="ypt-btn btn-resume"
+                data-action="ypt-resume"
+                data-day="${day.dayCountdown}"
+                data-slot="${key}"
+                ${!isThisPaused ? 'disabled' : ''}
+              >繼續 ▶</button>
+
+              <button
+                type="button"
+                class="ypt-btn btn-stop"
+                data-action="ypt-stop"
+                data-day="${day.dayCountdown}"
+                data-slot="${key}"
+                ${!isThisRunning && !isThisPaused ? 'disabled' : ''}
+              >結束 ⏹</button>
+            </div>
+
+            <div class="daily-timer-clock-box">
+              <span style="font-size:12px;color:var(--text-secondary);">專注計時：</span>
+              <span class="daily-live-clock" id="daily-clock-${day.dayCountdown}-${key}">
+                ${formatMsToClock(liveMs)}
+              </span>
+            </div>
+          </div>
+
+          <!-- 時間手動微調 -->
+          <div class="slot-time-inputs" style="grid-column: 1 / -1; display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-top:2px;">
+            <div class="time-range-group">
+              <span>起</span>
+              <input
+                type="text"
+                class="time-hm-input daily-time-input"
+                data-day="${day.dayCountdown}"
+                data-slot="${key}"
+                data-field="startTime"
+                value="${escapeHtml(s.startTime)}"
+                placeholder="${defStart}"
+                maxlength="5"
+              />
+              <span>迄</span>
+              <input
+                type="text"
+                class="time-hm-input daily-time-input"
+                data-day="${day.dayCountdown}"
+                data-slot="${key}"
+                data-field="endTime"
+                value="${escapeHtml(s.endTime)}"
+                placeholder="${defEnd}"
+                maxlength="5"
+              />
+            </div>
+
+            <div class="duration-manual-group">
+              <span class="duration-label">真實時長:</span>
+              <input
+                type="number"
+                min="0"
+                max="24"
+                class="dur-num-input daily-dur-hr"
+                data-day="${day.dayCountdown}"
+                data-slot="${key}"
+                value="${durHr}"
+              />
+              <span class="duration-unit">時</span>
+              <input
+                type="number"
+                min="0"
+                max="59"
+                class="dur-num-input daily-dur-min"
+                data-day="${day.dayCountdown}"
+                data-slot="${key}"
+                value="${durMin}"
+              />
+              <span class="duration-unit">分</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updateDailyPlanLiveClocks(active) {
+  if (!active || active.day.dayCountdown !== currentActiveDayCountdown) return;
+  const clockEl = document.getElementById(`daily-clock-${active.day.dayCountdown}-${active.slotKey}`);
+  if (clockEl) {
+    clockEl.textContent = formatMsToClock(getSlotLiveMs(active.slot));
+  }
+}
+
+/* ==========================================================================
    UI 渲染：主工作區（每日讀書計劃與 YPT 真實計時表格）
    ========================================================================== */
 
@@ -1233,6 +1741,7 @@ function buildDayRowHtml(day) {
       <td class="sticky-col-2" style="text-align:center;">
         <span class="day-badge">Day ${day.dayCountdown}</span>
         <span class="phase-mini-tag" id="row-phase-tag-${day.dayCountdown}">${escapeHtml(phaseName)}</span>
+        <button type="button" class="btn btn-xs btn-subtle jump-to-daily-btn" data-jump-day="${day.dayCountdown}" style="margin-top:4px;padding:2px 6px;font-size:11px;" title="開啟此日的專注計時與詳細規劃">今日專注 ➔</button>
       </td>
 
       <!-- 行事曆 -->
@@ -1384,7 +1893,7 @@ function buildSlotCellHtml(dayCountdown, slotKey, slot) {
 
         <!-- 第三排：開始時間、結束時間 與 真實讀書時長（支援手動微調） -->
         <div class="slot-time-inputs">
-          <div class="time-range-group" title="可直接點擊手動輸入或修改開始與結束時間 (如 08:30)">
+          <div class="time-range-group" title="可直接點擊手動輸入或修改開始與結束時間">
             <span>起</span>
             <input
               type="text"
@@ -1394,7 +1903,7 @@ function buildSlotCellHtml(dayCountdown, slotKey, slot) {
               data-slot="${slotKey}"
               data-field="startTime"
               value="${escapeHtml(slot.startTime)}"
-              placeholder="08:30"
+              placeholder="${slotKey === 'morning' ? '05:00' : (slotKey === 'afternoon' ? '12:00' : '19:00')}"
               maxlength="5"
             />
             <span>迄</span>
@@ -1406,7 +1915,7 @@ function buildSlotCellHtml(dayCountdown, slotKey, slot) {
               data-slot="${slotKey}"
               data-field="endTime"
               value="${escapeHtml(slot.endTime)}"
-              placeholder="12:00"
+              placeholder="${slotKey === 'morning' ? '12:00' : (slotKey === 'afternoon' ? '19:00' : '05:00')}"
               maxlength="5"
             />
           </div>
@@ -1549,6 +2058,8 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
   updateSingleDayRowSummaryDom(day);
   updateActiveTimerBanner();
   renderAllStatistics();
+  renderQuickTimerView();
+  renderDailyPlanView();
   if (isRoomConnected && !isReceivingRemoteUpdate) {
     broadcastRoomDelta({
       kind: 'timer',
@@ -1610,6 +2121,12 @@ function startGlobalTimerTicker() {
     const active = findActiveTimerSlot();
     updateActiveTimerBanner(active);
 
+    if (currentActiveTab === 'quick-timer') {
+      updateQuickTimerDom();
+    } else if (currentActiveTab === 'daily-plan') {
+      updateDailyPlanLiveClocks(active);
+    }
+
     if (active && active.slot.timerStatus === 'running') {
       const liveMs = getSlotLiveMs(active.slot);
       const clockEl = document.getElementById(`ypt-clock-${active.day.dayCountdown}-${active.slotKey}`);
@@ -1628,6 +2145,11 @@ function startGlobalTimerTicker() {
 
         updateSingleDayRowSummaryDom(active.day);
         renderAllStatistics();
+        if (currentActiveTab === 'quick-timer') {
+          renderQuickTimerView();
+        } else if (currentActiveTab === 'daily-plan') {
+          renderDailyPlanView();
+        }
       }
     }
   }, 500);
@@ -1780,6 +2302,13 @@ function setupEventListeners() {
   const planTableBody = document.getElementById('planTableBody');
   if (planTableBody) {
     planTableBody.addEventListener('click', (e) => {
+      const jumpBtn = e.target.closest('.jump-to-daily-btn');
+      if (jumpBtn && jumpBtn.dataset.jumpDay) {
+        changeDailyPlanDay(Number(jumpBtn.dataset.jumpDay));
+        switchMainTab('daily-plan');
+        return;
+      }
+
       const btn = e.target.closest('button[data-action]');
       if (!btn) return;
       const action = btn.dataset.action;
@@ -1963,7 +2492,8 @@ function setupEventListeners() {
     bannerJumpBtn.addEventListener('click', () => {
       const active = findActiveTimerSlot();
       if (!active) return;
-      scrollToDayRow(active.day.dayCountdown);
+      currentActiveDayCountdown = active.day.dayCountdown;
+      switchMainTab('quick-timer');
     });
   }
 
@@ -2086,10 +2616,214 @@ function setupEventListeners() {
       renderPhasesConfig();
       renderMainScheduleTable();
       renderFullDashboard();
+      renderQuickTimerView();
+      renderDailyPlanView();
       updateActiveTimerBanner();
       showToast('✨ 已將 85 天所有時間、計時器與打勾紀錄全新重置為 0（科目、範圍、行事曆與目標保留）');
     });
   }
+
+  // 10. 主要分頁導航切換（快捷計時、今日專注、行事曆、統計列表）
+  const mainTabsNav = document.getElementById('mainTabsNav');
+  if (mainTabsNav) {
+    mainTabsNav.addEventListener('click', (e) => {
+      const btn = e.target.closest('.tab-nav-btn');
+      if (btn && btn.dataset.tab) {
+        switchMainTab(btn.dataset.tab);
+      }
+    });
+  }
+
+  // 11. 分頁 1（快捷計時）互動處理
+  const quickGrid = document.getElementById('quickSubjectsGrid');
+  if (quickGrid) {
+    quickGrid.addEventListener('click', (e) => {
+      const btn = e.target.closest('.quick-subj-btn');
+      if (btn && btn.dataset.quickSubject) {
+        handleQuickSubjectClick(btn.dataset.quickSubject);
+      }
+    });
+  }
+
+  const quickPauseResumeBtn = document.getElementById('quickPauseResumeBtn');
+  if (quickPauseResumeBtn) {
+    quickPauseResumeBtn.addEventListener('click', () => {
+      const active = findActiveTimerSlot();
+      if (!active) return;
+      const action = active.slot.timerStatus === 'running' ? 'ypt-pause' : 'ypt-resume';
+      handleYptTimerAction(action, active.day.dayCountdown, active.slotKey);
+    });
+  }
+
+  const quickStopBtn = document.getElementById('quickStopBtn');
+  if (quickStopBtn) {
+    quickStopBtn.addEventListener('click', () => {
+      const active = findActiveTimerSlot();
+      if (!active) return;
+      handleYptTimerAction('ypt-stop', active.day.dayCountdown, active.slotKey);
+    });
+  }
+
+  const quickSwitchDayBtn = document.getElementById('quickSwitchDayBtn');
+  if (quickSwitchDayBtn) {
+    quickSwitchDayBtn.addEventListener('click', () => {
+      switchMainTab('daily-plan');
+    });
+  }
+
+  const quickJumpToDailyBtn = document.getElementById('quickJumpToDailyBtn');
+  if (quickJumpToDailyBtn) {
+    quickJumpToDailyBtn.addEventListener('click', () => {
+      switchMainTab('daily-plan');
+    });
+  }
+
+  // 12. 分頁 2（今日專注 / 每天計時）互動處理
+  const dailyPrevDayBtn = document.getElementById('dailyPrevDayBtn');
+  const dailyNextDayBtn = document.getElementById('dailyNextDayBtn');
+  const dailyTodayBtn = document.getElementById('dailyTodayBtn');
+  const dailyDaySelect = document.getElementById('dailyDaySelect');
+  const dailyCalendarInput = document.getElementById('dailyCalendarInput');
+  const dailySlotsContainer = document.getElementById('dailySlotsContainer');
+
+  if (dailyPrevDayBtn) {
+    dailyPrevDayBtn.addEventListener('click', () => {
+      changeDailyPlanDay(currentActiveDayCountdown + 1);
+    });
+  }
+  if (dailyNextDayBtn) {
+    dailyNextDayBtn.addEventListener('click', () => {
+      changeDailyPlanDay(currentActiveDayCountdown - 1);
+    });
+  }
+  if (dailyTodayBtn) {
+    dailyTodayBtn.addEventListener('click', () => {
+      changeDailyPlanDay(getTodayDayCountdown());
+    });
+  }
+  if (dailyDaySelect) {
+    dailyDaySelect.addEventListener('change', (e) => {
+      changeDailyPlanDay(Number(e.target.value));
+    });
+  }
+  if (dailyCalendarInput) {
+    dailyCalendarInput.addEventListener('input', (e) => {
+      const day = appState.days.find(d => d.dayCountdown === currentActiveDayCountdown);
+      if (!day) return;
+      day.calendar = e.target.value;
+      saveState();
+      const mainRow = document.getElementById(`row-day-${day.dayCountdown}`);
+      if (mainRow) {
+        const inp = mainRow.querySelector('.calendar-input');
+        if (inp && document.activeElement !== inp) inp.value = day.calendar;
+      }
+      broadcastRoomDeltaDebounced({ kind: 'calendar', day: day.dayCountdown, val: day.calendar });
+    });
+  }
+
+  if (dailySlotsContainer) {
+    dailySlotsContainer.addEventListener('change', (e) => {
+      const target = e.target;
+      const dayCountdown = Number(target.dataset.day);
+      const slotKey = target.dataset.slot;
+      const day = appState.days.find(d => d.dayCountdown === dayCountdown);
+      if (!day || !day[slotKey]) return;
+      const slot = day[slotKey];
+
+      if (target.classList.contains('daily-subject-select')) {
+        slot.subject = target.value;
+        saveState();
+        refreshSlotDom(day, slotKey);
+        renderDailyPlanView();
+        renderQuickTimerView();
+        renderAllStatistics();
+        broadcastRoomDeltaDebounced({ kind: 'subject', day: dayCountdown, slot: slotKey, val: slot.subject });
+      } else if (target.classList.contains('daily-done-checkbox')) {
+        slot.completed = target.checked;
+        saveState();
+        refreshSlotDom(day, slotKey);
+        renderDailyPlanView();
+        renderQuickTimerView();
+        renderAllStatistics();
+        broadcastRoomDelta({ kind: 'completed', day: dayCountdown, slot: slotKey, val: slot.completed, label: `${day.dateDisplay} ${getSlotLabel(slotKey)}` });
+      } else if (target.classList.contains('daily-time-input')) {
+        const field = target.dataset.field;
+        slot[field] = target.value.trim();
+        saveState();
+        refreshSlotDom(day, slotKey);
+        renderDailyPlanView();
+        renderQuickTimerView();
+        renderAllStatistics();
+        broadcastRoomDeltaDebounced({ kind: 'time', day: dayCountdown, slot: slotKey, startTime: slot.startTime, endTime: slot.endTime, durationMinutes: slot.durationMinutes });
+      } else if (target.classList.contains('daily-dur-hr') || target.classList.contains('daily-dur-min')) {
+        const card = document.getElementById(`daily-card-${dayCountdown}-${slotKey}`);
+        const hr = Number(card.querySelector('.daily-dur-hr').value) || 0;
+        const min = Number(card.querySelector('.daily-dur-min').value) || 0;
+        slot.durationMinutes = Math.max(0, hr * 60 + min);
+        slot.accumulatedMs = slot.durationMinutes * 60000;
+        saveState();
+        refreshSlotDom(day, slotKey);
+        renderDailyPlanView();
+        renderQuickTimerView();
+        renderAllStatistics();
+        broadcastRoomDeltaDebounced({ kind: 'time', day: dayCountdown, slot: slotKey, durationMinutes: slot.durationMinutes });
+      }
+    });
+
+    dailySlotsContainer.addEventListener('input', (e) => {
+      const target = e.target;
+      if (target.classList.contains('daily-task-input')) {
+        const dayCountdown = Number(target.dataset.day);
+        const slotKey = target.dataset.slot;
+        const day = appState.days.find(d => d.dayCountdown === dayCountdown);
+        if (!day || !day[slotKey]) return;
+        day[slotKey].task = target.value;
+        saveState();
+        const mainCard = document.getElementById(`slot-card-${dayCountdown}-${slotKey}`);
+        if (mainCard) {
+          const inp = mainCard.querySelector('.task-input');
+          if (inp && document.activeElement !== inp) inp.value = target.value;
+        }
+        broadcastRoomDeltaDebounced({ kind: 'task', day: dayCountdown, slot: slotKey, val: target.value });
+      }
+    });
+
+    dailySlotsContainer.addEventListener('click', (e) => {
+      const btn = e.target.closest('.ypt-btn');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      const dayCountdown = Number(btn.dataset.day);
+      const slotKey = btn.dataset.slot;
+      if (action && dayCountdown && slotKey) {
+        handleYptTimerAction(action, dayCountdown, slotKey);
+      }
+    });
+  }
+
+  // 13. 設定彈窗（⚙️ 開啟 / 關閉）
+  const openSettingsModalBtn = document.getElementById('openSettingsModalBtn');
+  const closeSettingsModalBtn = document.getElementById('closeSettingsModalBtn');
+  const settingsModal = document.getElementById('settingsModal');
+
+  if (openSettingsModalBtn && settingsModal) {
+    openSettingsModalBtn.addEventListener('click', () => {
+      settingsModal.classList.remove('hidden');
+    });
+  }
+  if (closeSettingsModalBtn && settingsModal) {
+    closeSettingsModalBtn.addEventListener('click', () => {
+      settingsModal.classList.add('hidden');
+    });
+  }
+  if (settingsModal) {
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) {
+        settingsModal.classList.add('hidden');
+      }
+    });
+  }
+
+
 }
 
 /* ==========================================================================
@@ -2107,28 +2841,31 @@ function updateAllRowPhaseTags() {
 }
 
 function scrollToDayRow(dayCountdown) {
-  let row = document.getElementById(`row-day-${dayCountdown}`);
-  if (!row) {
-    currentPhaseFilter = 'all';
-    currentSubjectFilter = '';
-    currentSearchQuery = '';
-    const tabs = document.querySelectorAll('#phaseFilterTabs .filter-tab');
-    tabs.forEach(t => t.classList.toggle('active', t.dataset.filter === 'all'));
-    const searchEl = document.getElementById('searchScheduleInput');
-    if (searchEl) searchEl.value = '';
-    const subjEl = document.getElementById('subjectFilterSelect');
-    if (subjEl) subjEl.value = '';
-    renderMainScheduleTable();
-    row = document.getElementById(`row-day-${dayCountdown}`);
-  }
-  if (row) {
-    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    row.style.transition = 'box-shadow 0.3s';
-    row.style.boxShadow = 'inset 0 0 0 2px var(--sakura-primary)';
-    setTimeout(() => {
-      row.style.boxShadow = '';
-    }, 1800);
-  }
+  switchMainTab('calendar-schedule');
+  setTimeout(() => {
+    let row = document.getElementById(`row-day-${dayCountdown}`);
+    if (!row) {
+      currentPhaseFilter = 'all';
+      currentSubjectFilter = '';
+      currentSearchQuery = '';
+      const tabs = document.querySelectorAll('#phaseFilterTabs .filter-tab');
+      tabs.forEach(t => t.classList.toggle('active', t.dataset.filter === 'all'));
+      const searchEl = document.getElementById('searchScheduleInput');
+      if (searchEl) searchEl.value = '';
+      const subjEl = document.getElementById('subjectFilterSelect');
+      if (subjEl) subjEl.value = '';
+      renderMainScheduleTable();
+      row = document.getElementById(`row-day-${dayCountdown}`);
+    }
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.style.transition = 'box-shadow 0.3s';
+      row.style.boxShadow = 'inset 0 0 0 2px var(--sakura-primary)';
+      setTimeout(() => {
+        row.style.boxShadow = '';
+      }, 1800);
+    }
+  }, 100);
 }
 
 function computeMinutesBetweenHM(startStr, endStr) {
@@ -2188,6 +2925,8 @@ function importJsonBackup(e) {
       renderPhasesConfig();
       renderMainScheduleTable();
       renderFullDashboard();
+      renderQuickTimerView();
+      renderDailyPlanView();
       updateActiveTimerBanner();
       showToast('🌸 已成功匯入並還原讀書計劃表資料！');
     } catch (err) {
@@ -2528,6 +3267,8 @@ function handleRoomIncomingMessage(msg) {
     renderPhasesConfig();
     renderMainScheduleTable();
     renderFullDashboard();
+    renderQuickTimerView();
+    renderDailyPlanView();
     updateActiveTimerBanner();
 
     isReceivingRemoteUpdate = false;
@@ -2637,6 +3378,8 @@ function handleRoomIncomingMessage(msg) {
       }
     }
 
+    renderQuickTimerView();
+    renderDailyPlanView();
     isReceivingRemoteUpdate = false;
   }
 }
@@ -2941,13 +3684,17 @@ function showToast(message) {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadState();
+  initCurrentActiveDay();
   renderPhasesConfig();
   renderMainScheduleTable();
   renderFullDashboard();
+  renderQuickTimerView();
+  renderDailyPlanView();
   updateActiveTimerBanner();
   setupEventListeners();
   startGlobalTimerTicker();
   initRoomSyncFromStorageOrUrl();
+  switchMainTab('quick-timer');
 
   // 切回分頁時立即以 Date.now() 對齊顯示（背景分頁的 setInterval 會被瀏覽器降速）
   document.addEventListener('visibilitychange', () => {
@@ -2979,6 +3726,8 @@ document.addEventListener('DOMContentLoaded', () => {
       renderPhasesConfig();
       renderMainScheduleTable();
       renderFullDashboard();
+      renderQuickTimerView();
+      renderDailyPlanView();
       updateActiveTimerBanner();
     } catch (err) {
       console.error('Cross-tab sync failed:', err);

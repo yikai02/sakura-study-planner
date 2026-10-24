@@ -1706,3 +1706,544 @@ body {
   margin-top: 6px;
   flex-wrap: wrap;
 }
+
+/* ==========================================================================
+   4 Main Navigation Tabs & Tab Views
+   ========================================================================== */
+.main-tabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(223, 118, 139, 0.08);
+  padding: 4px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(223, 118, 139, 0.2);
+}
+
+.tab-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.tab-nav-btn:hover {
+  color: var(--sakura-deep);
+  background: rgba(255, 255, 255, 0.65);
+}
+
+.tab-nav-btn.active {
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #DF768B 0%, #CC5F75 100%);
+  box-shadow: 0 2px 8px rgba(223, 118, 139, 0.35);
+}
+
+.tab-nav-btn .tab-icon {
+  font-size: 15px;
+}
+
+/* Tab Views */
+.tab-view {
+  display: none;
+  animation: fadeInTab 0.22s ease-out;
+}
+
+.tab-view.active {
+  display: block;
+}
+
+@keyframes fadeInTab {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Quick Timer View Styles */
+.quick-timer-wrapper {
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.quick-header-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #FFF8FA 0%, #FFFFFF 100%);
+  border: 1px solid var(--sakura-border);
+  border-radius: var(--radius-md);
+  padding: 14px 20px;
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.quick-date-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.quick-day-badge {
+  background: var(--sakura-primary);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(223, 118, 139, 0.3);
+}
+
+.quick-date-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.quick-phase-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sakura-deep);
+  background: var(--bg-sakura-soft);
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--sakura-border);
+}
+
+.quick-today-stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quick-stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.quick-stat-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--sakura-deep);
+  font-family: "SF Mono", monospace;
+}
+
+/* Big YPT Clock Card */
+.quick-timer-card {
+  text-align: center;
+  padding: 36px 20px;
+  background: linear-gradient(180deg, #FFFFFF 0%, #FFFDFE 100%);
+  border: 1.5px solid var(--sakura-border);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
+}
+
+.quick-timer-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.quick-active-badge-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 18px;
+  border-radius: 999px;
+  background: var(--bg-sakura-soft);
+  border: 1px solid var(--sakura-border);
+}
+
+.quick-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #A64458;
+}
+
+.quick-status-dot.running {
+  background: var(--timer-running);
+  animation: blinkDot 1s infinite;
+}
+
+.quick-status-dot.paused {
+  background: var(--timer-paused);
+}
+
+.quick-status-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.quick-clock-display {
+  font-family: "SF Pro Display", "SF Mono", "Menlo", monospace;
+  font-size: clamp(52px, 12vw, 88px);
+  font-weight: 800;
+  color: var(--sakura-deep);
+  letter-spacing: 2px;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0;
+  text-shadow: 0 2px 10px rgba(166, 68, 88, 0.08);
+}
+
+.quick-slot-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  background: rgba(0,0,0,0.02);
+  padding: 4px 12px;
+  border-radius: 6px;
+}
+
+.quick-actions-row {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.btn-lg {
+  padding: 10px 24px;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 12px;
+}
+
+/* Quick Subject Buttons (YPT Style) */
+.quick-subjects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.quick-subj-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 12px;
+  border-radius: 14px;
+  border: 1.5px solid var(--border-light);
+  background: #FFFFFF;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--shadow-xs);
+  text-align: center;
+  user-select: none;
+}
+
+.quick-subj-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+  border-color: var(--sakura-primary);
+}
+
+.quick-subj-btn:active {
+  transform: translateY(0);
+}
+
+.quick-subj-btn.active-running {
+  border-color: var(--sakura-primary);
+  background: var(--bg-sakura-soft);
+  box-shadow: 0 0 0 3px rgba(223, 118, 139, 0.25);
+}
+
+.quick-subj-icon {
+  font-size: 26px;
+  margin-bottom: 4px;
+}
+
+.quick-subj-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.quick-subj-time {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Quick 3 Slots Preview */
+.quick-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.quick-slot-card {
+  background: #FAF7F5;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 12px 14px;
+  transition: all 0.2s ease;
+}
+
+.quick-slot-card.is-active {
+  background: #FFF5F7;
+  border-color: var(--sakura-primary);
+  box-shadow: 0 2px 8px rgba(223, 118, 139, 0.15);
+}
+
+.quick-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.quick-slot-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.quick-slot-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.quick-slot-details {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* Daily Plan View Styles */
+.daily-plan-wrapper {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.daily-nav-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFFFFF;
+  border: 1.5px solid var(--sakura-border);
+  border-radius: var(--radius-md);
+  padding: 12px 18px;
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.daily-current-day-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.daily-day-badge {
+  background: var(--sakura-primary);
+  color: white;
+  font-weight: 700;
+  font-size: 13.5px;
+  padding: 3px 12px;
+  border-radius: 999px;
+}
+
+.daily-date-heading {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.daily-phase-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sakura-deep);
+  background: var(--bg-sakura-soft);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.daily-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.daily-calendar-card .card-body {
+  padding: 12px 18px;
+}
+
+.daily-calendar-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  font-size: 14px;
+  background: #FFFDFC;
+  transition: border-color 0.2s ease;
+}
+
+.daily-calendar-input:focus {
+  outline: none;
+  border-color: var(--sakura-primary);
+  box-shadow: 0 0 0 3px rgba(223, 118, 139, 0.15);
+}
+
+/* 3 Detailed Slots Container */
+.daily-slots-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.daily-slot-card {
+  background: #FFFFFF;
+  border: 1.5px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.daily-slot-card.completed {
+  border-color: #BDE6CC;
+  background: #FAFCFA;
+}
+
+.daily-slot-card.running {
+  border-color: var(--sakura-primary);
+  box-shadow: 0 3px 12px rgba(223, 118, 139, 0.2);
+}
+
+.daily-slot-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, #FFFDFD 0%, #FAF5F6 100%);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.daily-slot-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.daily-slot-time-range {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.daily-slot-card-body {
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .daily-slot-card-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.daily-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.daily-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.daily-timer-strip {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg-main);
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.daily-timer-clock-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.daily-live-clock {
+  font-family: "SF Mono", monospace;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--sakura-deep);
+}
+
+/* Daily Summary Card */
+.daily-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding: 16px 20px;
+  text-align: center;
+}
+
+.daily-sum-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.daily-sum-box .sum-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.daily-sum-box .sum-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--sakura-deep);
+}
+
+/* Settings Modal Elements */
+.settings-sec-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.settings-sec-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
