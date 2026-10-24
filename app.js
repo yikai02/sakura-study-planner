@@ -380,15 +380,14 @@ function updateSaveStatusDisplay(roomStatusMessage = null) {
   const now = new Date();
   const hh = String(now.getHours()).padStart(2, '0');
   const mm = String(now.getMinutes()).padStart(2, '0');
-  const ss = String(now.getSeconds()).padStart(2, '0');
 
   if (roomStatusMessage) {
     statusEl.textContent = roomStatusMessage;
   } else if (isRoomConnected) {
-    statusEl.textContent = `🌸 房間同步中 (${hh}:${mm}:${ss})`;
-    if (dotEl) dotEl.style.background = '#DF768B';
+    statusEl.textContent = `🌸 房間已同步 (${hh}:${mm})`;
+    if (dotEl) dotEl.style.background = '#2E7350';
   } else {
-    statusEl.textContent = `已本機儲存 (${hh}:${mm}:${ss})`;
+    statusEl.textContent = `已本機儲存 (${hh}:${mm})`;
     if (dotEl) dotEl.style.background = '#4E8C6F';
   }
 }
@@ -400,7 +399,6 @@ function queueRoomFullBroadcast() {
   if (roomDebounceTimer) {
     clearTimeout(roomDebounceTimer);
   }
-  updateSaveStatusDisplay('🌸 正在同步至房間...');
   setRoomNavbarStatus('syncing');
 
   roomDebounceTimer = setTimeout(() => {
@@ -2226,8 +2224,8 @@ function compactState(st) {
     if (d.calendar && d.calendar.trim()) dayEntry.c = d.calendar.trim();
     SLOT_KEYS.forEach(({ key }) => {
       const s = d[key];
-      if (s.subject || s.task || s.durationMinutes || s.completed || s.startTime || s.endTime) {
-        dayEntry[key[0]] = [
+      if (s.subject || s.task || s.durationMinutes || s.completed || s.startTime || s.endTime || (s.accumulatedMs && s.accumulatedMs > 0)) {
+        const arr = [
           s.subject || '',
           s.task || '',
           s.durationMinutes || 0,
@@ -2237,6 +2235,18 @@ function compactState(st) {
           s.timerStatus || 'idle',
           s.accumulatedMs || 0
         ];
+        // 移除尾部預設值以極度精簡傳輸體積
+        while (arr.length > 2 && (
+          (arr.length === 8 && arr[7] === 0) ||
+          (arr.length === 7 && arr[6] === 'idle') ||
+          (arr.length === 6 && arr[5] === '') ||
+          (arr.length === 5 && arr[4] === '') ||
+          (arr.length === 4 && arr[3] === 0) ||
+          (arr.length === 3 && arr[2] === 0)
+        )) {
+          arr.pop();
+        }
+        dayEntry[key[0]] = arr;
       }
     });
     if (Object.keys(dayEntry).length > 0) {
@@ -2325,8 +2335,10 @@ function broadcastRoomDeltaDebounced(payload) {
 /**
  * 廣播完整狀態（開房、加入或手動強制推送時）
  */
+let lastFullBroadcastTs = 0;
 function broadcastFullStateToRoom() {
   if (!isRoomConnected || !currentRoomId || isReceivingRemoteUpdate) return;
+  lastFullBroadcastTs = Date.now();
   broadcastToRoom({
     type: 'FULL',
     roomId: currentRoomId,
@@ -2338,11 +2350,48 @@ function broadcastFullStateToRoom() {
 }
 
 /**
+ * 解析共同房間訊息（支援直接 JSON 訊息，以及 ntfy 大於 4KB 轉為檔案附件時的自動讀取）
+ */
+async function extractRoomMessagePayload(msgEvent) {
+  if (!msgEvent) return null;
+
+  // 1. 若為 ntfy 超過 4KB 轉成的檔案附件
+  if (msgEvent.attachment && msgEvent.attachment.url) {
+    try {
+      const res = await fetch(msgEvent.attachment.url);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('Failed to fetch room attachment:', e);
+    }
+  }
+
+  // 2. 一般文字訊息
+  if (msgEvent.message) {
+    try {
+      return JSON.parse(msgEvent.message);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/**
  * 連線至共同房間（WebSocket 全球即時頻道，免帳號、免2FA）
  */
 function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
   const cleanRoomId = (roomId || 'sakura-study-2026').trim().replace(/[^a-zA-Z0-9_一-龥-]/g, '_');
   if (!cleanRoomId) return;
+
+  // 避免重複連線造成 WebSocket 閃爍與無窮重連風暴
+  if (roomWs && (roomWs.readyState === WebSocket.OPEN || roomWs.readyState === WebSocket.CONNECTING) && currentRoomId === cleanRoomId) {
+    myNickname = (nickname || '我').trim() || '我';
+    setRoomNavbarStatus('connected');
+    return;
+  }
 
   if (roomReconnectTimeout) {
     clearTimeout(roomReconnectTimeout);
@@ -2356,7 +2405,7 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
 
   currentRoomId = cleanRoomId;
   myNickname = (nickname || '我').trim() || '我';
-  setRoomNavbarStatus('syncing');
+  setRoomNavbarStatus('connected');
 
   const topic = `sakura_room_${encodeURIComponent(currentRoomId)}`;
   const wsUrl = `wss://ntfy.sh/${topic}/ws`;
@@ -2392,24 +2441,25 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
       }
     };
 
-    roomWs.onmessage = (event) => {
+    roomWs.onmessage = async (event) => {
       try {
         const msgEvent = JSON.parse(event.data);
-        if (msgEvent.event === 'message' && msgEvent.message) {
-          const data = JSON.parse(msgEvent.message);
-          handleRoomIncomingMessage(data);
+        if (msgEvent.event === 'message') {
+          const data = await extractRoomMessagePayload(msgEvent);
+          if (data) {
+            handleRoomIncomingMessage(data);
+          }
         }
       } catch (err) {
-        // 忽略非 JSON 訊息
+        // 忽略非預期訊息
       }
     };
 
     roomWs.onclose = () => {
       isRoomConnected = false;
-      setRoomNavbarStatus('disconnected');
       renderRoomModalState();
 
-      // 若使用者仍處於連線設定中，則 5 秒後自動重連
+      // 若使用者仍處於連線設定中，則 6 秒後自動重連
       const stored = localStorage.getItem(ROOM_STORAGE_KEY);
       if (stored) {
         try {
@@ -2417,7 +2467,7 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
           if (parsed && parsed.enabled) {
             roomReconnectTimeout = setTimeout(() => {
               connectToSharedRoom(currentRoomId, myNickname, true);
-            }, 4500);
+            }, 6000);
           }
         } catch (e) {}
       }
@@ -2425,13 +2475,15 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
 
     roomWs.onerror = (err) => {
       console.warn('Room WebSocket error:', err);
-      setRoomNavbarStatus('disconnected');
     };
   } catch (err) {
     console.error('Failed to open room WebSocket:', err);
-    setRoomNavbarStatus('disconnected');
   }
 }
+
+let lastJoinResponseTs = 0;
+let lastJoinToastTs = 0;
+let lastKnownJoinSender = '';
 
 /**
  * 處理房間內收到的即時更新訊息
@@ -2440,14 +2492,28 @@ function handleRoomIncomingMessage(msg) {
   if (!msg || msg.senderId === myClientId) return; // 略過自己發出的廣播
 
   if (msg.type === 'JOIN') {
-    // 有新成員（或自己的另一台手機）剛加入房間，身為在線成員自動將目前進度推給他！
-    broadcastFullStateToRoom();
-    showToast(`👋 夥伴【${escapeHtml(msg.senderName || '新成員')}】加入了房間！`);
+    const now = Date.now();
+    // 夥伴加入通知防洗版（同一個人在 15 秒內只彈一次提示）
+    if (now - lastJoinToastTs > 15000 || lastKnownJoinSender !== msg.senderId) {
+      lastJoinToastTs = now;
+      lastKnownJoinSender = msg.senderId;
+      showToast(`👋 夥伴【${escapeHtml(msg.senderName || '新成員')}】已連線！`);
+    }
+
+    // 關鍵防循環保護：8 秒內只回應一次 FULL，避免手機與電腦互相 JOIN 形成無窮發送風暴
+    if (now - lastJoinResponseTs > 8000) {
+      lastJoinResponseTs = now;
+      broadcastFullStateToRoom();
+    }
     return;
   }
 
   if (msg.type === 'REQ_FULL') {
-    broadcastFullStateToRoom();
+    const now = Date.now();
+    if (now - lastJoinResponseTs > 5000) {
+      lastJoinResponseTs = now;
+      broadcastFullStateToRoom();
+    }
     return;
   }
 
@@ -2591,12 +2657,14 @@ async function pollLatestRoomSnapshot(topic) {
     for (let i = 0; i < lines.length; i++) {
       try {
         const item = JSON.parse(lines[i]);
-        if (item.event === 'message' && item.message) {
-          const data = JSON.parse(item.message);
-          items.push(data);
-          if (data && data.type === 'FULL' && data.compact && data.senderId !== myClientId) {
-            fullSnapshotIndex = items.length - 1;
-            fullSnapshotData = data;
+        if (item.event === 'message') {
+          const data = await extractRoomMessagePayload(item);
+          if (data) {
+            items.push(data);
+            if (data.type === 'FULL' && data.compact && data.senderId !== myClientId) {
+              fullSnapshotIndex = items.length - 1;
+              fullSnapshotData = data;
+            }
           }
         }
       } catch (e) {}
@@ -2652,13 +2720,12 @@ function setRoomNavbarStatus(status) {
 
   if (status === 'connected') {
     btn.classList.add('connected');
-    textEl.textContent = `房號: ${currentRoomId}`;
   } else if (status === 'syncing') {
     btn.classList.add('syncing');
-    textEl.textContent = '同步連線中...';
-  } else {
-    textEl.textContent = '多人同步房';
   }
+
+  // 保持按鈕文字穩定，絕對不切換長短字串，防止導覽列跳動閃爍
+  textEl.textContent = currentRoomId ? `房號: ${currentRoomId}` : '多人同步房';
 }
 
 /**

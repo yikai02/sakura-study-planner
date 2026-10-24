@@ -253,6 +253,7 @@ body {
   align-items: center;
   gap: 5px;
   margin-right: 6px;
+  white-space: nowrap;
 }
 
 .save-indicator .dot {
@@ -1338,8 +1339,11 @@ body {
   font-weight: 600;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  transition: all 0.2s ease;
+  min-width: 165px;
+  white-space: nowrap;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .btn-cloud:hover {
@@ -1366,23 +1370,12 @@ body {
 
 .btn-cloud.connected .cloud-dot {
   background-color: #2E7350;
-  box-shadow: 0 0 0 2px rgba(46, 115, 80, 0.2);
-  animation: pulseGreen 2s infinite ease-in-out;
+  box-shadow: 0 0 0 2px rgba(46, 115, 80, 0.25);
 }
 
 .btn-cloud.syncing .cloud-dot {
   background-color: #D98A3C;
-  animation: pulseAmber 1s infinite ease-in-out;
-}
-
-@keyframes pulseGreen {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.85); }
-}
-
-@keyframes pulseAmber {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(0.8); }
+  box-shadow: 0 0 0 2px rgba(217, 138, 60, 0.25);
 }
 
 /* Modal Overlay & Card (Sakura Theme) */
