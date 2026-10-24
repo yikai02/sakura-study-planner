@@ -2576,7 +2576,7 @@ function handleRoomIncomingMessage(msg) {
 }
 
 /**
- * 查詢房間最近一筆快取進度
+ * 查詢房間最近一筆快取進度並依序回放最新異動
  */
 async function pollLatestRoomSnapshot(topic) {
   try {
@@ -2584,17 +2584,35 @@ async function pollLatestRoomSnapshot(topic) {
     if (!res.ok) return;
     const text = await res.text();
     const lines = text.trim().split('\n');
-    for (let i = lines.length - 1; i >= 0; i--) {
+    let fullSnapshotIndex = -1;
+    let fullSnapshotData = null;
+    const items = [];
+
+    for (let i = 0; i < lines.length; i++) {
       try {
         const item = JSON.parse(lines[i]);
         if (item.event === 'message' && item.message) {
           const data = JSON.parse(item.message);
+          items.push(data);
           if (data && data.type === 'FULL' && data.compact && data.senderId !== myClientId) {
-            handleRoomIncomingMessage(data);
-            break;
+            fullSnapshotIndex = items.length - 1;
+            fullSnapshotData = data;
           }
         }
       } catch (e) {}
+    }
+
+    // 優先套用最新一筆完整快照
+    if (fullSnapshotData) {
+      handleRoomIncomingMessage(fullSnapshotData);
+    }
+
+    // 依序回放快照之後的所有最新細項異動
+    const startIdx = fullSnapshotIndex >= 0 ? fullSnapshotIndex + 1 : 0;
+    for (let i = startIdx; i < items.length; i++) {
+      if (items[i] && items[i].type === 'DELTA' && items[i].senderId !== myClientId) {
+        handleRoomIncomingMessage(items[i]);
+      }
     }
   } catch (err) {
     console.warn('Poll room snapshot warning:', err);
@@ -2875,6 +2893,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     updateActiveTimerBanner(active);
     renderAllStatistics();
+
+    // Safari / iOS 螢幕喚醒時若 WebSocket 連線已休眠斷開，立即自動重新連線！
+    if (currentRoomId) {
+      if (!roomWs || roomWs.readyState === WebSocket.CLOSED || roomWs.readyState === WebSocket.CLOSING) {
+        connectToSharedRoom(currentRoomId, myNickname, true);
+      }
+    }
   });
 
   // 多分頁同步：其他分頁修改資料時重新載入，避免互相覆蓋
