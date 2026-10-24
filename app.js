@@ -131,9 +131,11 @@ const WEEKDAY_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五
 
 // 全域狀態
 let appState = null;
-let currentPhaseFilter = 'all';
-let currentSubjectFilter = '';
-let currentSearchQuery = '';
+let currentPhaseFilter = 'all'; // 純粹行事曆階段篩選
+let currentSearchQuery = '';     // 純粹行事曆關鍵字搜尋
+let currentDailyPhaseFilter = 'all';  // 每日專注總表階段篩選
+let currentDailySubjectFilter = '';   // 每日專注總表科目篩選
+let currentDailySearchQuery = '';     // 每日專注總表關鍵字搜尋
 let isSideBySideLayout = false;
 let isDashboardCollapsed = false;
 let timerIntervalId = null;
@@ -610,6 +612,10 @@ function renderPhasesConfig() {
     const btn = document.getElementById(`filterTabPhase${idx}`);
     if (btn) {
       btn.textContent = `${p.name} (Day ${p.startDay}-${p.endDay})`;
+    }
+    const dailyBtn = document.getElementById(`dailyFilterTabPhase${idx}`);
+    if (dailyBtn) {
+      dailyBtn.textContent = `${p.name} (Day ${p.startDay}-${p.endDay})`;
     }
   });
 }
@@ -1454,6 +1460,7 @@ function renderDailyPlanView() {
   }
 
   renderDailySlotsDetailed(day);
+  renderDailyFocusScheduleTable();
 
   const doneCount = SLOT_KEYS.filter(({ key }) => day[key].completed).length;
   const rate = Math.round((doneCount / 3) * 100);
@@ -1644,19 +1651,117 @@ function updateDailyPlanLiveClocks(active) {
 }
 
 /* ==========================================================================
-   UI 渲染：主工作區（每日讀書計劃與 YPT 真實計時表格）
+   UI 渲染：純粹行事曆（85天日期、倒數與行程備忘大表）
    ========================================================================== */
 
-function renderMainScheduleTable() {
-  const tbody = document.getElementById('planTableBody');
+function renderPureCalendarTable() {
+  const tbody = document.getElementById('pureCalendarTableBody');
   if (!tbody) return;
 
   const filteredDays = appState.days.filter(day => {
-    // 1. 階段或紀錄篩選
     if (currentPhaseFilter === 'phase-0' && getPhaseIndexForDay(day.dayCountdown) !== 0) return false;
     if (currentPhaseFilter === 'phase-1' && getPhaseIndexForDay(day.dayCountdown) !== 1) return false;
     if (currentPhaseFilter === 'phase-2' && getPhaseIndexForDay(day.dayCountdown) !== 2) return false;
-    if (currentPhaseFilter === 'has-record') {
+    if (currentPhaseFilter === 'has-calendar') {
+      if (!day.calendar || !day.calendar.trim()) return false;
+    }
+
+    if (currentSearchQuery) {
+      const q = currentSearchQuery.toLowerCase();
+      const hay = [
+        day.dateDisplay,
+        day.weekdayDisplay,
+        `day ${day.dayCountdown}`,
+        day.calendar || ''
+      ].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+
+    return true;
+  });
+
+  if (filteredDays.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" style="text-align:center; padding: 36px; color: var(--text-muted);">
+          找不到符合條件的行事曆列 🌸
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filteredDays.map(day => buildPureCalendarRowHtml(day)).join('');
+}
+
+function buildPureCalendarRowHtml(day) {
+  const phaseIdx = getPhaseIndexForDay(day.dayCountdown);
+  const phaseName = phaseIdx >= 0 ? appState.phases[phaseIdx].name : '未分類';
+  const hasActiveTimer = SLOT_KEYS.some(({ key }) => day[key].timerStatus === 'running' || day[key].timerStatus === 'paused');
+  const doneCount = SLOT_KEYS.reduce((acc, { key }) => acc + (day[key].completed ? 1 : 0), 0);
+  const ratePct = doneCount === 0 ? 0 : doneCount === 1 ? 33 : doneCount === 2 ? 67 : 100;
+  const totalDayMins = SLOT_KEYS.reduce((acc, { key }) => acc + getSlotEffectiveMinutes(day[key]), 0);
+
+  const rowClasses = [
+    hasActiveTimer ? 'row-active-timer' : '',
+    doneCount === 3 ? 'row-complete-all' : ''
+  ].filter(Boolean).join(' ');
+
+  return `
+    <tr id="pure-row-day-${day.dayCountdown}" class="${rowClasses}" data-day="${day.dayCountdown}">
+      <td style="text-align: center;">
+        <div class="date-cell-content">
+          <span class="date-main">${day.dateDisplay}</span>
+          <span class="date-weekday ${day.isWeekend ? 'weekend' : ''}">${day.weekdayDisplay}</span>
+        </div>
+      </td>
+      <td style="text-align: center;">
+        <span class="day-badge">Day ${day.dayCountdown}</span>
+        <span class="phase-mini-tag">${escapeHtml(phaseName)}</span>
+      </td>
+      <td class="calendar-cell">
+        <textarea
+          class="pure-calendar-input"
+          data-day="${day.dayCountdown}"
+          data-field="calendar"
+          placeholder="備忘行程、考試或死線..."
+        >${escapeHtml(day.calendar)}</textarea>
+      </td>
+      <td style="text-align: center;">
+        <span class="daily-total-time ${totalDayMins > 0 ? 'has-time' : ''}" id="pure-summary-time-${day.dayCountdown}">
+          ${formatMinutesToHM(totalDayMins)}
+        </span>
+      </td>
+      <td style="text-align: center;">
+        <div class="pure-completion-wrap">
+          <span class="pure-done-text" id="pure-summary-done-${day.dayCountdown}">${doneCount} / 3</span>
+          <div class="mini-progress-bar">
+            <div class="mini-progress-fill" id="pure-summary-bar-${day.dayCountdown}" style="width: ${ratePct}%;"></div>
+          </div>
+        </div>
+      </td>
+      <td style="text-align: center;">
+        <button type="button" class="btn btn-xs btn-primary jump-to-daily-btn" data-jump-day="${day.dayCountdown}" title="進入此日的專注規劃">
+          每日專注 ➔
+        </button>
+      </td>
+    </tr>
+  `;
+}
+
+/* ==========================================================================
+   UI 渲染：每日專注總表（85天早中晚專注時間與各時段詳細紀錄）
+   ========================================================================== */
+
+function renderDailyFocusScheduleTable() {
+  const tbody = document.getElementById('dailyFocusTableBody');
+  if (!tbody) return;
+
+  const filteredDays = appState.days.filter(day => {
+    if (currentDailyPhaseFilter === 'phase-0' && getPhaseIndexForDay(day.dayCountdown) !== 0) return false;
+    if (currentDailyPhaseFilter === 'phase-1' && getPhaseIndexForDay(day.dayCountdown) !== 1) return false;
+    if (currentDailyPhaseFilter === 'phase-2' && getPhaseIndexForDay(day.dayCountdown) !== 2) return false;
+    if (currentDailyPhaseFilter === 'has-record') {
       const hasRec = SLOT_KEYS.some(({ key }) => {
         const s = day[key];
         return s.completed || getSlotEffectiveMinutes(s) > 0 || s.timerStatus === 'running' || s.timerStatus === 'paused';
@@ -1664,26 +1769,23 @@ function renderMainScheduleTable() {
       if (!hasRec) return false;
     }
 
-    // 2. 科目篩選
-    if (currentSubjectFilter) {
+    if (currentDailySubjectFilter) {
       const matchSubj = SLOT_KEYS.some(({ key }) => {
         const subj = day[key].subject;
-        if (currentSubjectFilter === '經濟') {
+        if (currentDailySubjectFilter === '經濟') {
           return subj === '經濟' || subj === '個經' || subj === '總經';
         }
-        return subj === currentSubjectFilter;
+        return subj === currentDailySubjectFilter;
       });
       if (!matchSubj) return false;
     }
 
-    // 3. 關鍵字搜尋
-    if (currentSearchQuery) {
-      const q = currentSearchQuery.toLowerCase();
+    if (currentDailySearchQuery) {
+      const q = currentDailySearchQuery.toLowerCase();
       const hay = [
         day.dateDisplay,
         day.weekdayDisplay,
         `day ${day.dayCountdown}`,
-        day.calendar,
         day.morning.subject,
         day.morning.task,
         day.afternoon.subject,
@@ -1701,23 +1803,20 @@ function renderMainScheduleTable() {
     tbody.innerHTML = `
       <tr>
         <td colspan="9" style="text-align:center; padding: 36px; color: var(--text-muted);">
-          找不到符合篩選條件的日期列，請切換上方篩選分頁或清除搜尋關鍵字 🌸
+          找不到符合條件的專注紀錄列 🌸
         </td>
       </tr>
     `;
     return;
   }
 
-  tbody.innerHTML = filteredDays.map(day => buildDayRowHtml(day)).join('');
+  tbody.innerHTML = filteredDays.map(day => buildDailyFocusRowHtml(day)).join('');
 }
 
-function buildDayRowHtml(day) {
+function buildDailyFocusRowHtml(day) {
   const phaseIdx = getPhaseIndexForDay(day.dayCountdown);
   const phaseName = phaseIdx >= 0 ? appState.phases[phaseIdx].name : '未分類';
-
   const hasActiveTimer = SLOT_KEYS.some(({ key }) => day[key].timerStatus === 'running' || day[key].timerStatus === 'paused');
-
-  // 計算當日自動彙總
   const doneCount = SLOT_KEYS.reduce((acc, { key }) => acc + (day[key].completed ? 1 : 0), 0);
   const ratePct = doneCount === 0 ? 0 : doneCount === 1 ? 33 : doneCount === 2 ? 67 : 100;
   const totalDayMins = SLOT_KEYS.reduce((acc, { key }) => acc + getSlotEffectiveMinutes(day[key]), 0);
@@ -1729,41 +1828,21 @@ function buildDayRowHtml(day) {
 
   return `
     <tr id="row-day-${day.dayCountdown}" class="${rowClasses}" data-day="${day.dayCountdown}">
-      <!-- Date -->
       <td class="sticky-col-1">
         <div class="date-cell-content">
           <span class="date-main">${day.dateDisplay}</span>
           <span class="date-weekday ${day.isWeekend ? 'weekend' : ''}">${day.weekdayDisplay}</span>
         </div>
       </td>
-
-      <!-- Day Countdown -->
       <td class="sticky-col-2" style="text-align:center;">
         <span class="day-badge">Day ${day.dayCountdown}</span>
-        <span class="phase-mini-tag" id="row-phase-tag-${day.dayCountdown}">${escapeHtml(phaseName)}</span>
-        <button type="button" class="btn btn-xs btn-subtle jump-to-daily-btn" data-jump-day="${day.dayCountdown}" style="margin-top:4px;padding:2px 6px;font-size:11px;" title="開啟此日的專注計時與詳細規劃">今日專注 ➔</button>
+        <span class="phase-mini-tag">${escapeHtml(phaseName)}</span>
       </td>
-
-      <!-- 行事曆 -->
-      <td class="calendar-cell">
-        <textarea
-          class="calendar-input"
-          data-day="${day.dayCountdown}"
-          data-field="calendar"
-          placeholder="自由輸入行程、期中考或死線..."
-        >${escapeHtml(day.calendar)}</textarea>
-      </td>
-
-      <!-- 三大時段：早上 / 下午 / 晚上 -->
       ${SLOT_KEYS.map(({ key }) => buildSlotCellHtml(day.dayCountdown, key, day[key])).join('')}
-
-      <!-- 每日自動彙總：每日完成 (0~3) -->
       <td class="summary-cell">
         <span class="daily-done-count" id="summary-done-${day.dayCountdown}">${doneCount}</span>
         <span class="stat-sub-val">/ 3 時段</span>
       </td>
-
-      <!-- 每日自動彙總：每日完成率 (0%, 33%, 67%, 100%) -->
       <td class="summary-cell">
         <div class="daily-rate-wrap">
           <span class="daily-rate-text" id="summary-rate-${day.dayCountdown}">${ratePct}%</span>
@@ -1772,15 +1851,23 @@ function buildDayRowHtml(day) {
           </div>
         </div>
       </td>
-
-      <!-- 每日自動彙總：每日讀書時間 -->
       <td class="summary-cell">
         <span class="daily-total-time ${totalDayMins > 0 ? 'has-time' : ''}" id="summary-time-${day.dayCountdown}">
           ${formatMinutesToHM(totalDayMins)}
         </span>
       </td>
+      <td style="text-align: center;">
+        <button type="button" class="btn btn-xs btn-subtle jump-to-daily-btn" data-jump-day="${day.dayCountdown}" title="切換至上方單日專注">
+          切換 ↵
+        </button>
+      </td>
     </tr>
   `;
+}
+
+function renderMainScheduleTable() {
+  renderPureCalendarTable();
+  renderDailyFocusScheduleTable();
 }
 
 function buildSlotCellHtml(dayCountdown, slotKey, slot) {
@@ -1954,13 +2041,15 @@ function buildSlotCellHtml(dayCountdown, slotKey, slot) {
 }
 
 /**
- * 局部更新單日右側彙總與特定時段卡片（避免重新渲染整張表導致輸入框失焦）
+ * 局部更新單日彙總（同時更新每日專注總表、純粹行事曆與頂部資訊卡）
  */
 function updateSingleDayRowSummaryDom(day) {
   const doneCount = SLOT_KEYS.reduce((acc, { key }) => acc + (day[key].completed ? 1 : 0), 0);
   const ratePct = doneCount === 0 ? 0 : doneCount === 1 ? 33 : doneCount === 2 ? 67 : 100;
   const totalDayMins = SLOT_KEYS.reduce((acc, { key }) => acc + getSlotEffectiveMinutes(day[key]), 0);
+  const hasActive = SLOT_KEYS.some(({ key }) => day[key].timerStatus === 'running' || day[key].timerStatus === 'paused');
 
+  // 1. 每日專注總表對應列
   const doneEl = document.getElementById(`summary-done-${day.dayCountdown}`);
   const rateEl = document.getElementById(`summary-rate-${day.dayCountdown}`);
   const barEl = document.getElementById(`summary-bar-${day.dayCountdown}`);
@@ -1975,9 +2064,38 @@ function updateSingleDayRowSummaryDom(day) {
     timeEl.classList.toggle('has-time', totalDayMins > 0);
   }
   if (rowEl) {
-    const hasActive = SLOT_KEYS.some(({ key }) => day[key].timerStatus === 'running' || day[key].timerStatus === 'paused');
     rowEl.classList.toggle('row-active-timer', hasActive);
     rowEl.classList.toggle('row-complete-all', doneCount === 3);
+  }
+
+  // 2. 純粹行事曆對應列
+  const pureDoneEl = document.getElementById(`pure-summary-done-${day.dayCountdown}`);
+  const pureBarEl = document.getElementById(`pure-summary-bar-${day.dayCountdown}`);
+  const pureTimeEl = document.getElementById(`pure-summary-time-${day.dayCountdown}`);
+  const pureRowEl = document.getElementById(`pure-row-day-${day.dayCountdown}`);
+
+  if (pureDoneEl) pureDoneEl.textContent = `${doneCount} / 3`;
+  if (pureBarEl) pureBarEl.style.width = `${ratePct}%`;
+  if (pureTimeEl) {
+    pureTimeEl.textContent = formatMinutesToHM(totalDayMins);
+    pureTimeEl.classList.toggle('has-time', totalDayMins > 0);
+  }
+  if (pureRowEl) {
+    pureRowEl.classList.toggle('row-active-timer', hasActive);
+    pureRowEl.classList.toggle('row-complete-all', doneCount === 3);
+  }
+
+  // 3. 若為當前單日專注/快捷計時選定日，同步更新其頂部指標
+  if (day.dayCountdown === currentActiveDayCountdown) {
+    const dailyDoneCount = document.getElementById('dailyDoneCount');
+    const dailyDoneRate = document.getElementById('dailyDoneRate');
+    const dailyTotalTime = document.getElementById('dailyTotalTime');
+    const quickTodayTotalTime = document.getElementById('quickTodayTotalTime');
+
+    if (dailyDoneCount) dailyDoneCount.textContent = `${doneCount} / 3`;
+    if (dailyDoneRate) dailyDoneRate.textContent = `${ratePct}%`;
+    if (dailyTotalTime) dailyTotalTime.textContent = formatMinutesToHM(totalDayMins);
+    if (quickTodayTotalTime) quickTodayTotalTime.textContent = formatMinutesToHM(totalDayMins);
   }
 }
 
@@ -2298,14 +2416,45 @@ function setupEventListeners() {
     });
   }
 
-  // 3. 主表格：YPT 按鈕點擊委派
-  const planTableBody = document.getElementById('planTableBody');
-  if (planTableBody) {
-    planTableBody.addEventListener('click', (e) => {
+  // 3A. 純粹行事曆表格委派
+  const pureCalendarTableBody = document.getElementById('pureCalendarTableBody');
+  if (pureCalendarTableBody) {
+    pureCalendarTableBody.addEventListener('click', (e) => {
       const jumpBtn = e.target.closest('.jump-to-daily-btn');
       if (jumpBtn && jumpBtn.dataset.jumpDay) {
         changeDailyPlanDay(Number(jumpBtn.dataset.jumpDay));
         switchMainTab('daily-plan');
+      }
+    });
+
+    pureCalendarTableBody.addEventListener('input', (e) => {
+      const target = e.target;
+      if (target.classList.contains('pure-calendar-input')) {
+        const dayCountdown = Number(target.dataset.day);
+        const day = appState.days.find(d => d.dayCountdown === dayCountdown);
+        if (!day) return;
+        day.calendar = target.value;
+        saveState();
+        if (currentActiveDayCountdown === dayCountdown) {
+          const dailyInp = document.getElementById('dailyCalendarInput');
+          if (dailyInp && document.activeElement !== dailyInp) dailyInp.value = day.calendar;
+        }
+        if (isRoomConnected && !isReceivingRemoteUpdate) {
+          broadcastRoomDeltaDebounced({ kind: 'calendar', day: dayCountdown, val: day.calendar });
+        }
+      }
+    });
+  }
+
+  // 3B. 每日專注總表（85天早中晚專注時間表）委派
+  const dailyFocusTableBody = document.getElementById('dailyFocusTableBody');
+  if (dailyFocusTableBody) {
+    dailyFocusTableBody.addEventListener('click', (e) => {
+      const jumpBtn = e.target.closest('.jump-to-daily-btn');
+      if (jumpBtn && jumpBtn.dataset.jumpDay) {
+        changeDailyPlanDay(Number(jumpBtn.dataset.jumpDay));
+        const topNavCard = document.querySelector('.daily-nav-card');
+        if (topNavCard) topNavCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
       }
 
@@ -2317,8 +2466,8 @@ function setupEventListeners() {
       handleYptTimerAction(action, dayCountdown, slotKey);
     });
 
-    // 主表格：科目下拉、完成勾選、開始/結束時間、真實時長手動微調
-    planTableBody.addEventListener('change', (e) => {
+    // 每日專注總表：科目下拉、完成勾選、開始/結束時間、真實時長手動微調
+    dailyFocusTableBody.addEventListener('change', (e) => {
       const target = e.target;
       const dayCountdown = Number(target.dataset.day);
       const day = appState.days.find(d => d.dayCountdown === dayCountdown);
@@ -2334,6 +2483,10 @@ function setupEventListeners() {
         saveState();
         updateActiveTimerBanner();
         renderAllStatistics();
+        if (currentActiveDayCountdown === dayCountdown) {
+          renderDailySlotsDetailed(day);
+          renderQuickTimerView();
+        }
         if (isRoomConnected && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({ kind: 'subject', day: dayCountdown, slot: slotKey, val: slot.subject });
         }
@@ -2344,6 +2497,10 @@ function setupEventListeners() {
         saveState();
         updateSingleDayRowSummaryDom(day);
         renderAllStatistics();
+        if (currentActiveDayCountdown === dayCountdown) {
+          renderDailySlotsDetailed(day);
+          renderQuickTimerView();
+        }
         if (isRoomConnected && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({
             kind: 'completed',
@@ -2362,7 +2519,7 @@ function setupEventListeners() {
         }
         slot[field] = normalizedTime;
         target.value = normalizedTime;
-        // 若使用者手動輸入了開始與結束時間，且目前真實讀書時長為 0，貼心自動試算時長（仍可隨時手動修改）
+        // 若使用者手動輸入了開始與結束時間，且目前真實讀書時長為 0，自動試算時長
         if (slot.startTime && slot.endTime && slot.durationMinutes === 0 && slot.timerStatus === 'idle') {
           const autoMins = computeMinutesBetweenHM(slot.startTime, slot.endTime);
           if (autoMins > 0) {
@@ -2379,6 +2536,10 @@ function setupEventListeners() {
         saveState();
         updateSingleDayRowSummaryDom(day);
         renderAllStatistics();
+        if (currentActiveDayCountdown === dayCountdown) {
+          renderDailySlotsDetailed(day);
+          renderQuickTimerView();
+        }
         if (isRoomConnected && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({
             kind: 'time',
@@ -2411,6 +2572,10 @@ function setupEventListeners() {
         updateSingleDayRowSummaryDom(day);
         updateActiveTimerBanner();
         renderAllStatistics();
+        if (currentActiveDayCountdown === dayCountdown) {
+          renderDailySlotsDetailed(day);
+          renderQuickTimerView();
+        }
         if (isRoomConnected && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({
             kind: 'time',
@@ -2424,8 +2589,8 @@ function setupEventListeners() {
       }
     });
 
-    // 主表格：行事曆與範圍任務文字即時輸入儲存
-    planTableBody.addEventListener('input', (e) => {
+    // 每日專注總表：範圍任務文字與手動時長即時輸入儲存
+    dailyFocusTableBody.addEventListener('input', (e) => {
       const target = e.target;
       const dayCountdown = Number(target.dataset.day);
       const day = appState.days.find(d => d.dayCountdown === dayCountdown);
@@ -2434,15 +2599,16 @@ function setupEventListeners() {
       const field = target.dataset.field;
       const slotKey = target.dataset.slot;
 
-      if (field === 'calendar') {
-        day.calendar = target.value;
-        saveState();
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
-          broadcastRoomDeltaDebounced({ kind: 'calendar', day: dayCountdown, val: day.calendar });
-        }
-      } else if (field === 'task' && slotKey && day[slotKey]) {
+      if (field === 'task' && slotKey && day[slotKey]) {
         day[slotKey].task = target.value;
         saveState();
+        if (currentActiveDayCountdown === dayCountdown) {
+          const dailyCard = document.getElementById(`daily-card-${dayCountdown}-${slotKey}`);
+          if (dailyCard) {
+            const inp = dailyCard.querySelector('.daily-task-input');
+            if (inp && document.activeElement !== inp) inp.value = target.value;
+          }
+        }
         if (isRoomConnected && !isReceivingRemoteUpdate) {
           broadcastRoomDeltaDebounced({ kind: 'task', day: dayCountdown, slot: slotKey, val: day[slotKey].task });
         }
@@ -2497,7 +2663,7 @@ function setupEventListeners() {
     });
   }
 
-  // 5. 階段篩選 Tabs、科目篩選與搜尋框
+  // 5A. 純粹行事曆篩選 Tabs 與搜尋框
   const phaseFilterTabs = document.getElementById('phaseFilterTabs');
   if (phaseFilterTabs) {
     phaseFilterTabs.addEventListener('click', (e) => {
@@ -2506,15 +2672,7 @@ function setupEventListeners() {
       phaseFilterTabs.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentPhaseFilter = btn.dataset.filter || 'all';
-      renderMainScheduleTable();
-    });
-  }
-
-  const subjectFilterSelect = document.getElementById('subjectFilterSelect');
-  if (subjectFilterSelect) {
-    subjectFilterSelect.addEventListener('change', (e) => {
-      currentSubjectFilter = e.target.value;
-      renderMainScheduleTable();
+      renderPureCalendarTable();
     });
   }
 
@@ -2522,7 +2680,7 @@ function setupEventListeners() {
   if (searchInput) {
     searchInput.addEventListener('input', (e) => {
       currentSearchQuery = e.target.value.trim();
-      renderMainScheduleTable();
+      renderPureCalendarTable();
     });
   }
 
@@ -2533,10 +2691,59 @@ function setupEventListeners() {
       const mm = String(now.getMonth() + 1).padStart(2, '0');
       const dd = String(now.getDate()).padStart(2, '0');
       const todayMatch = appState.days.find(d => d.isoDate.endsWith(`-${mm}-${dd}`));
-      if (todayMatch) {
-        scrollToDayRow(todayMatch.dayCountdown);
-      } else {
-        scrollToDayRow(85);
+      const targetCountdown = todayMatch ? todayMatch.dayCountdown : 85;
+      scrollToDayRow(targetCountdown);
+    });
+  }
+
+  // 5B. 每日專注總表篩選 Tabs、科目篩選與搜尋框
+  const dailyPhaseFilterTabs = document.getElementById('dailyPhaseFilterTabs');
+  if (dailyPhaseFilterTabs) {
+    dailyPhaseFilterTabs.addEventListener('click', (e) => {
+      const btn = e.target.closest('.filter-tab');
+      if (!btn) return;
+      dailyPhaseFilterTabs.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentDailyPhaseFilter = btn.dataset.filter || 'all';
+      renderDailyFocusScheduleTable();
+    });
+  }
+
+  const dailySubjectFilterSelect = document.getElementById('dailySubjectFilterSelect');
+  if (dailySubjectFilterSelect) {
+    dailySubjectFilterSelect.addEventListener('change', (e) => {
+      currentDailySubjectFilter = e.target.value;
+      renderDailyFocusScheduleTable();
+    });
+  }
+
+  const dailySearchInput = document.getElementById('dailySearchScheduleInput');
+  if (dailySearchInput) {
+    dailySearchInput.addEventListener('input', (e) => {
+      currentDailySearchQuery = e.target.value.trim();
+      renderDailyFocusScheduleTable();
+    });
+  }
+
+  const dailyJumpBtn = document.getElementById('dailyJumpToTodayBtn');
+  if (dailyJumpBtn) {
+    dailyJumpBtn.addEventListener('click', () => {
+      const todayCountdown = getTodayDayCountdown();
+      let row = document.getElementById(`row-day-${todayCountdown}`);
+      if (!row) {
+        currentDailyPhaseFilter = 'all';
+        currentDailySubjectFilter = '';
+        currentDailySearchQuery = '';
+        if (dailyPhaseFilterTabs) {
+          dailyPhaseFilterTabs.querySelectorAll('.filter-tab').forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+        }
+        renderDailyFocusScheduleTable();
+        row = document.getElementById(`row-day-${todayCountdown}`);
+      }
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('row-pulse-highlight');
+        setTimeout(() => row.classList.remove('row-pulse-highlight'), 1800);
       }
     });
   }
@@ -2841,20 +3048,15 @@ function updateAllRowPhaseTags() {
 }
 
 function scrollToDayRow(dayCountdown) {
-  switchMainTab('calendar-schedule');
-  setTimeout(() => {
+  if (currentActiveTab === 'daily-plan') {
     let row = document.getElementById(`row-day-${dayCountdown}`);
     if (!row) {
-      currentPhaseFilter = 'all';
-      currentSubjectFilter = '';
-      currentSearchQuery = '';
-      const tabs = document.querySelectorAll('#phaseFilterTabs .filter-tab');
+      currentDailyPhaseFilter = 'all';
+      currentDailySubjectFilter = '';
+      currentDailySearchQuery = '';
+      const tabs = document.querySelectorAll('#dailyPhaseFilterTabs .filter-tab');
       tabs.forEach(t => t.classList.toggle('active', t.dataset.filter === 'all'));
-      const searchEl = document.getElementById('searchScheduleInput');
-      if (searchEl) searchEl.value = '';
-      const subjEl = document.getElementById('subjectFilterSelect');
-      if (subjEl) subjEl.value = '';
-      renderMainScheduleTable();
+      renderDailyFocusScheduleTable();
       row = document.getElementById(`row-day-${dayCountdown}`);
     }
     if (row) {
@@ -2865,7 +3067,30 @@ function scrollToDayRow(dayCountdown) {
         row.style.boxShadow = '';
       }, 1800);
     }
-  }, 100);
+  } else {
+    switchMainTab('calendar-schedule');
+    setTimeout(() => {
+      let row = document.getElementById(`pure-row-day-${dayCountdown}`);
+      if (!row) {
+        currentPhaseFilter = 'all';
+        currentSearchQuery = '';
+        const tabs = document.querySelectorAll('#phaseFilterTabs .filter-tab');
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.filter === 'all'));
+        const searchEl = document.getElementById('searchScheduleInput');
+        if (searchEl) searchEl.value = '';
+        renderPureCalendarTable();
+        row = document.getElementById(`pure-row-day-${dayCountdown}`);
+      }
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.style.transition = 'box-shadow 0.3s';
+        row.style.boxShadow = 'inset 0 0 0 2px var(--sakura-primary)';
+        setTimeout(() => {
+          row.style.boxShadow = '';
+        }, 1800);
+      }
+    }, 100);
+  }
 }
 
 function computeMinutesBetweenHM(startStr, endStr) {
@@ -3353,10 +3578,14 @@ function handleRoomIncomingMessage(msg) {
       const day = appState.days.find(d => d.dayCountdown === Number(p.day));
       if (day) {
         day.calendar = p.val || '';
-        const row = document.getElementById(`row-day-${p.day}`);
-        const inputEl = row ? row.querySelector('.calendar-input') : null;
+        const pureRow = document.getElementById(`pure-row-day-${p.day}`);
+        const inputEl = pureRow ? pureRow.querySelector('.pure-calendar-input') : null;
         if (inputEl && document.activeElement !== inputEl) {
           inputEl.value = day.calendar;
+        }
+        if (currentActiveDayCountdown === day.dayCountdown) {
+          const dailyInp = document.getElementById('dailyCalendarInput');
+          if (dailyInp && document.activeElement !== dailyInp) dailyInp.value = day.calendar;
         }
         saveState(false, false);
       }
