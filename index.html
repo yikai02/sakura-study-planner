@@ -36,16 +36,16 @@
       </div>
     </div>
 
-    <!-- Right Actions: Save Status, Cloud Sync, Layout Switch, Load Pre-planned, Export/Import JSON, Reset -->
+    <!-- Right Actions: Save Status, Room Sync, Layout Switch, Load Pre-planned, Export/Import JSON, Reset -->
     <div class="top-actions">
-      <div class="save-indicator" id="saveIndicator" title="所有變更皆自動儲存於瀏覽器 localStorage 與雲端">
+      <div class="save-indicator" id="saveIndicator" title="所有變更皆自動儲存於瀏覽器 localStorage">
         <span class="dot" id="saveIndicatorDot"></span>
         <span id="saveStatusText">已自動儲存</span>
       </div>
-      <button id="cloudSyncBtn" class="btn btn-cloud" type="button" title="設定 Google Firebase 即時雲端同步（手機與電腦同步連線）">
-        <span class="cloud-dot" id="cloudDot"></span>
-        <span class="cloud-icon">☁️</span>
-        <span id="cloudStatusText">雲端同步</span>
+      <button id="roomSyncBtn" class="btn btn-cloud" type="button" title="開啟免註冊・多人即時同步讀書房（免Google帳號、免兩階段驗證）">
+        <span class="cloud-dot" id="roomDot"></span>
+        <span class="cloud-icon">🌸</span>
+        <span id="roomStatusText">多人同步房</span>
       </button>
       <button id="toggleLayoutBtn" class="btn btn-subtle" type="button" title="切換「上下全寬檢視」或「左右並排（Numbers 經典檢視）」">切換左右並排 ◫</button>
       <button id="toggleDashboardBtn" class="btn btn-subtle" type="button">收合統計面板 ▲</button>
@@ -290,108 +290,105 @@
 
   </main>
 
-  <!-- Cloud Real-time Sync Modal (Google Docs-style multi-device sync) -->
-  <div id="cloudSyncModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="cloudModalTitle">
+  <!-- Multi-user Real-time Sync Room Modal (Zero-config, No Google 2FA, Multi-person collaboration) -->
+  <div id="roomSyncModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="roomModalTitle">
     <div class="modal-card">
       <div class="modal-header">
         <div class="modal-title-group">
-          <span class="modal-icon">☁️</span>
-          <h3 id="cloudModalTitle">雲端即時同步設定（Google 文件模式）</h3>
+          <span class="modal-icon">🌸</span>
+          <h3 id="roomModalTitle">多人即時同步讀書房（免 Google 帳號・免兩階段驗證）</h3>
         </div>
-        <button id="closeCloudModalBtn" class="modal-close-btn" type="button" aria-label="關閉彈窗">✕</button>
+        <button id="closeRoomModalBtn" class="modal-close-btn" type="button" aria-label="關閉彈窗">✕</button>
       </div>
 
       <div class="modal-body">
         <!-- Live Connection Status Strip -->
-        <div class="cloud-status-strip" id="cloudStatusStrip">
+        <div class="cloud-status-strip" id="roomStatusStrip">
           <div class="cloud-status-indicator">
-            <span class="status-pulse-dot" id="modalStatusDot"></span>
+            <span class="status-pulse-dot" id="roomStatusDot"></span>
             <div>
-              <div class="status-main-title" id="modalStatusTitle">尚未連線雲端資料庫</div>
-              <div class="status-sub-desc" id="modalStatusDesc">目前運作於本機模式（僅儲存於當前瀏覽器）。完成下方設定後即可開啟跨裝置即時同步！</div>
+              <div class="status-main-title" id="roomStatusTitle">尚未加入共同房間（個人單機模式）</div>
+              <div class="status-sub-desc" id="roomStatusDesc">
+                免登入 Google 帳號、免兩階段驗證！只要設定共同房號，不同人、不同手機或電腦皆可隨時進入，任何人打勾修改皆會即時推播給所有人！
+              </div>
             </div>
           </div>
-          <span class="room-pill hidden" id="modalRoomPill">房間：<strong id="modalRoomPillText">-</strong></span>
+          <span class="room-pill hidden" id="currentRoomPill">房號：<strong id="currentRoomPillText">-</strong></span>
         </div>
 
-        <!-- Section: Share & Connect mobile / iPad (shown when connected) -->
-        <div class="sync-mobile-card hidden" id="syncMobileSection">
-          <div class="sync-card-title">📱 手機 / iPad 一鍵同步專屬網址與 QR Code</div>
-          <p class="sync-card-desc">用手機直接掃描此 QR Code，或點擊下方按鈕複製專屬網址傳到手機/平板打開，即可自動綁定並即時雙向連線！</p>
+        <!-- Section: Share & Connect mobile / friends (shown when in a room) -->
+        <div class="sync-mobile-card hidden" id="roomShareSection">
+          <div class="sync-card-title">📱 朋友 / 手機一鍵加入專屬網址與 QR Code</div>
+          <p class="sync-card-desc">
+            將此網址分享給讀書夥伴，或直接拿手機相機掃描 QR Code 開啟，所有人就能立刻進入同一個房間，即時互相看到最新進度並自由修改！
+          </p>
           <div class="qrcode-wrapper">
-            <div id="syncQrCodeContainer" class="qrcode-box"></div>
+            <div id="roomQrCodeContainer" class="qrcode-box"></div>
             <div class="sync-link-actions">
-              <input type="text" id="syncShareUrlInput" class="sync-share-url-input" readonly />
-              <button id="copySyncUrlBtn" class="btn btn-primary" type="button">📋 複製專屬同步網址</button>
+              <input type="text" id="roomShareUrlInput" class="sync-share-url-input" readonly />
+              <button id="copyRoomUrlBtn" class="btn btn-primary" type="button">📋 複製專屬房間連結（傳給朋友或手機點開即連）</button>
             </div>
           </div>
         </div>
 
-        <!-- Setup Form -->
+        <!-- Room Settings Form -->
         <div class="cloud-setup-form">
           <div class="form-group">
-            <label for="syncRoomIdInput" class="form-label">
-              <span>讀書計劃房間代碼（自訂專屬名稱）</span>
-              <span class="form-tip">不同裝置只要房間代碼相同即可同步</span>
+            <label for="roomInputId" class="form-label">
+              <span>共同房間代碼 (Room ID)</span>
+              <span class="form-tip">只要輸入相同代碼，任何人即可連入同一張表</span>
             </label>
             <input
               type="text"
-              id="syncRoomIdInput"
+              id="roomInputId"
               class="form-input"
-              placeholder="例如: sakura_yikai_2026"
-              value="sakura_yikai"
+              placeholder="例如: sakura-study-2026 或 自訂好記的英文/數字"
+              value="sakura-study-2026"
             />
           </div>
 
           <div class="form-group">
-            <label for="firebaseConfigInput" class="form-label">
-              <span>Firebase 專案設定（firebaseConfig）</span>
-              <a href="https://console.firebase.google.com/" target="_blank" rel="noopener noreferrer" class="link-external">
-                前往 Firebase 控制台 ↗
-              </a>
+            <label for="roomInputNickname" class="form-label">
+              <span>我的編輯暱稱</span>
+              <span class="form-tip">打勾或修改時會顯示於同步通知</span>
             </label>
-            <textarea
-              id="firebaseConfigInput"
-              class="form-textarea"
-              placeholder="請直接貼上 Firebase 提供的整段程式碼或 JSON，例如：
-const firebaseConfig = {
-  apiKey: &quot;AIzaSy...&quot;,
-  authDomain: &quot;sakura-study.firebaseapp.com&quot;,
-  projectId: &quot;sakura-study&quot;,
-  storageBucket: &quot;sakura-study.appspot.com&quot;,
-  messagingSenderId: &quot;...&quot;,
-  appId: &quot;...&quot;
-};"
-            ></textarea>
-            <div class="form-help-block">
-              <strong>💡 3 步驟免費建立專屬雲端（完全免費、永久有效）：</strong>
-              <ol>
-                <li>使用 Google 帳號前往 <a href="https://console.firebase.google.com/" target="_blank" rel="noopener">Firebase 控制台</a>，點擊「新增專案」（專案名稱可填 <code>sakura-study</code>）。</li>
-                <li>建立後點擊左側「Build」➔「<strong>Firestore Database</strong>」➔「建立資料庫」➔ 選擇「<strong>以測試模式啟動 (Test mode)</strong>」並確認。</li>
-                <li>點擊專案首頁齒輪「專案設定」➔ 在下方「您的應用程式」點擊網頁圖示 <code>&lt;/&gt;</code> 註冊應用程式，複製 <code>firebaseConfig = { ... }</code> 貼到上方文字框即可！</li>
-              </ol>
-            </div>
+            <input
+              type="text"
+              id="roomInputNickname"
+              class="form-input"
+              placeholder="例如: 小凱、小櫻 (iPad)"
+              value="小凱"
+            />
           </div>
 
           <!-- Action Buttons -->
           <div class="modal-actions-row">
-            <button id="saveAndConnectCloudBtn" class="btn btn-primary" type="button">
-              ✨ 儲存設定並立即連線同步
+            <button id="joinRoomBtn" class="btn btn-primary" type="button">
+              ✨ 進入房間連線同步
             </button>
-            <button id="disconnectCloudBtn" class="btn btn-subtle hidden" type="button">
-              中斷雲端連線（切回純本機）
+            <button id="leaveRoomBtn" class="btn btn-subtle hidden" type="button">
+              🚪 離開房間（切回個人單機模式）
             </button>
           </div>
 
-          <!-- Advanced Manual Push / Pull buttons -->
-          <div class="manual-sync-strip hidden" id="manualSyncSection">
-            <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">手動強制操作：</span>
-            <button id="forcePushCloudBtn" class="btn btn-xs" type="button" title="將目前本機畫面上的進度強制覆蓋至雲端">
-              ⬆️ 強制上傳目前本機進度
+          <!-- Manual Push / Pull buttons -->
+          <div class="manual-sync-strip hidden" id="roomManualSyncSection">
+            <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">手動同步操作：</span>
+            <button id="roomForcePushBtn" class="btn btn-xs" type="button" title="將目前畫面上的完整進度廣播給房間內所有人">
+              ⬆️ 廣播我目前畫面給所有人
             </button>
-            <button id="forcePullCloudBtn" class="btn btn-xs" type="button" title="自雲端抓取最新進度覆蓋本機畫面">
-              ⬇️ 強制下載雲端最新進度
+            <button id="roomForcePullBtn" class="btn btn-xs" type="button" title="向房間內其他成員索取最新進度">
+              ⬇️ 重新自房間拉取最新進度
             </button>
+          </div>
+
+          <div class="form-help-block">
+            <strong>💡 多人同步房特點：</strong>
+            <ul style="margin: 4px 0 0 16px; line-height: 1.6;">
+              <li><strong>零註冊・免兩階段驗證</strong>：完全不用開 Google 帳號兩步驟驗證，任何裝置打開就能用。</li>
+              <li><strong>多人共同編輯</strong>：一人在手機上按計時結束或打勾，其他人的電腦/平板即刻自動更新。</li>
+              <li><strong>離線安全防護</strong>：所有資料在每個人的瀏覽器（localStorage）皆有本機存檔，斷線或休眠喚醒自動重新連線！</li>
+            </ul>
           </div>
         </div>
 
@@ -401,11 +398,7 @@ const firebaseConfig = {
 
   <div id="toastContainer" class="toast-container"></div>
 
-  <!-- Firebase Compat SDKs (Official Google Real-time Database) -->
-  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
-
-  <!-- Lightweight QRCode Generator for Mobile One-Click Sync -->
+  <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
   <script src="app.js"></script>

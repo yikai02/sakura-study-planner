@@ -4,16 +4,17 @@
  */
 
 const STORAGE_KEY = 'sakura_study_planner_v1';
-const CLOUD_CONFIG_KEY = 'sakura_firebase_sync_config_v1';
+const ROOM_STORAGE_KEY = 'sakura_shared_room_v2';
 
-// 雲端同步全域變數
-let cloudDb = null;
-let cloudDocRef = null;
-let cloudUnsubscribe = null;
-let cloudDebounceTimer = null;
-let isCloudConnected = false;
-let isRemoteUpdating = false;
-let currentCloudConfig = null;
+// 多人即時同步房全域變數（免註冊・免 Google 帳號・免兩階段驗證）
+const myClientId = 'usr_' + Math.random().toString(36).slice(2, 9);
+let roomWs = null;
+let isRoomConnected = false;
+let currentRoomId = '';
+let myNickname = '我';
+let roomReconnectTimeout = null;
+let isReceivingRemoteUpdate = false;
+let roomDebounceTimer = null;
 
 // 主表格下拉選單科目選項
 const SUBJECT_OPTIONS = ['', '個經', '總經', '經濟', '統計', '財管', '英文', '上課', '其他'];
@@ -352,9 +353,9 @@ function normalizeTimeInput(str) {
 }
 
 /**
- * 儲存狀態至 localStorage，若已連線雲端則自動防抖上傳至 Firestore
+ * 儲存狀態至 localStorage，若已進入共同讀書房則自動即時廣播給所有成員
  */
-function saveState(showIndicator = true, syncToCloud = true) {
+function saveState(showIndicator = true, broadcastToRoom = true) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
     if (showIndicator) {
@@ -365,13 +366,13 @@ function saveState(showIndicator = true, syncToCloud = true) {
     showToast('⚠️ 儲存失敗：瀏覽器儲存空間可能已滿');
   }
 
-  // 自動同步至雲端（Google 文件級即時推播）
-  if (syncToCloud && isCloudConnected && cloudDocRef && !isRemoteUpdating) {
-    queueCloudSync();
+  // 自動同步至共同房間（多人即時連線）
+  if (broadcastToRoom && isRoomConnected && !isReceivingRemoteUpdate) {
+    queueRoomFullBroadcast();
   }
 }
 
-function updateSaveStatusDisplay(cloudStatusMessage = null) {
+function updateSaveStatusDisplay(roomStatusMessage = null) {
   const statusEl = document.getElementById('saveStatusText');
   const dotEl = document.getElementById('saveIndicatorDot');
   if (!statusEl) return;
@@ -381,11 +382,11 @@ function updateSaveStatusDisplay(cloudStatusMessage = null) {
   const mm = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
 
-  if (cloudStatusMessage) {
-    statusEl.textContent = cloudStatusMessage;
-  } else if (isCloudConnected) {
-    statusEl.textContent = `☁️ 雲端已同步 (${hh}:${mm}:${ss})`;
-    if (dotEl) dotEl.style.background = '#2E7350';
+  if (roomStatusMessage) {
+    statusEl.textContent = roomStatusMessage;
+  } else if (isRoomConnected) {
+    statusEl.textContent = `🌸 房間同步中 (${hh}:${mm}:${ss})`;
+    if (dotEl) dotEl.style.background = '#DF768B';
   } else {
     statusEl.textContent = `已本機儲存 (${hh}:${mm}:${ss})`;
     if (dotEl) dotEl.style.background = '#4E8C6F';
@@ -393,33 +394,20 @@ function updateSaveStatusDisplay(cloudStatusMessage = null) {
 }
 
 /**
- * 雲端防抖上傳（延遲 500ms 批次上傳連續輸入，避免頻繁寫入）
+ * 共同房間全量防抖廣播（延遲 600ms 批次上傳連續輸入，避免頻繁發送）
  */
-function queueCloudSync() {
-  if (cloudDebounceTimer) {
-    clearTimeout(cloudDebounceTimer);
+function queueRoomFullBroadcast() {
+  if (roomDebounceTimer) {
+    clearTimeout(roomDebounceTimer);
   }
-  updateSaveStatusDisplay('☁️ 雲端同步中...');
-  setCloudNavbarStatus('syncing');
+  updateSaveStatusDisplay('🌸 正在同步至房間...');
+  setRoomNavbarStatus('syncing');
 
-  cloudDebounceTimer = setTimeout(async () => {
-    if (!cloudDocRef) return;
-    try {
-      await cloudDocRef.set({
-        appState: JSON.parse(JSON.stringify(appState)),
-        updatedAt: Date.now(),
-        clientDevice: navigator.userAgent
-      }, { merge: true });
-
-      updateSaveStatusDisplay();
-      setCloudNavbarStatus('connected');
-    } catch (err) {
-      console.error('Failed to sync to cloud:', err);
-      updateSaveStatusDisplay('⚠️ 雲端同步失敗');
-      setCloudNavbarStatus('error');
-      showToast('⚠️ 雲端同步失敗：請檢查 Firebase 權限規則或網路連線');
-    }
-  }, 500);
+  roomDebounceTimer = setTimeout(() => {
+    broadcastFullStateToRoom();
+    updateSaveStatusDisplay();
+    setRoomNavbarStatus('connected');
+  }, 600);
 }
 
 /**
@@ -1563,6 +1551,19 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
   updateSingleDayRowSummaryDom(day);
   updateActiveTimerBanner();
   renderAllStatistics();
+  if (isRoomConnected && !isReceivingRemoteUpdate) {
+    broadcastRoomDelta({
+      kind: 'timer',
+      day: day.dayCountdown,
+      slot: slotKey,
+      timerStatus: slot.timerStatus,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      durationMinutes: slot.durationMinutes,
+      accumulatedMs: slot.accumulatedMs,
+      label: `${day.dateDisplay} ${getSlotLabel(slotKey)}`
+    });
+  }
 }
 
 function pauseOtherActiveSlots(currentDayCountdown, currentSlotKey) {
@@ -1730,6 +1731,9 @@ function setupEventListeners() {
 
         updateAllRowPhaseTags();
         renderFullDashboard();
+        if (isRoomConnected && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({ kind: 'phases', phases: appState.phases });
+        }
       }
     });
 
@@ -1768,6 +1772,9 @@ function setupEventListeners() {
       if (!appState.goals[subj]) appState.goals[subj] = {};
       appState.goals[subj][phaseKey] = target.value;
       saveState();
+      if (isRoomConnected && !isReceivingRemoteUpdate) {
+        broadcastRoomDelta({ kind: 'goal', subj, phaseKey, val: target.value });
+      }
     });
   }
 
@@ -1800,6 +1807,9 @@ function setupEventListeners() {
         saveState();
         updateActiveTimerBanner();
         renderAllStatistics();
+        if (isRoomConnected && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({ kind: 'subject', day: dayCountdown, slot: slotKey, val: slot.subject });
+        }
       } else if (field === 'completed' && slot) {
         slot.completed = target.checked;
         const cardEl = document.getElementById(`slot-card-${dayCountdown}-${slotKey}`);
@@ -1807,6 +1817,15 @@ function setupEventListeners() {
         saveState();
         updateSingleDayRowSummaryDom(day);
         renderAllStatistics();
+        if (isRoomConnected && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({
+            kind: 'completed',
+            day: dayCountdown,
+            slot: slotKey,
+            val: slot.completed,
+            label: `${day.dateDisplay} ${getSlotLabel(slotKey)}`
+          });
+        }
       } else if ((field === 'startTime' || field === 'endTime') && slot) {
         const normalizedTime = normalizeTimeInput(target.value);
         if (normalizedTime === null) {
@@ -1833,6 +1852,16 @@ function setupEventListeners() {
         saveState();
         updateSingleDayRowSummaryDom(day);
         renderAllStatistics();
+        if (isRoomConnected && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({
+            kind: 'time',
+            day: dayCountdown,
+            slot: slotKey,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            durationMinutes: slot.durationMinutes
+          });
+        }
       } else if ((field === 'durationHours' || field === 'durationMins') && slot) {
         const hrEl = document.getElementById(`dur-hr-${dayCountdown}-${slotKey}`);
         const minEl = document.getElementById(`dur-min-${dayCountdown}-${slotKey}`);
@@ -1855,6 +1884,16 @@ function setupEventListeners() {
         updateSingleDayRowSummaryDom(day);
         updateActiveTimerBanner();
         renderAllStatistics();
+        if (isRoomConnected && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({
+            kind: 'time',
+            day: dayCountdown,
+            slot: slotKey,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            durationMinutes: slot.durationMinutes
+          });
+        }
       }
     });
 
@@ -1871,9 +1910,15 @@ function setupEventListeners() {
       if (field === 'calendar') {
         day.calendar = target.value;
         saveState();
+        if (isRoomConnected && !isReceivingRemoteUpdate) {
+          broadcastRoomDeltaDebounced({ kind: 'calendar', day: dayCountdown, val: day.calendar });
+        }
       } else if (field === 'task' && slotKey && day[slotKey]) {
         day[slotKey].task = target.value;
         saveState();
+        if (isRoomConnected && !isReceivingRemoteUpdate) {
+          broadcastRoomDeltaDebounced({ kind: 'task', day: dayCountdown, slot: slotKey, val: day[slotKey].task });
+        }
       } else if ((field === 'durationHours' || field === 'durationMins') && slotKey && day[slotKey]) {
         const slot = day[slotKey];
         const hrEl = document.getElementById(`dur-hr-${dayCountdown}-${slotKey}`);
@@ -2168,411 +2213,556 @@ function escapeHtml(str) {
 }
 
 /* ==========================================================================
-   Google Firebase 雲端即時同步核心模組（Google 文件模式）
+   🌸 免註冊・多人即時同步讀書房核心模組（免 Google 帳號、免兩階段驗證、多人可編輯）
    ========================================================================== */
 
 /**
- * 智慧解析使用者貼上的 Firebase 設定（支援完整 JS 物件宣告、JSON 或單純鍵值）
+ * 壓縮狀態以節省頻寬與即時傳輸量（僅保留有內容的日期與時段）
  */
-function parseFirebaseConfigText(raw) {
-  if (!raw || typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-
-  // 嘗試 1：直接 JSON.parse
-  try {
-    const obj = JSON.parse(trimmed);
-    if (obj && obj.apiKey && obj.projectId) return obj;
-  } catch (e) {
-    // 忽略，繼續嘗試正規表達式提取
-  }
-
-  // 嘗試 2：提取 JS 物件中的各大欄位
-  const fields = ['apiKey', 'authDomain', 'projectId', 'storageBucket', 'messagingSenderId', 'appId', 'measurementId'];
-  const extracted = {};
-
-  fields.forEach(f => {
-    // 匹配如: apiKey: "AIzaSy..." 或 "apiKey": 'AIzaSy...'
-    const reg = new RegExp(`["']?${f}["']?\\s*:\\s*["']([^"']+)["']`, 'i');
-    const match = reg.exec(trimmed);
-    if (match && match[1]) {
-      extracted[f] = match[1].trim();
+function compactState(st) {
+  const compactDays = {};
+  st.days.forEach(d => {
+    const dayEntry = {};
+    if (d.calendar && d.calendar.trim()) dayEntry.c = d.calendar.trim();
+    SLOT_KEYS.forEach(({ key }) => {
+      const s = d[key];
+      if (s.subject || s.task || s.durationMinutes || s.completed || s.startTime || s.endTime) {
+        dayEntry[key[0]] = [
+          s.subject || '',
+          s.task || '',
+          s.durationMinutes || 0,
+          s.completed ? 1 : 0,
+          s.startTime || '',
+          s.endTime || '',
+          s.timerStatus || 'idle',
+          s.accumulatedMs || 0
+        ];
+      }
+    });
+    if (Object.keys(dayEntry).length > 0) {
+      compactDays[d.dayCountdown] = dayEntry;
     }
   });
-
-  if (extracted.apiKey && extracted.projectId) {
-    return extracted;
-  }
-
-  return null;
+  return { p: st.phases, g: st.goals, d: compactDays };
 }
 
 /**
- * 初始化雲端同步（檢查網址 Hash 或本機 localStorage）
+ * 解壓縮還原完整 85 天狀態
  */
-async function initCloudSyncFromStorageOrHash() {
-  setupCloudSyncEventListeners();
+function unpackCompactState(compact) {
+  const base = generate85DaysSchedule(false);
+  const phases = (compact.p && Array.isArray(compact.p) && compact.p.length === 3) ? compact.p : DEFAULT_PHASES;
+  const goals = compact.g || DEFAULT_GOALS;
+  const compactDays = compact.d || {};
 
-  // 1. 檢查是否從手機/另一台裝置點開帶有 #sync=... 的專屬同步網址
-  const hash = window.location.hash || '';
-  if (hash.startsWith('#sync=')) {
-    try {
-      const b64 = decodeURIComponent(hash.slice(6));
-      const jsonStr = decodeURIComponent(escape(atob(b64)));
-      const payload = JSON.parse(jsonStr);
-
-      if (payload && payload.c && payload.r) {
-        localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify({
-          enabled: true,
-          roomId: payload.r,
-          firebaseConfig: payload.c
-        }));
-        // 清除網址 hash 保持網址簡潔
-        if (window.history && window.history.replaceState) {
-          window.history.replaceState(null, '', window.location.pathname);
+  const days = base.map(day => {
+    const saved = compactDays[day.dayCountdown];
+    if (saved) {
+      if (typeof saved.c === 'string') day.calendar = saved.c;
+      SLOT_KEYS.forEach(({ key }) => {
+        const slotData = saved[key[0]];
+        if (Array.isArray(slotData)) {
+          day[key] = {
+            subject: slotData[0] || '',
+            task: slotData[1] || '',
+            durationMinutes: Number(slotData[2]) || 0,
+            completed: Boolean(slotData[3]),
+            startTime: slotData[4] || '',
+            endTime: slotData[5] || '',
+            timerStatus: slotData[6] || 'idle',
+            accumulatedMs: Number(slotData[7]) || 0,
+            lastResumeTimestamp: null
+          };
         }
-        showToast('🌸 已透過專屬連結自動啟用跨裝置雲端同步！');
-      }
-    } catch (err) {
-      console.error('Failed to parse sync hash:', err);
+      });
     }
-  }
+    return day;
+  });
 
-  // 2. 讀取本機儲存之雲端設定
+  return normalizeState({ version: 1, phases, goals, days });
+}
+
+/**
+ * 向共同房間廣播即時訊息（透過 HTTPS POST）
+ */
+async function broadcastToRoom(messageObj) {
+  if (!isRoomConnected || !currentRoomId) return;
+  const topic = `sakura_room_${encodeURIComponent(currentRoomId)}`;
   try {
-    const raw = localStorage.getItem(CLOUD_CONFIG_KEY);
-    if (!raw) {
-      setCloudNavbarStatus('disconnected');
-      renderCloudModalState();
-      return;
-    }
-    const config = JSON.parse(raw);
-    if (config && config.enabled && config.firebaseConfig && config.roomId) {
-      currentCloudConfig = config;
-      await connectToFirebase(config.firebaseConfig, config.roomId, true);
-    } else {
-      setCloudNavbarStatus('disconnected');
-      renderCloudModalState();
-    }
+    await fetch(`https://ntfy.sh/${topic}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(messageObj)
+    });
   } catch (err) {
-    console.error('Init cloud sync error:', err);
-    setCloudNavbarStatus('disconnected');
-    renderCloudModalState();
+    console.warn('Room broadcast failed:', err);
   }
 }
 
 /**
- * 連線至 Google Firebase Firestore 並監聽即時變更
+ * 廣播個別細項異動（打勾、修改時間、寫筆記等毫秒級同步）
  */
-async function connectToFirebase(firebaseConfig, roomId, isInitial = false) {
-  if (typeof window.firebase === 'undefined') {
-    console.warn('Firebase SDK not loaded.');
-    setCloudNavbarStatus('error');
-    return false;
+function broadcastRoomDelta(payload) {
+  if (!isRoomConnected || !currentRoomId || isReceivingRemoteUpdate) return;
+  broadcastToRoom({
+    type: 'DELTA',
+    roomId: currentRoomId,
+    senderId: myClientId,
+    senderName: myNickname,
+    ts: Date.now(),
+    payload
+  });
+}
+
+let roomInputDebounce = null;
+function broadcastRoomDeltaDebounced(payload) {
+  if (roomInputDebounce) clearTimeout(roomInputDebounce);
+  roomInputDebounce = setTimeout(() => {
+    broadcastRoomDelta(payload);
+  }, 450);
+}
+
+/**
+ * 廣播完整狀態（開房、加入或手動強制推送時）
+ */
+function broadcastFullStateToRoom() {
+  if (!isRoomConnected || !currentRoomId || isReceivingRemoteUpdate) return;
+  broadcastToRoom({
+    type: 'FULL',
+    roomId: currentRoomId,
+    senderId: myClientId,
+    senderName: myNickname,
+    ts: Date.now(),
+    compact: compactState(appState)
+  });
+}
+
+/**
+ * 連線至共同房間（WebSocket 全球即時頻道，免帳號、免2FA）
+ */
+function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
+  const cleanRoomId = (roomId || 'sakura-study-2026').trim().replace(/[^a-zA-Z0-9_一-龥-]/g, '_');
+  if (!cleanRoomId) return;
+
+  if (roomReconnectTimeout) {
+    clearTimeout(roomReconnectTimeout);
+    roomReconnectTimeout = null;
   }
 
+  if (roomWs) {
+    try { roomWs.close(); } catch (e) {}
+    roomWs = null;
+  }
+
+  currentRoomId = cleanRoomId;
+  myNickname = (nickname || '我').trim() || '我';
+  setRoomNavbarStatus('syncing');
+
+  const topic = `sakura_room_${encodeURIComponent(currentRoomId)}`;
+  const wsUrl = `wss://ntfy.sh/${topic}/ws`;
+
   try {
-    setCloudNavbarStatus('syncing');
+    roomWs = new WebSocket(wsUrl);
 
-    // 若先前已有監聽，先取消
-    if (cloudUnsubscribe) {
-      cloudUnsubscribe();
-      cloudUnsubscribe = null;
-    }
+    roomWs.onopen = () => {
+      isRoomConnected = true;
+      localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify({
+        enabled: true,
+        roomId: currentRoomId,
+        nickname: myNickname
+      }));
 
-    // 初始化 Firebase App（若尚未初始化或切換專案）
-    let app;
-    const appName = 'sakuraPlannerApp';
-    const existing = window.firebase.apps.find(a => a.name === appName);
-    if (existing) {
-      app = existing;
-    } else {
-      app = window.firebase.initializeApp(firebaseConfig, appName);
-    }
+      setRoomNavbarStatus('connected');
+      renderRoomModalState();
 
-    cloudDb = app.firestore();
+      // 發送加入通知，請求房間內其他在線成員同步最新進度
+      broadcastToRoom({
+        type: 'JOIN',
+        roomId: currentRoomId,
+        senderId: myClientId,
+        senderName: myNickname,
+        ts: Date.now()
+      });
 
-    // 嘗試啟用離線持久化（離線亦可順暢使用）
-    try {
-      await cloudDb.enablePersistence({ synchronizeTabs: true });
-    } catch (persistErr) {
-      // 若瀏覽器已開啟多個分頁可能引發衝突，忽略即可
-    }
+      // 同時主動向伺服器快取查詢最新進度
+      pollLatestRoomSnapshot(topic);
 
-    const cleanRoomId = (roomId || 'sakura_yikai').trim().replace(/[^a-zA-Z0-9_\u4e00-\u9fa5-]/g, '_');
-    cloudDocRef = cloudDb.collection('sakura_study_plans').doc(cleanRoomId);
-
-    // 啟動 Firestore 即時推播監聽（如同 Google 文件多裝置連動）
-    cloudUnsubscribe = cloudDocRef.onSnapshot({ includeMetadataChanges: true }, (docSnapshot) => {
-      isCloudConnected = true;
-      setCloudNavbarStatus('connected');
-      renderCloudModalState();
-
-      // 若雲端尚無此房間紀錄，自動將當前本機資料上傳作為初始基準
-      if (!docSnapshot.exists) {
-        saveState(true, true);
-        return;
+      if (!isInitial) {
+        showToast(`🌸 已成功加入房間【${currentRoomId}】！多人即時同步中`);
       }
+    };
 
-      // 若這次 snapshot 只是當前本機裝置尚未寫入成功的暫存，跳過以避免覆蓋正在打字的文字
-      if (docSnapshot.metadata.hasPendingWrites) {
-        return;
-      }
-
-      const data = docSnapshot.data();
-      if (!data || !data.appState) return;
-
-      const remoteState = normalizeState(data.appState);
-      if (!remoteState) return;
-
-      const curStr = JSON.stringify(appState);
-      const remStr = JSON.stringify(remoteState);
-      if (curStr === remStr) return;
-
-      // 收到來自另一台手機或電腦的即時修改！
-      isRemoteUpdating = true;
-      appState = remoteState;
+    roomWs.onmessage = (event) => {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
-      } catch (e) {}
-
-      // 保留當前使用者正在打字焦點
-      const activeEl = document.activeElement;
-      const activeId = activeEl ? activeEl.id : null;
-      const selStart = activeEl && 'selectionStart' in activeEl ? activeEl.selectionStart : null;
-      const selEnd = activeEl && 'selectionEnd' in activeEl ? activeEl.selectionEnd : null;
-
-      renderPhasesConfig();
-      renderMainScheduleTable();
-      renderFullDashboard();
-      updateActiveTimerBanner();
-
-      if (activeId) {
-        const restored = document.getElementById(activeId);
-        if (restored) {
-          restored.focus();
-          if (selStart !== null && 'setSelectionRange' in restored) {
-            try { restored.setSelectionRange(selStart, selEnd); } catch (e) {}
-          }
+        const msgEvent = JSON.parse(event.data);
+        if (msgEvent.event === 'message' && msgEvent.message) {
+          const data = JSON.parse(msgEvent.message);
+          handleRoomIncomingMessage(data);
         }
+      } catch (err) {
+        // 忽略非 JSON 訊息
       }
+    };
 
-      isRemoteUpdating = false;
-      updateSaveStatusDisplay();
-      showToast('🌸 收到來自其他裝置的即時更新！');
-    }, (err) => {
-      console.error('Firestore listener error:', err);
-      isCloudConnected = false;
-      setCloudNavbarStatus('error');
-      renderCloudModalState();
-      showToast('⚠️ 雲端即時連線中斷：' + (err.message || '請確認 Firestore 權限規則'));
-    });
+    roomWs.onclose = () => {
+      isRoomConnected = false;
+      setRoomNavbarStatus('disconnected');
+      renderRoomModalState();
 
-    isCloudConnected = true;
-    currentCloudConfig = { enabled: true, roomId: cleanRoomId, firebaseConfig };
-    localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify(currentCloudConfig));
-    setCloudNavbarStatus('connected');
-    renderCloudModalState();
+      // 若使用者仍處於連線設定中，則 5 秒後自動重連
+      const stored = localStorage.getItem(ROOM_STORAGE_KEY);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.enabled) {
+            roomReconnectTimeout = setTimeout(() => {
+              connectToSharedRoom(currentRoomId, myNickname, true);
+            }, 4500);
+          }
+        } catch (e) {}
+      }
+    };
 
-    if (!isInitial) {
-      showToast('🟢 雲端即時同步已連線！（Google 文件模式已啟動）');
-    }
-    return true;
+    roomWs.onerror = (err) => {
+      console.warn('Room WebSocket error:', err);
+      setRoomNavbarStatus('disconnected');
+    };
   } catch (err) {
-    console.error('Firebase connect failed:', err);
-    isCloudConnected = false;
-    setCloudNavbarStatus('error');
-    renderCloudModalState();
-    showToast('⚠️ 連線失敗：' + (err.message || '請確認 Firebase 設定內容'));
-    return false;
+    console.error('Failed to open room WebSocket:', err);
+    setRoomNavbarStatus('disconnected');
   }
 }
 
 /**
- * 中斷雲端連線（切回純本機模式）
+ * 處理房間內收到的即時更新訊息
  */
-function disconnectFromFirebase() {
-  if (cloudUnsubscribe) {
-    cloudUnsubscribe();
-    cloudUnsubscribe = null;
-  }
-  isCloudConnected = false;
-  currentCloudConfig = null;
-  localStorage.removeItem(CLOUD_CONFIG_KEY);
-  setCloudNavbarStatus('disconnected');
-  renderCloudModalState();
-  updateSaveStatusDisplay();
-  showToast('🟡 已切換為純本機模式（停止雲端同步）');
-}
+function handleRoomIncomingMessage(msg) {
+  if (!msg || msg.senderId === myClientId) return; // 略過自己發出的廣播
 
-/**
- * 手動強制將本機所有資料推送到雲端
- */
-async function forcePushToCloud() {
-  if (!cloudDocRef) return;
-  try {
-    setCloudNavbarStatus('syncing');
-    await cloudDocRef.set({
-      appState: JSON.parse(JSON.stringify(appState)),
-      updatedAt: Date.now(),
-      forcedBy: 'user_push'
-    });
-    setCloudNavbarStatus('connected');
-    updateSaveStatusDisplay();
-    showToast('☁️ 已強制將目前本機進度完整推送到雲端！');
-  } catch (err) {
-    console.error('Force push error:', err);
-    showToast('⚠️ 強制推送失敗：' + err.message);
+  if (msg.type === 'JOIN') {
+    // 有新成員（或自己的另一台手機）剛加入房間，身為在線成員自動將目前進度推給他！
+    broadcastFullStateToRoom();
+    showToast(`👋 夥伴【${escapeHtml(msg.senderName || '新成員')}】加入了房間！`);
+    return;
   }
-}
 
-/**
- * 手動強制自雲端拉取最新資料覆蓋本機
- */
-async function forcePullFromCloud() {
-  if (!cloudDocRef) return;
-  try {
-    setCloudNavbarStatus('syncing');
-    const doc = await cloudDocRef.get();
-    if (!doc.exists) {
-      showToast('ℹ️ 雲端目前尚無儲存進度');
-      setCloudNavbarStatus('connected');
-      return;
-    }
-    const data = doc.data();
-    if (!data || !data.appState) return;
-    const remote = normalizeState(data.appState);
-    if (!remote) {
-      showToast('⚠️ 雲端資料格式不合');
-      return;
-    }
+  if (msg.type === 'REQ_FULL') {
+    broadcastFullStateToRoom();
+    return;
+  }
+
+  if (msg.type === 'FULL' && msg.compact) {
+    const remote = unpackCompactState(msg.compact);
+    if (!remote) return;
+
+    isReceivingRemoteUpdate = true;
     appState = remote;
-    saveState(true, false);
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(appState)); } catch (e) {}
+
     renderPhasesConfig();
     renderMainScheduleTable();
     renderFullDashboard();
     updateActiveTimerBanner();
-    setCloudNavbarStatus('connected');
-    showToast('☁️ 已自雲端成功抓取最新進度覆蓋本機！');
-  } catch (err) {
-    console.error('Force pull error:', err);
-    showToast('⚠️ 強制抓取失敗：' + err.message);
+
+    isReceivingRemoteUpdate = false;
+    updateSaveStatusDisplay();
+    showToast(`🌸 已自房間同步【${escapeHtml(msg.senderName || '成員')}】更新的完整進度！`);
+    return;
+  }
+
+  if (msg.type === 'DELTA' && msg.payload) {
+    const p = msg.payload;
+    isReceivingRemoteUpdate = true;
+
+    if (p.kind === 'completed') {
+      const day = appState.days.find(d => d.dayCountdown === Number(p.day));
+      if (day && day[p.slot]) {
+        day[p.slot].completed = Boolean(p.val);
+        const cardEl = document.getElementById(`slot-card-${p.day}-${p.slot}`);
+        if (cardEl) cardEl.classList.toggle('slot-completed', day[p.slot].completed);
+        const chk = cardEl ? cardEl.querySelector('.done-checkbox') : null;
+        if (chk) chk.checked = day[p.slot].completed;
+
+        updateSingleDayRowSummaryDom(day);
+        renderAllStatistics();
+        saveState(false, false);
+        showToast(`🌸 ${escapeHtml(msg.senderName || '夥伴')} ${p.val ? '打勾完成了' : '取消了'} ${p.label || '時段'}！`);
+      }
+    } else if (p.kind === 'subject') {
+      const day = appState.days.find(d => d.dayCountdown === Number(p.day));
+      if (day && day[p.slot]) {
+        day[p.slot].subject = p.val;
+        refreshSlotDom(day, p.slot);
+        renderAllStatistics();
+        saveState(false, false);
+      }
+    } else if (p.kind === 'time') {
+      const day = appState.days.find(d => d.dayCountdown === Number(p.day));
+      if (day && day[p.slot]) {
+        if (p.startTime !== undefined) day[p.slot].startTime = p.startTime;
+        if (p.endTime !== undefined) day[p.slot].endTime = p.endTime;
+        if (p.durationMinutes !== undefined) {
+          day[p.slot].durationMinutes = p.durationMinutes;
+          day[p.slot].accumulatedMs = p.durationMinutes * 60000;
+        }
+        refreshSlotDom(day, p.slot);
+        updateSingleDayRowSummaryDom(day);
+        renderAllStatistics();
+        saveState(false, false);
+      }
+    } else if (p.kind === 'timer') {
+      const day = appState.days.find(d => d.dayCountdown === Number(p.day));
+      if (day && day[p.slot]) {
+        day[p.slot].timerStatus = p.timerStatus || 'idle';
+        day[p.slot].startTime = p.startTime || '';
+        day[p.slot].endTime = p.endTime || '';
+        day[p.slot].durationMinutes = p.durationMinutes || 0;
+        day[p.slot].accumulatedMs = p.accumulatedMs || 0;
+        day[p.slot].lastResumeTimestamp = (p.timerStatus === 'running') ? Date.now() : null;
+
+        refreshSlotDom(day, p.slot);
+        updateSingleDayRowSummaryDom(day);
+        updateActiveTimerBanner();
+        renderAllStatistics();
+        saveState(false, false);
+        if (p.timerStatus === 'running') {
+          showToast(`⏱️ ${escapeHtml(msg.senderName || '夥伴')} 開始了 ${p.label || ''} 專注計時！`);
+        } else if (p.timerStatus === 'ended') {
+          showToast(`⏹️ ${escapeHtml(msg.senderName || '夥伴')} 結束了計時（鎖定 ${formatMinutesToHM(p.durationMinutes)}）`);
+        }
+      }
+    } else if (p.kind === 'task') {
+      const day = appState.days.find(d => d.dayCountdown === Number(p.day));
+      if (day && day[p.slot]) {
+        day[p.slot].task = p.val || '';
+        const cardEl = document.getElementById(`slot-card-${p.day}-${p.slot}`);
+        const inputEl = cardEl ? cardEl.querySelector('.task-input') : null;
+        if (inputEl && document.activeElement !== inputEl) {
+          inputEl.value = day[p.slot].task;
+        }
+        saveState(false, false);
+      }
+    } else if (p.kind === 'calendar') {
+      const day = appState.days.find(d => d.dayCountdown === Number(p.day));
+      if (day) {
+        day.calendar = p.val || '';
+        const row = document.getElementById(`row-day-${p.day}`);
+        const inputEl = row ? row.querySelector('.calendar-input') : null;
+        if (inputEl && document.activeElement !== inputEl) {
+          inputEl.value = day.calendar;
+        }
+        saveState(false, false);
+      }
+    } else if (p.kind === 'goal') {
+      if (!appState.goals[p.subj]) appState.goals[p.subj] = {};
+      appState.goals[p.subj][p.phaseKey] = p.val || '';
+      saveState(false, false);
+      const textarea = document.querySelector(`.goal-textarea[data-goal-subj="${p.subj}"][data-goal-phase="${p.phaseKey}"]`);
+      if (textarea && document.activeElement !== textarea) {
+        textarea.value = p.val || '';
+      }
+    } else if (p.kind === 'phases') {
+      if (Array.isArray(p.phases) && p.phases.length === 3) {
+        appState.phases = p.phases;
+        saveState(false, false);
+        renderPhasesConfig();
+        updateAllRowPhaseTags();
+        renderFullDashboard();
+      }
+    }
+
+    isReceivingRemoteUpdate = false;
   }
 }
 
 /**
- * 更新導覽列「雲端同步」按鈕與狀態燈號
+ * 查詢房間最近一筆快取進度
  */
-function setCloudNavbarStatus(status) {
-  const btn = document.getElementById('cloudSyncBtn');
-  const textEl = document.getElementById('cloudStatusText');
+async function pollLatestRoomSnapshot(topic) {
+  try {
+    const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1`);
+    if (!res.ok) return;
+    const text = await res.text();
+    const lines = text.trim().split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const item = JSON.parse(lines[i]);
+        if (item.event === 'message' && item.message) {
+          const data = JSON.parse(item.message);
+          if (data && data.type === 'FULL' && data.compact && data.senderId !== myClientId) {
+            handleRoomIncomingMessage(data);
+            break;
+          }
+        }
+      } catch (e) {}
+    }
+  } catch (err) {
+    console.warn('Poll room snapshot warning:', err);
+  }
+}
+
+/**
+ * 離開房間（切回個人單機模式）
+ */
+function leaveSharedRoom() {
+  if (roomReconnectTimeout) {
+    clearTimeout(roomReconnectTimeout);
+    roomReconnectTimeout = null;
+  }
+  if (roomWs) {
+    try { roomWs.close(); } catch (e) {}
+    roomWs = null;
+  }
+  isRoomConnected = false;
+  currentRoomId = '';
+  localStorage.removeItem(ROOM_STORAGE_KEY);
+  setRoomNavbarStatus('disconnected');
+  renderRoomModalState();
+  updateSaveStatusDisplay();
+  showToast('🚪 已離開房間，切回個人單機模式');
+}
+
+/**
+ * 更新導覽列房間同步按鈕狀態
+ */
+function setRoomNavbarStatus(status) {
+  const btn = document.getElementById('roomSyncBtn');
+  const textEl = document.getElementById('roomStatusText');
   if (!btn || !textEl) return;
 
-  btn.classList.remove('connected', 'syncing', 'error');
+  btn.classList.remove('connected', 'syncing');
 
   if (status === 'connected') {
     btn.classList.add('connected');
-    textEl.textContent = '雲端已連線';
+    textEl.textContent = `房號: ${currentRoomId}`;
   } else if (status === 'syncing') {
     btn.classList.add('syncing');
-    textEl.textContent = '同步中...';
-  } else if (status === 'error') {
-    btn.classList.add('error');
-    textEl.textContent = '連線異常';
+    textEl.textContent = '同步連線中...';
   } else {
-    textEl.textContent = '雲端同步';
+    textEl.textContent = '多人同步房';
   }
 }
 
 /**
- * 渲染彈窗內部的連線狀態、房間代碼、手機 QR Code 與專屬連結
+ * 渲染房間彈窗內容（包含專屬連結與 QR Code）
  */
-function renderCloudModalState() {
-  const strip = document.getElementById('cloudStatusStrip');
-  const titleEl = document.getElementById('modalStatusTitle');
-  const descEl = document.getElementById('modalStatusDesc');
-  const roomPill = document.getElementById('modalRoomPill');
-  const roomText = document.getElementById('modalRoomPillText');
-  const mobileSection = document.getElementById('syncMobileSection');
-  const manualSection = document.getElementById('manualSyncSection');
-  const disconnectBtn = document.getElementById('disconnectCloudBtn');
-  const shareInput = document.getElementById('syncShareUrlInput');
-  const qrContainer = document.getElementById('syncQrCodeContainer');
+function renderRoomModalState() {
+  const strip = document.getElementById('roomStatusStrip');
+  const titleEl = document.getElementById('roomStatusTitle');
+  const descEl = document.getElementById('roomStatusDesc');
+  const roomPill = document.getElementById('currentRoomPill');
+  const roomText = document.getElementById('currentRoomPillText');
+  const shareSection = document.getElementById('roomShareSection');
+  const manualSection = document.getElementById('roomManualSyncSection');
+  const leaveBtn = document.getElementById('leaveRoomBtn');
+  const shareInput = document.getElementById('roomShareUrlInput');
+  const qrContainer = document.getElementById('roomQrCodeContainer');
+  const roomIdInput = document.getElementById('roomInputId');
+  const nicknameInput = document.getElementById('roomInputNickname');
 
   if (!strip) return;
 
-  if (isCloudConnected && currentCloudConfig) {
+  if (isRoomConnected && currentRoomId) {
     strip.classList.add('connected');
-    if (titleEl) titleEl.textContent = '🟢 雲端即時同步中（Google 文件模式）';
-    if (descEl) descEl.textContent = '任何裝置上的修改、計時、打勾皆會於毫秒內自動同步至所有已連線設備！';
+    if (titleEl) titleEl.textContent = `🟢 共同讀書房連線中（房號：${currentRoomId}）`;
+    if (descEl) descEl.textContent = `多人協作模式已啟動！任何人在手機、電腦上的修改或打勾，所有人的畫面將在 0.1 秒內自動同步！`;
     if (roomPill && roomText) {
       roomPill.classList.remove('hidden');
-      roomText.textContent = currentCloudConfig.roomId;
+      roomText.textContent = currentRoomId;
     }
-    if (disconnectBtn) disconnectBtn.classList.remove('hidden');
+    if (leaveBtn) leaveBtn.classList.remove('hidden');
     if (manualSection) manualSection.classList.remove('hidden');
-    if (mobileSection) mobileSection.classList.remove('hidden');
+    if (shareSection) shareSection.classList.remove('hidden');
+    if (roomIdInput) roomIdInput.value = currentRoomId;
+    if (nicknameInput) nicknameInput.value = myNickname;
 
-    // 產生跨裝置一鍵同步專屬網址
-    const payload = {
-      r: currentCloudConfig.roomId,
-      c: currentCloudConfig.firebaseConfig
-    };
-    try {
-      const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-      const shareUrl = `${window.location.origin}${window.location.pathname}#sync=${encodeURIComponent(b64)}`;
-      if (shareInput) shareInput.value = shareUrl;
+    // 產生專屬房間邀請連結（傳給朋友或用手機點開即直接進入連線！）
+    const shareUrl = `${window.location.origin}${window.location.pathname}?room=${encodeURIComponent(currentRoomId)}`;
+    if (shareInput) shareInput.value = shareUrl;
 
-      // 產生 QR Code
-      if (qrContainer && typeof window.QRCode !== 'undefined') {
-        qrContainer.innerHTML = '';
-        new window.QRCode(qrContainer, {
-          text: shareUrl,
-          width: 110,
-          height: 110,
-          colorDark: '#3A3335',
-          colorLight: '#FFFFFF',
-          correctLevel: window.QRCode.CorrectLevel.M
-        });
-      }
-    } catch (e) {
-      console.error('QR code generation error:', e);
+    // 繪製 QR Code
+    if (qrContainer && typeof window.QRCode !== 'undefined') {
+      qrContainer.innerHTML = '';
+      new window.QRCode(qrContainer, {
+        text: shareUrl,
+        width: 110,
+        height: 110,
+        colorDark: '#3A3335',
+        colorLight: '#FFFFFF',
+        correctLevel: window.QRCode.CorrectLevel.M
+      });
     }
   } else {
     strip.classList.remove('connected');
-    if (titleEl) titleEl.textContent = '尚未連線雲端資料庫';
-    if (descEl) descEl.textContent = '目前運作於本機模式（僅儲存於當前瀏覽器）。完成下方設定後即可開啟跨裝置即時同步！';
+    if (titleEl) titleEl.textContent = '尚未加入共同房間（個人單機模式）';
+    if (descEl) descEl.textContent = '免登入 Google 帳號、免兩階段驗證！只要設定共同房號，不同人、不同手機或電腦皆可隨時進入，任何人打勾修改皆會即時推播給所有人！';
     if (roomPill) roomPill.classList.add('hidden');
-    if (disconnectBtn) disconnectBtn.classList.add('hidden');
+    if (leaveBtn) leaveBtn.classList.add('hidden');
     if (manualSection) manualSection.classList.add('hidden');
-    if (mobileSection) mobileSection.classList.add('hidden');
+    if (shareSection) shareSection.classList.add('hidden');
   }
 }
 
 /**
- * 綁定雲端同步彈窗互動事件
+ * 從網址查詢參數解析房號（支援相容各版本瀏覽器）
  */
-function setupCloudSyncEventListeners() {
-  const modal = document.getElementById('cloudSyncModal');
-  const openBtn = document.getElementById('cloudSyncBtn');
-  const closeBtn = document.getElementById('closeCloudModalBtn');
-  const saveBtn = document.getElementById('saveAndConnectCloudBtn');
-  const disconnectBtn = document.getElementById('disconnectCloudBtn');
-  const forcePushBtn = document.getElementById('forcePushCloudBtn');
-  const forcePullBtn = document.getElementById('forcePullCloudBtn');
-  const copyUrlBtn = document.getElementById('copySyncUrlBtn');
-  const configTextarea = document.getElementById('firebaseConfigInput');
-  const roomInput = document.getElementById('syncRoomIdInput');
+function getRoomParamFromUrl() {
+  if (typeof URLSearchParams !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('room')) return params.get('room');
+  }
+  const match = /[?&]room=([^&#]+)/.exec(window.location.search || window.location.hash || '');
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * 初始化房間同步（支援網址參數 ?room=... 一鍵直接進房）
+ */
+function initRoomSyncFromStorageOrUrl() {
+  setupRoomSyncEventListeners();
+
+  // 1. 優先檢查網址參數 ?room=...（點開分享連結或掃 QR Code 一鍵自動進房）
+  const roomParam = getRoomParamFromUrl();
+  if (roomParam && roomParam.trim()) {
+    const cleanId = roomParam.trim();
+    connectToSharedRoom(cleanId, '訪客', false);
+    return;
+  }
+
+  // 2. 檢查本機先前是否有設定連線房間
+  const stored = localStorage.getItem(ROOM_STORAGE_KEY);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      if (parsed && parsed.enabled && parsed.roomId) {
+        connectToSharedRoom(parsed.roomId, parsed.nickname || '我', true);
+        return;
+      }
+    } catch (e) {}
+  }
+
+  setRoomNavbarStatus('disconnected');
+  renderRoomModalState();
+}
+
+/**
+ * 綁定房間同步彈窗互動事件
+ */
+function setupRoomSyncEventListeners() {
+  const modal = document.getElementById('roomSyncModal');
+  const openBtn = document.getElementById('roomSyncBtn');
+  const closeBtn = document.getElementById('closeRoomModalBtn');
+  const joinBtn = document.getElementById('joinRoomBtn');
+  const leaveBtn = document.getElementById('leaveRoomBtn');
+  const pushBtn = document.getElementById('roomForcePushBtn');
+  const pullBtn = document.getElementById('roomForcePullBtn');
+  const copyBtn = document.getElementById('copyRoomUrlBtn');
+  const roomIdInput = document.getElementById('roomInputId');
+  const nicknameInput = document.getElementById('roomInputNickname');
 
   if (openBtn && modal) {
     openBtn.addEventListener('click', () => {
-      // 填入目前已儲存之設定（若有）
-      if (currentCloudConfig) {
-        if (roomInput) roomInput.value = currentCloudConfig.roomId || 'sakura_yikai';
-        if (configTextarea && !configTextarea.value.trim()) {
-          configTextarea.value = JSON.stringify(currentCloudConfig.firebaseConfig, null, 2);
-        }
-      }
-      renderCloudModalState();
+      renderRoomModalState();
       modal.classList.remove('hidden');
     });
   }
@@ -2591,64 +2781,56 @@ function setupCloudSyncEventListeners() {
     });
   }
 
-  if (saveBtn) {
-    saveBtn.addEventListener('click', async () => {
-      const rawText = configTextarea ? configTextarea.value : '';
-      const parsedConfig = parseFirebaseConfigText(rawText);
-      const roomId = (roomInput ? roomInput.value : 'sakura_yikai').trim() || 'sakura_yikai';
-
-      if (!parsedConfig) {
-        showToast('⚠️ 無法解析 Firebase 設定，請確認有複製包含 apiKey 與 projectId 的完整內容');
+  if (joinBtn) {
+    joinBtn.addEventListener('click', () => {
+      const rId = (roomIdInput ? roomIdInput.value : '').trim();
+      const nick = (nicknameInput ? nicknameInput.value : '').trim() || '我';
+      if (!rId) {
+        showToast('⚠️ 請輸入房間代碼');
         return;
       }
+      connectToSharedRoom(rId, nick, false);
+    });
+  }
 
-      saveBtn.disabled = true;
-      saveBtn.textContent = '連線測試中...';
-      const ok = await connectToFirebase(parsedConfig, roomId, false);
-      saveBtn.disabled = false;
-      saveBtn.textContent = '✨ 儲存設定並立即連線同步';
-
-      if (ok) {
-        renderCloudModalState();
+  if (leaveBtn) {
+    leaveBtn.addEventListener('click', () => {
+      if (window.confirm('確定要離開目前房間切回個人單機模式嗎？（本機已有的進度不會遺失）')) {
+        leaveSharedRoom();
       }
     });
   }
 
-  if (disconnectBtn) {
-    disconnectBtn.addEventListener('click', () => {
-      if (window.confirm('確定要中斷雲端連線嗎？（將切回純本機模式，雲端上的進度不會被刪除）')) {
-        disconnectFromFirebase();
+  if (pushBtn) {
+    pushBtn.addEventListener('click', () => {
+      if (window.confirm('確定要將目前畫面上的完整進度廣播給房間內所有人嗎？')) {
+        broadcastFullStateToRoom();
+        showToast('⬆️ 已將您目前的完整進度廣播至房間！');
       }
     });
   }
 
-  if (forcePushBtn) {
-    forcePushBtn.addEventListener('click', () => {
-      if (window.confirm('確定要以目前本機畫面上的進度「強制覆蓋」雲端紀錄嗎？')) {
-        forcePushToCloud();
+  if (pullBtn) {
+    pullBtn.addEventListener('click', () => {
+      if (isRoomConnected && currentRoomId) {
+        broadcastToRoom({ type: 'REQ_FULL', roomId: currentRoomId, senderId: myClientId, ts: Date.now() });
+        pollLatestRoomSnapshot(`sakura_room_${encodeURIComponent(currentRoomId)}`);
+        showToast('⬇️ 已向房間廣播索取最新進度！');
       }
     });
   }
 
-  if (forcePullBtn) {
-    forcePullBtn.addEventListener('click', () => {
-      if (window.confirm('確定要自雲端下載最新進度「強制覆蓋」目前本機畫面嗎？')) {
-        forcePullFromCloud();
-      }
-    });
-  }
-
-  if (copyUrlBtn) {
-    const shareInput = document.getElementById('syncShareUrlInput');
-    copyUrlBtn.addEventListener('click', async () => {
+  if (copyBtn) {
+    const shareInput = document.getElementById('roomShareUrlInput');
+    copyBtn.addEventListener('click', async () => {
       if (!shareInput || !shareInput.value) return;
       try {
         await navigator.clipboard.writeText(shareInput.value);
-        showToast('📋 已複製專屬同步網址！傳至手機或平板打開即可自動連線');
+        showToast('📋 已複製專屬房間網址！傳給讀書夥伴或用手機打開即直接同步');
       } catch (err) {
         shareInput.select();
         document.execCommand('copy');
-        showToast('📋 已複製專屬同步網址！');
+        showToast('📋 已複製專屬房間網址！');
       }
     });
   }
@@ -2680,7 +2862,7 @@ document.addEventListener('DOMContentLoaded', () => {
   updateActiveTimerBanner();
   setupEventListeners();
   startGlobalTimerTicker();
-  initCloudSyncFromStorageOrHash();
+  initRoomSyncFromStorageOrUrl();
 
   // 切回分頁時立即以 Date.now() 對齊顯示（背景分頁的 setInterval 會被瀏覽器降速）
   document.addEventListener('visibilitychange', () => {
