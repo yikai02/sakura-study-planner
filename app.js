@@ -153,7 +153,8 @@ function createEmptySlot(subject = '', task = '') {
     accumulatedMs: 0,        // YPT 計時器累計毫秒數（不含當前正在跑的區間）
     timerStatus: 'idle',     // 'idle' | 'running' | 'paused' | 'ended'
     lastResumeTimestamp: null, // 系統時間戳記 Date.now()
-    completed: false
+    completed: false,
+    updatedAt: 0             // 最後異動時間戳記 Date.now()（跨裝置與背景喚醒衝突比對用）
   };
 }
 
@@ -185,6 +186,7 @@ function generate85DaysSchedule(withPreplanned = true) {
       isWeekend,
       dayCountdown,
       calendar: pre ? pre.calendar : '',
+      calendarUpdatedAt: 0,
       morning: createEmptySlot(pre ? pre.morning[0] : '', pre ? pre.morning[1] : ''),
       afternoon: createEmptySlot(pre ? pre.afternoon[0] : '', pre ? pre.afternoon[1] : ''),
       evening: createEmptySlot(pre ? pre.evening[0] : '', pre ? pre.evening[1] : '')
@@ -199,6 +201,7 @@ function generate85DaysSchedule(withPreplanned = true) {
 function createDefaultState(withPreplanned = true) {
   return {
     version: 1,
+    updatedAt: 0,
     phases: JSON.parse(JSON.stringify(DEFAULT_PHASES)),
     goals: JSON.parse(JSON.stringify(DEFAULT_GOALS)),
     days: generate85DaysSchedule(withPreplanned)
@@ -243,7 +246,11 @@ function normalizeState(raw) {
 
   const days = template.map((tpl, i) => {
     const src = raw.days.find(d => d && Number(d.dayCountdown) === tpl.dayCountdown) || raw.days[i] || {};
-    const day = { ...tpl, calendar: typeof src.calendar === 'string' ? src.calendar : '' };
+    const day = {
+      ...tpl,
+      calendar: typeof src.calendar === 'string' ? src.calendar : '',
+      calendarUpdatedAt: Number(src.calendarUpdatedAt) || 0
+    };
     SLOT_KEYS.forEach(({ key }) => {
       const s = src[key] && typeof src[key] === 'object' ? src[key] : {};
       const slot = createEmptySlot();
@@ -256,6 +263,7 @@ function normalizeState(raw) {
       slot.timerStatus = validStatus.includes(s.timerStatus) ? s.timerStatus : 'idle';
       slot.lastResumeTimestamp = Number(s.lastResumeTimestamp) || null;
       slot.completed = Boolean(s.completed);
+      slot.updatedAt = Number(s.updatedAt) || (slot.lastResumeTimestamp || 0);
       if (slot.timerStatus === 'running' && !slot.lastResumeTimestamp) {
         slot.timerStatus = 'paused';
       }
@@ -285,20 +293,27 @@ function normalizeState(raw) {
     });
   }
 
-  // 確保同一時間只有一個時段在「計時中」，其餘自動轉為暫停
-  let runningFound = false;
+  // 確保同一時間只有一個時段在「計時中」（挑選最新啟動的一個保持 running，其餘轉為暫停）
+  let latestRunningSlot = null;
   days.forEach(d => SLOT_KEYS.forEach(({ key }) => {
     const s = d[key];
-    if (s.timerStatus !== 'running') return;
-    if (runningFound) {
-      s.accumulatedMs += Math.max(0, Date.now() - s.lastResumeTimestamp);
+    if (s.timerStatus === 'running' && s.lastResumeTimestamp) {
+      if (!latestRunningSlot || (s.updatedAt || s.lastResumeTimestamp) >= (latestRunningSlot.updatedAt || latestRunningSlot.lastResumeTimestamp)) {
+        latestRunningSlot = s;
+      }
+    }
+  }));
+  days.forEach(d => SLOT_KEYS.forEach(({ key }) => {
+    const s = d[key];
+    if (s.timerStatus === 'running' && s !== latestRunningSlot) {
+      s.accumulatedMs += Math.max(0, Date.now() - (s.lastResumeTimestamp || Date.now()));
+      s.durationMinutes = s.accumulatedMs > 0 ? Math.max(1, Math.round(s.accumulatedMs / 60000)) : 0;
       s.lastResumeTimestamp = null;
       s.timerStatus = 'paused';
     }
-    runningFound = true;
   }));
 
-  return { version: 1, phases, goals, days };
+  return { version: 1, updatedAt: Number(raw.updatedAt) || 0, phases, goals, days };
 }
 
 function clampDay(v, fallback) {
@@ -1410,6 +1425,11 @@ function handleQuickSubjectClick(subjectName) {
     } else {
       handleYptTimerAction('ypt-pause', active.day.dayCountdown, active.slotKey);
     }
+  } else if (active && active.slot.timerStatus === 'paused' && active.slot.subject === subjectName && active.day.dayCountdown === targetDayCountdown) {
+    // 若同一科目正處於暫停狀態，再次點擊直接繼續原時段計時（維持以最初開始時間之時段為準）
+    handleYptTimerAction('ypt-resume', active.day.dayCountdown, active.slotKey);
+    renderQuickTimerView();
+    return;
   }
 
   // 依當前「開始時間」判定時段（以開始時間作為最重要依據）
@@ -1418,6 +1438,7 @@ function handleQuickSubjectClick(subjectName) {
   const slot = day[slotKey];
 
   slot.subject = subjectName;
+  slot.updatedAt = Date.now();
   if (!slot.startTime || slot.timerStatus === 'idle' || slot.timerStatus === 'ended') {
     slot.startTime = getCurrentTimeHM();
   }
@@ -2103,16 +2124,53 @@ function updateSingleDayRowSummaryDom(day) {
    YPT 模式計時器核心控制（Date.now() 時間戳記差值計算，背景不掉秒）
    ========================================================================== */
 
+// 螢幕常亮鎖（Wake Lock API：支援手機/平板開著畫面時不自動暗屏，關屏則自動由時間戳記接手）
+let wakeLockSentinel = null;
+async function syncScreenWakeLock() {
+  try {
+    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return;
+    const active = findActiveTimerSlot();
+    const isRunning = Boolean(active && active.slot.timerStatus === 'running');
+    if (isRunning && document.visibilityState === 'visible') {
+      if (!wakeLockSentinel) {
+        wakeLockSentinel = await navigator.wakeLock.request('screen');
+        wakeLockSentinel.addEventListener('release', () => {
+          wakeLockSentinel = null;
+        });
+      }
+    } else if (!isRunning && wakeLockSentinel) {
+      await wakeLockSentinel.release();
+      wakeLockSentinel = null;
+    }
+  } catch (e) {
+    // 忽略瀏覽器權限或背景狀態下的 WakeLock 例外
+  }
+}
+
 function findActiveTimerSlot() {
+  let runningCandidate = null;
+  let pausedCandidate = null;
+
   for (const day of appState.days) {
     for (const { key, label } of SLOT_KEYS) {
       const slot = day[key];
-      if (slot.timerStatus === 'running' || slot.timerStatus === 'paused') {
-        return { day, slotKey: key, slotLabel: label, slot };
+      if (slot.timerStatus === 'running') {
+        const ts = slot.updatedAt || slot.lastResumeTimestamp || 0;
+        const bestTs = runningCandidate ? (runningCandidate.slot.updatedAt || runningCandidate.slot.lastResumeTimestamp || 0) : -1;
+        if (!runningCandidate || ts >= bestTs) {
+          runningCandidate = { day, slotKey: key, slotLabel: label, slot };
+        }
+      } else if (slot.timerStatus === 'paused') {
+        const ts = slot.updatedAt || 0;
+        const bestTs = pausedCandidate ? (pausedCandidate.slot.updatedAt || 0) : -1;
+        if (!pausedCandidate || ts >= bestTs) {
+          pausedCandidate = { day, slotKey: key, slotLabel: label, slot };
+        }
       }
     }
   }
-  return null;
+
+  return runningCandidate || pausedCandidate;
 }
 
 function handleYptTimerAction(action, dayCountdown, slotKey) {
@@ -2125,7 +2183,7 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
 
   if (action === 'ypt-start') {
     // 若有其他正在跑的時段，先自動將其暫停以確保單一專注計時準確
-    pauseOtherActiveSlots(day.dayCountdown, slotKey);
+    pauseOtherActiveSlots(day.dayCountdown, slotKey, now - 1);
 
     if (!slot.startTime) {
       slot.startTime = getCurrentTimeHM();
@@ -2137,8 +2195,10 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     }
     slot.timerStatus = 'running';
     slot.lastResumeTimestamp = now;
+    slot.updatedAt = now;
+    appState.updatedAt = now;
 
-    showToast(`▶ 開始專注計時：${day.dateDisplay} ${getSlotLabel(slotKey)}（開始時間 ${slot.startTime}）`);
+    showToast(`▶ 開始計時：${day.dateDisplay} ${getSlotLabel(slotKey)} ${slot.subject ? `(${slot.subject})` : ''}`);
   } else if (action === 'ypt-pause') {
     if (slot.timerStatus === 'running' && slot.lastResumeTimestamp) {
       slot.accumulatedMs = (slot.accumulatedMs || 0) + Math.max(0, now - slot.lastResumeTimestamp);
@@ -2146,14 +2206,18 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     slot.lastResumeTimestamp = null;
     slot.timerStatus = 'paused';
     slot.durationMinutes = slot.accumulatedMs > 0 ? Math.max(1, Math.round(slot.accumulatedMs / 60000)) : 0;
+    slot.updatedAt = now;
+    appState.updatedAt = now;
 
-    showToast(`⏸ 已暫停計時：休息期間不計入真實讀書時長`);
+    showToast(`⏸ 已暫停計時（目前已累計 ${formatMinutesToHM(slot.durationMinutes)}）`);
   } else if (action === 'ypt-resume') {
-    pauseOtherActiveSlots(day.dayCountdown, slotKey);
+    pauseOtherActiveSlots(day.dayCountdown, slotKey, now - 1);
     slot.timerStatus = 'running';
     slot.lastResumeTimestamp = now;
+    slot.updatedAt = now;
+    appState.updatedAt = now;
 
-    showToast(`▶ 繼續專注計時：${day.dateDisplay} ${getSlotLabel(slotKey)}`);
+    showToast(`▶ 繼續計時：${day.dateDisplay} ${getSlotLabel(slotKey)} ${slot.subject ? `(${slot.subject})` : ''}`);
   } else if (action === 'ypt-stop') {
     if (slot.timerStatus === 'running' && slot.lastResumeTimestamp) {
       slot.accumulatedMs = (slot.accumulatedMs || 0) + Math.max(0, now - slot.lastResumeTimestamp);
@@ -2162,38 +2226,53 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     slot.timerStatus = 'ended';
     slot.endTime = getCurrentTimeHM();
 
-    // 計算鎖定淨時長（若累積大於 1 秒但未滿 1 分鐘，以 1 分鐘計，方便測試與短時紀錄；超過 1 分鐘則四捨五入至分鐘）
+    // 計算鎖定淨時長（若累積大於 1 秒但未滿 1 分鐘，以 1 分鐘計；超過 1 分鐘則四捨五入至分鐘）
     const totalMs = slot.accumulatedMs || 0;
     const netMinutes = totalMs >= 1000 ? Math.max(1, Math.round(totalMs / 60000)) : 0;
     slot.durationMinutes = netMinutes;
     slot.accumulatedMs = netMinutes * 60000;
+    slot.updatedAt = now;
+    appState.updatedAt = now;
 
-    showToast(`⏹ 結束計時！已鎖定真實讀書時長：${formatMinutesToHM(netMinutes)}（結束時間 ${slot.endTime}）`);
+    showToast(`⏹ 結束計時！已記錄時長：${formatMinutesToHM(netMinutes)}`);
   }
 
-  saveState();
+  // 立即寫入本機 localStorage，並立即雙通道廣播給所有跨裝置（不等待防抖延遲，確保按完馬上關螢幕也 100% 同步）
+  saveState(true, false);
+  syncScreenWakeLock();
   refreshSlotDom(day, slotKey);
   updateSingleDayRowSummaryDom(day);
   updateActiveTimerBanner();
   renderAllStatistics();
   renderQuickTimerView();
   renderDailyPlanView();
+
   if (isRoomConnected && !isReceivingRemoteUpdate) {
     broadcastRoomDelta({
       kind: 'timer',
       day: day.dayCountdown,
       slot: slotKey,
+      subject: slot.subject,
+      task: slot.task,
       timerStatus: slot.timerStatus,
       startTime: slot.startTime,
       endTime: slot.endTime,
       durationMinutes: slot.durationMinutes,
       accumulatedMs: slot.accumulatedMs,
+      lastResumeTimestamp: slot.lastResumeTimestamp,
+      updatedAt: slot.updatedAt,
       label: `${day.dateDisplay} ${getSlotLabel(slotKey)}`
     });
+    // 同時立即發送完整快照，確保其他晚開啟的裝置也能取得最新 lastResumeTimestamp
+    if (roomDebounceTimer) {
+      clearTimeout(roomDebounceTimer);
+      roomDebounceTimer = null;
+    }
+    broadcastFullStateToRoom();
   }
 }
 
-function pauseOtherActiveSlots(currentDayCountdown, currentSlotKey) {
+function pauseOtherActiveSlots(currentDayCountdown, currentSlotKey, tsOverride = Date.now()) {
   const now = Date.now();
   appState.days.forEach(d => {
     SLOT_KEYS.forEach(({ key }) => {
@@ -2206,6 +2285,7 @@ function pauseOtherActiveSlots(currentDayCountdown, currentSlotKey) {
         s.lastResumeTimestamp = null;
         s.timerStatus = 'paused';
         s.durationMinutes = s.accumulatedMs > 0 ? Math.max(1, Math.round(s.accumulatedMs / 60000)) : 0;
+        s.updatedAt = tsOverride;
         refreshSlotDom(d, key);
         updateSingleDayRowSummaryDom(d);
       }
@@ -2229,7 +2309,7 @@ function refreshSlotDom(day, slotKey) {
 }
 
 /**
- * 每秒定時更新正在運行或暫停中的時鐘與統計（背景分頁切換回來時自動以 Date.now() 差值對齊）
+ * 每秒定時更新正在運行或暫停中的時鐘與統計（背景分頁、關螢幕或滑掉重開時自動以 Date.now() 差值無縫接續）
  */
 function startGlobalTimerTicker() {
   if (timerIntervalId) clearInterval(timerIntervalId);
@@ -2247,9 +2327,15 @@ function startGlobalTimerTicker() {
 
     if (active && active.slot.timerStatus === 'running') {
       const liveMs = getSlotLiveMs(active.slot);
+      const clockStr = formatMsToClock(liveMs);
       const clockEl = document.getElementById(`ypt-clock-${active.day.dayCountdown}-${active.slotKey}`);
       if (clockEl) {
-        clockEl.textContent = formatMsToClock(liveMs);
+        clockEl.textContent = clockStr;
+      }
+
+      if (typeof document !== 'undefined' && document.title !== undefined) {
+        const subj = active.slot.subject || '專注中';
+        document.title = `⏱️ ${clockStr} ${subj}｜小櫻讀書計劃表`;
       }
 
       const currentMinuteBucket = Math.floor(liveMs / 60000);
@@ -2264,10 +2350,13 @@ function startGlobalTimerTicker() {
         updateSingleDayRowSummaryDom(active.day);
         renderAllStatistics();
         if (currentActiveTab === 'quick-timer') {
-          renderQuickTimerView();
-        } else if (currentActiveTab === 'daily-plan') {
-          renderDailyPlanView();
+          renderQuickSubjectsGrid(active.day);
+          renderQuickSlotsOverview(active.day);
         }
+      }
+    } else {
+      if (typeof document !== 'undefined' && document.title && document.title.startsWith('⏱️')) {
+        document.title = '小櫻讀書計劃表 🌸';
       }
     }
   }, 500);
@@ -2433,14 +2522,17 @@ function setupEventListeners() {
         const dayCountdown = Number(target.dataset.day);
         const day = appState.days.find(d => d.dayCountdown === dayCountdown);
         if (!day) return;
+        const nowTs = Date.now();
         day.calendar = target.value;
+        day.calendarUpdatedAt = nowTs;
+        appState.updatedAt = nowTs;
         saveState();
         if (currentActiveDayCountdown === dayCountdown) {
           const dailyInp = document.getElementById('dailyCalendarInput');
           if (dailyInp && document.activeElement !== dailyInp) dailyInp.value = day.calendar;
         }
         if (isRoomConnected && !isReceivingRemoteUpdate) {
-          broadcastRoomDeltaDebounced({ kind: 'calendar', day: dayCountdown, val: day.calendar });
+          broadcastRoomDeltaDebounced({ kind: 'calendar', day: dayCountdown, val: day.calendar, updatedAt: nowTs });
         }
       }
     });
@@ -2476,9 +2568,12 @@ function setupEventListeners() {
       const field = target.dataset.field;
       const slotKey = target.dataset.slot;
       const slot = slotKey ? day[slotKey] : null;
+      const nowTs = Date.now();
 
       if (field === 'subject' && slot) {
         slot.subject = target.value;
+        slot.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
         target.setAttribute('data-subj', slot.subject);
         saveState();
         updateActiveTimerBanner();
@@ -2488,10 +2583,12 @@ function setupEventListeners() {
           renderQuickTimerView();
         }
         if (isRoomConnected && !isReceivingRemoteUpdate) {
-          broadcastRoomDelta({ kind: 'subject', day: dayCountdown, slot: slotKey, val: slot.subject });
+          broadcastRoomDelta({ kind: 'subject', day: dayCountdown, slot: slotKey, val: slot.subject, updatedAt: nowTs });
         }
       } else if (field === 'completed' && slot) {
         slot.completed = target.checked;
+        slot.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
         const cardEl = document.getElementById(`slot-card-${dayCountdown}-${slotKey}`);
         if (cardEl) cardEl.classList.toggle('slot-completed', slot.completed);
         saveState();
@@ -2507,6 +2604,7 @@ function setupEventListeners() {
             day: dayCountdown,
             slot: slotKey,
             val: slot.completed,
+            updatedAt: nowTs,
             label: `${day.dateDisplay} ${getSlotLabel(slotKey)}`
           });
         }
@@ -2518,6 +2616,8 @@ function setupEventListeners() {
           return;
         }
         slot[field] = normalizedTime;
+        slot.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
         target.value = normalizedTime;
         // 若使用者手動輸入了開始與結束時間，且目前真實讀書時長為 0，自動試算時長
         if (slot.startTime && slot.endTime && slot.durationMinutes === 0 && slot.timerStatus === 'idle') {
@@ -2547,7 +2647,8 @@ function setupEventListeners() {
             slot: slotKey,
             startTime: slot.startTime,
             endTime: slot.endTime,
-            durationMinutes: slot.durationMinutes
+            durationMinutes: slot.durationMinutes,
+            updatedAt: nowTs
           });
         }
       } else if ((field === 'durationHours' || field === 'durationMins') && slot) {
@@ -2561,8 +2662,10 @@ function setupEventListeners() {
         const totalManualMins = hrs * 60 + mins;
         slot.durationMinutes = totalManualMins;
         slot.accumulatedMs = totalManualMins * 60000;
+        slot.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
         if (slot.timerStatus === 'running') {
-          slot.lastResumeTimestamp = Date.now();
+          slot.lastResumeTimestamp = nowTs;
         }
 
         const clockEl = document.getElementById(`ypt-clock-${dayCountdown}-${slotKey}`);
@@ -2583,7 +2686,8 @@ function setupEventListeners() {
             slot: slotKey,
             startTime: slot.startTime,
             endTime: slot.endTime,
-            durationMinutes: slot.durationMinutes
+            durationMinutes: slot.durationMinutes,
+            updatedAt: nowTs
           });
         }
       }
@@ -2598,9 +2702,12 @@ function setupEventListeners() {
 
       const field = target.dataset.field;
       const slotKey = target.dataset.slot;
+      const nowTs = Date.now();
 
       if (field === 'task' && slotKey && day[slotKey]) {
         day[slotKey].task = target.value;
+        day[slotKey].updatedAt = nowTs;
+        appState.updatedAt = nowTs;
         saveState();
         if (currentActiveDayCountdown === dayCountdown) {
           const dailyCard = document.getElementById(`daily-card-${dayCountdown}-${slotKey}`);
@@ -2610,7 +2717,7 @@ function setupEventListeners() {
           }
         }
         if (isRoomConnected && !isReceivingRemoteUpdate) {
-          broadcastRoomDeltaDebounced({ kind: 'task', day: dayCountdown, slot: slotKey, val: day[slotKey].task });
+          broadcastRoomDeltaDebounced({ kind: 'task', day: dayCountdown, slot: slotKey, val: day[slotKey].task, updatedAt: nowTs });
         }
       } else if ((field === 'durationHours' || field === 'durationMins') && slotKey && day[slotKey]) {
         const slot = day[slotKey];
@@ -2621,8 +2728,10 @@ function setupEventListeners() {
         const totalManualMins = hrs * 60 + mins;
         slot.durationMinutes = totalManualMins;
         slot.accumulatedMs = totalManualMins * 60000;
+        slot.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
         if (slot.timerStatus === 'running') {
-          slot.lastResumeTimestamp = Date.now();
+          slot.lastResumeTimestamp = nowTs;
         }
         const clockEl = document.getElementById(`ypt-clock-${dayCountdown}-${slotKey}`);
         if (clockEl) clockEl.textContent = formatMsToClock(slot.accumulatedMs);
@@ -2778,16 +2887,27 @@ function setupEventListeners() {
   const loadPdfPlanBtn = document.getElementById('loadPdfPlanBtn');
   if (loadPdfPlanBtn) {
     loadPdfPlanBtn.addEventListener('click', () => {
+      const nowTs = Date.now();
       appState.days.forEach(day => {
         const mmdd = day.isoDate.slice(5);
         const pre = PDF_PREPLANNED_DATA[mmdd];
         if (!pre) return;
-        if (!day.calendar && pre.calendar) day.calendar = pre.calendar;
+        if (!day.calendar && pre.calendar) {
+          day.calendar = pre.calendar;
+          day.calendarUpdatedAt = nowTs;
+        }
         SLOT_KEYS.forEach(({ key }) => {
-          if (!day[key].subject && pre[key][0]) day[key].subject = pre[key][0];
-          if (!day[key].task && pre[key][1]) day[key].task = pre[key][1];
+          if (!day[key].subject && pre[key][0]) {
+            day[key].subject = pre[key][0];
+            day[key].updatedAt = nowTs;
+          }
+          if (!day[key].task && pre[key][1]) {
+            day[key].task = pre[key][1];
+            day[key].updatedAt = nowTs;
+          }
         });
       });
+      appState.updatedAt = nowTs;
       saveState();
       renderMainScheduleTable();
       renderAllStatistics();
@@ -2814,11 +2934,14 @@ function setupEventListeners() {
         '確定要將所有讀書時間、計時器與打勾紀錄「從零開始重新計算」嗎？\n\n（將重置 11/1~1/24 共 85 天的開始/結束時間、真實讀書時長與打勾；已填寫的科目、範圍、行事曆與小櫻目標會保留。建議先「匯出 JSON」備份）'
       );
       if (!confirmed) return;
+      const nowTs = Date.now();
       appState.days.forEach(day => {
         SLOT_KEYS.forEach(({ key }) => {
           day[key] = createEmptySlot(day[key].subject, day[key].task);
+          day[key].updatedAt = nowTs;
         });
       });
+      appState.updatedAt = nowTs;
       saveState();
       renderPhasesConfig();
       renderMainScheduleTable();
@@ -2917,14 +3040,17 @@ function setupEventListeners() {
     dailyCalendarInput.addEventListener('input', (e) => {
       const day = appState.days.find(d => d.dayCountdown === currentActiveDayCountdown);
       if (!day) return;
+      const nowTs = Date.now();
       day.calendar = e.target.value;
+      day.calendarUpdatedAt = nowTs;
+      appState.updatedAt = nowTs;
       saveState();
-      const mainRow = document.getElementById(`row-day-${day.dayCountdown}`);
-      if (mainRow) {
-        const inp = mainRow.querySelector('.calendar-input');
+      const pureRow = document.getElementById(`pure-row-day-${day.dayCountdown}`);
+      if (pureRow) {
+        const inp = pureRow.querySelector('.pure-calendar-input');
         if (inp && document.activeElement !== inp) inp.value = day.calendar;
       }
-      broadcastRoomDeltaDebounced({ kind: 'calendar', day: day.dayCountdown, val: day.calendar });
+      broadcastRoomDeltaDebounced({ kind: 'calendar', day: day.dayCountdown, val: day.calendar, updatedAt: nowTs });
     });
   }
 
@@ -2936,44 +3062,56 @@ function setupEventListeners() {
       const day = appState.days.find(d => d.dayCountdown === dayCountdown);
       if (!day || !day[slotKey]) return;
       const slot = day[slotKey];
+      const nowTs = Date.now();
 
       if (target.classList.contains('daily-subject-select')) {
         slot.subject = target.value;
+        slot.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
         saveState();
         refreshSlotDom(day, slotKey);
         renderDailyPlanView();
         renderQuickTimerView();
         renderAllStatistics();
-        broadcastRoomDeltaDebounced({ kind: 'subject', day: dayCountdown, slot: slotKey, val: slot.subject });
+        broadcastRoomDeltaDebounced({ kind: 'subject', day: dayCountdown, slot: slotKey, val: slot.subject, updatedAt: nowTs });
       } else if (target.classList.contains('daily-done-checkbox')) {
         slot.completed = target.checked;
+        slot.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
         saveState();
         refreshSlotDom(day, slotKey);
         renderDailyPlanView();
         renderQuickTimerView();
         renderAllStatistics();
-        broadcastRoomDelta({ kind: 'completed', day: dayCountdown, slot: slotKey, val: slot.completed, label: `${day.dateDisplay} ${getSlotLabel(slotKey)}` });
+        broadcastRoomDelta({ kind: 'completed', day: dayCountdown, slot: slotKey, val: slot.completed, updatedAt: nowTs, label: `${day.dateDisplay} ${getSlotLabel(slotKey)}` });
       } else if (target.classList.contains('daily-time-input')) {
         const field = target.dataset.field;
         slot[field] = target.value.trim();
+        slot.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
         saveState();
         refreshSlotDom(day, slotKey);
         renderDailyPlanView();
         renderQuickTimerView();
         renderAllStatistics();
-        broadcastRoomDeltaDebounced({ kind: 'time', day: dayCountdown, slot: slotKey, startTime: slot.startTime, endTime: slot.endTime, durationMinutes: slot.durationMinutes });
+        broadcastRoomDeltaDebounced({ kind: 'time', day: dayCountdown, slot: slotKey, startTime: slot.startTime, endTime: slot.endTime, durationMinutes: slot.durationMinutes, updatedAt: nowTs });
       } else if (target.classList.contains('daily-dur-hr') || target.classList.contains('daily-dur-min')) {
         const card = document.getElementById(`daily-card-${dayCountdown}-${slotKey}`);
         const hr = Number(card.querySelector('.daily-dur-hr').value) || 0;
         const min = Number(card.querySelector('.daily-dur-min').value) || 0;
         slot.durationMinutes = Math.max(0, hr * 60 + min);
         slot.accumulatedMs = slot.durationMinutes * 60000;
+        slot.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
+        if (slot.timerStatus === 'running') {
+          slot.lastResumeTimestamp = nowTs;
+        }
         saveState();
         refreshSlotDom(day, slotKey);
         renderDailyPlanView();
         renderQuickTimerView();
         renderAllStatistics();
-        broadcastRoomDeltaDebounced({ kind: 'time', day: dayCountdown, slot: slotKey, durationMinutes: slot.durationMinutes });
+        broadcastRoomDeltaDebounced({ kind: 'time', day: dayCountdown, slot: slotKey, durationMinutes: slot.durationMinutes, updatedAt: nowTs });
       }
     });
 
@@ -2984,14 +3122,17 @@ function setupEventListeners() {
         const slotKey = target.dataset.slot;
         const day = appState.days.find(d => d.dayCountdown === dayCountdown);
         if (!day || !day[slotKey]) return;
+        const nowTs = Date.now();
         day[slotKey].task = target.value;
+        day[slotKey].updatedAt = nowTs;
+        appState.updatedAt = nowTs;
         saveState();
         const mainCard = document.getElementById(`slot-card-${dayCountdown}-${slotKey}`);
         if (mainCard) {
           const inp = mainCard.querySelector('.task-input');
           if (inp && document.activeElement !== inp) inp.value = target.value;
         }
-        broadcastRoomDeltaDebounced({ kind: 'task', day: dayCountdown, slot: slotKey, val: target.value });
+        broadcastRoomDeltaDebounced({ kind: 'task', day: dayCountdown, slot: slotKey, val: target.value, updatedAt: nowTs });
       }
     });
 
@@ -3179,16 +3320,29 @@ function escapeHtml(str) {
    ========================================================================== */
 
 /**
- * 壓縮狀態以節省頻寬與即時傳輸量（僅保留有內容的日期與時段）
+ * 壓縮狀態以節省頻寬與即時傳輸量（僅保留有內容的日期與時段，並完整保留計時器時間戳與更新時間）
  */
 function compactState(st) {
   const compactDays = {};
   st.days.forEach(d => {
     const dayEntry = {};
     if (d.calendar && d.calendar.trim()) dayEntry.c = d.calendar.trim();
+    if (d.calendarUpdatedAt) dayEntry.cu = d.calendarUpdatedAt;
     SLOT_KEYS.forEach(({ key }) => {
       const s = d[key];
-      if (s.subject || s.task || s.durationMinutes || s.completed || s.startTime || s.endTime || (s.accumulatedMs && s.accumulatedMs > 0)) {
+      const hasTimerState = s.timerStatus && s.timerStatus !== 'idle';
+      if (
+        s.subject ||
+        s.task ||
+        s.durationMinutes ||
+        s.completed ||
+        s.startTime ||
+        s.endTime ||
+        hasTimerState ||
+        (s.accumulatedMs && s.accumulatedMs > 0) ||
+        (s.lastResumeTimestamp && s.lastResumeTimestamp > 0) ||
+        (s.updatedAt && s.updatedAt > 0)
+      ) {
         const arr = [
           s.subject || '',
           s.task || '',
@@ -3197,10 +3351,14 @@ function compactState(st) {
           s.startTime || '',
           s.endTime || '',
           s.timerStatus || 'idle',
-          s.accumulatedMs || 0
+          s.accumulatedMs || 0,
+          s.lastResumeTimestamp || 0,
+          s.updatedAt || 0
         ];
         // 移除尾部預設值以極度精簡傳輸體積
         while (arr.length > 2 && (
+          (arr.length === 10 && arr[9] === 0) ||
+          (arr.length === 9 && arr[8] === 0) ||
           (arr.length === 8 && arr[7] === 0) ||
           (arr.length === 7 && arr[6] === 'idle') ||
           (arr.length === 6 && arr[5] === '') ||
@@ -3217,11 +3375,11 @@ function compactState(st) {
       compactDays[d.dayCountdown] = dayEntry;
     }
   });
-  return { p: st.phases, g: st.goals, d: compactDays };
+  return { p: st.phases, g: st.goals, d: compactDays, u: st.updatedAt || Date.now() };
 }
 
 /**
- * 解壓縮還原完整 85 天狀態
+ * 解壓縮還原完整 85 天狀態（保留 lastResumeTimestamp 與 updatedAt）
  */
 function unpackCompactState(compact) {
   const base = generate85DaysSchedule(false);
@@ -3233,9 +3391,13 @@ function unpackCompactState(compact) {
     const saved = compactDays[day.dayCountdown];
     if (saved) {
       if (typeof saved.c === 'string') day.calendar = saved.c;
+      if (saved.cu) day.calendarUpdatedAt = Number(saved.cu) || 0;
       SLOT_KEYS.forEach(({ key }) => {
         const slotData = saved[key[0]];
         if (Array.isArray(slotData)) {
+          const timerStatus = slotData[6] || 'idle';
+          const resumeTs = Number(slotData[8]) || 0;
+          const updatedAt = Number(slotData[9]) || 0;
           day[key] = {
             subject: slotData[0] || '',
             task: slotData[1] || '',
@@ -3243,9 +3405,10 @@ function unpackCompactState(compact) {
             completed: Boolean(slotData[3]),
             startTime: slotData[4] || '',
             endTime: slotData[5] || '',
-            timerStatus: slotData[6] || 'idle',
+            timerStatus,
             accumulatedMs: Number(slotData[7]) || 0,
-            lastResumeTimestamp: null
+            lastResumeTimestamp: timerStatus === 'running' ? (resumeTs || updatedAt || Number(compact.u) || Date.now()) : null,
+            updatedAt
           };
         }
       });
@@ -3253,20 +3416,87 @@ function unpackCompactState(compact) {
     return day;
   });
 
-  return normalizeState({ version: 1, phases, goals, days });
+  return normalizeState({ version: 1, updatedAt: Number(compact.u) || 0, phases, goals, days });
 }
 
 /**
- * 向共同房間廣播即時訊息（透過 HTTPS POST）
+ * 智慧合併遠端完整狀態與本機狀態（依每個時段的 updatedAt 判斷誰比較新，防止舊裝置覆蓋新計時器）
+ */
+function mergeRemoteState(remote) {
+  if (!remote || !Array.isArray(remote.days)) return false;
+
+  if (remote.updatedAt >= (appState.updatedAt || 0)) {
+    if (Array.isArray(remote.phases) && remote.phases.length === 3) {
+      appState.phases = remote.phases;
+    }
+    if (remote.goals) {
+      appState.goals = remote.goals;
+    }
+  }
+
+  let latestRunning = null;
+  let latestRunningTs = -1;
+
+  appState.days.forEach((localDay, idx) => {
+    const remoteDay = remote.days[idx] || remote.days.find(d => d.dayCountdown === localDay.dayCountdown);
+    if (!remoteDay) return;
+
+    const rCalTs = Number(remoteDay.calendarUpdatedAt) || 0;
+    const lCalTs = Number(localDay.calendarUpdatedAt) || 0;
+    if (rCalTs > lCalTs || (!localDay.calendar && remoteDay.calendar)) {
+      localDay.calendar = remoteDay.calendar || '';
+      localDay.calendarUpdatedAt = rCalTs;
+    }
+
+    SLOT_KEYS.forEach(({ key }) => {
+      const lSlot = localDay[key];
+      const rSlot = remoteDay[key];
+      if (!rSlot) return;
+
+      const lTs = Number(lSlot.updatedAt) || Number(lSlot.lastResumeTimestamp) || 0;
+      const rTs = Number(rSlot.updatedAt) || Number(rSlot.lastResumeTimestamp) || 0;
+
+      const lEmpty = !lSlot.subject && !lSlot.task && lSlot.durationMinutes === 0 && !lSlot.completed && lSlot.timerStatus === 'idle' && (lSlot.accumulatedMs || 0) === 0;
+      const rHasData = Boolean(rSlot.subject || rSlot.task || rSlot.durationMinutes > 0 || rSlot.completed || rSlot.timerStatus !== 'idle' || (rSlot.accumulatedMs || 0) > 0);
+
+      if (rTs > lTs || (rTs === lTs && rHasData && lEmpty) || (lTs === 0 && rHasData)) {
+        localDay[key] = { ...rSlot };
+      }
+
+      const finalSlot = localDay[key];
+      if (finalSlot.timerStatus === 'running') {
+        const startScore = Number(finalSlot.updatedAt) || Number(finalSlot.lastResumeTimestamp) || 0;
+        if (startScore >= latestRunningTs) {
+          latestRunningTs = startScore;
+          latestRunning = { dayCountdown: localDay.dayCountdown, slotKey: key };
+        }
+      }
+    });
+  });
+
+  // 確保全表最多只有一個 running 時段（以最新啟動者為準）
+  if (latestRunning) {
+    pauseOtherActiveSlots(latestRunning.dayCountdown, latestRunning.slotKey, latestRunningTs);
+    currentActiveDayCountdown = latestRunning.dayCountdown;
+  }
+
+  appState.updatedAt = Math.max(appState.updatedAt || 0, remote.updatedAt || 0);
+  return true;
+}
+
+/**
+ * 向共同房間廣播即時訊息（透過 HTTPS POST，啟用 keepalive 確保手機按開始後立刻鎖屏也能送達）
  */
 async function broadcastToRoom(messageObj) {
   if (!isRoomConnected || !currentRoomId) return;
   const topic = `sakura_room_${encodeURIComponent(currentRoomId)}`;
+  const bodyStr = JSON.stringify(messageObj);
   try {
     await fetch(`https://ntfy.sh/${topic}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(messageObj)
+      body: bodyStr,
+      keepalive: bodyStr.length < 60000
     });
   } catch (err) {
     console.warn('Room broadcast failed:', err);
@@ -3278,13 +3508,14 @@ async function broadcastToRoom(messageObj) {
  */
 function broadcastRoomDelta(payload) {
   if (!isRoomConnected || !currentRoomId || isReceivingRemoteUpdate) return;
+  const nowTs = Date.now();
   broadcastToRoom({
     type: 'DELTA',
     roomId: currentRoomId,
     senderId: myClientId,
     senderName: myNickname,
-    ts: Date.now(),
-    payload
+    ts: nowTs,
+    payload: { updatedAt: nowTs, ...payload }
   });
 }
 
@@ -3377,7 +3608,7 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
   try {
     roomWs = new WebSocket(wsUrl);
 
-    roomWs.onopen = () => {
+    roomWs.onopen = async () => {
       isRoomConnected = true;
       localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify({
         enabled: true,
@@ -3388,6 +3619,9 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
       setRoomNavbarStatus('connected');
       renderRoomModalState();
 
+      // 先向伺服器快取拉取最新進度（包含其他裝置或自己稍早廣播的計時狀態），再發送 JOIN
+      await pollLatestRoomSnapshot(topic);
+
       // 發送加入通知，請求房間內其他在線成員同步最新進度
       broadcastToRoom({
         type: 'JOIN',
@@ -3397,11 +3631,8 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
         ts: Date.now()
       });
 
-      // 同時主動向伺服器快取查詢最新進度
-      pollLatestRoomSnapshot(topic);
-
       if (!isInitial) {
-        showToast(`🌸 已成功加入房間【${currentRoomId}】！多人即時同步中`);
+        showToast(`🌸 已成功加入房間【${currentRoomId}】！跨裝置即時同步中`);
       }
     };
 
@@ -3411,7 +3642,7 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
         if (msgEvent.event === 'message') {
           const data = await extractRoomMessagePayload(msgEvent);
           if (data) {
-            handleRoomIncomingMessage(data);
+            handleRoomIncomingMessage(data, false);
           }
         }
       } catch (err) {
@@ -3423,7 +3654,7 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
       isRoomConnected = false;
       renderRoomModalState();
 
-      // 若使用者仍處於連線設定中，則 6 秒後自動重連
+      // 若使用者仍處於連線設定中，則 4 秒後自動重連
       const stored = localStorage.getItem(ROOM_STORAGE_KEY);
       if (stored) {
         try {
@@ -3431,7 +3662,7 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
           if (parsed && parsed.enabled) {
             roomReconnectTimeout = setTimeout(() => {
               connectToSharedRoom(currentRoomId, myNickname, true);
-            }, 6000);
+            }, 4000);
           }
         } catch (e) {}
       }
@@ -3451,11 +3682,16 @@ let lastKnownJoinSender = '';
 
 /**
  * 處理房間內收到的即時更新訊息
+ * @param {object} msg 訊息物件
+ * @param {boolean} isHistoryReplay 是否為重連/喚醒時的歷史快取回放
  */
-function handleRoomIncomingMessage(msg) {
-  if (!msg || msg.senderId === myClientId) return; // 略過自己發出的廣播
+function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
+  if (!msg) return;
+  // 若為即時推播且是自己剛發出的則略過；若是歷史回放則允許用雲端快取補齊本機可能遺漏的狀態
+  if (!isHistoryReplay && msg.senderId === myClientId) return;
 
   if (msg.type === 'JOIN') {
+    if (isHistoryReplay) return;
     const now = Date.now();
     // 夥伴加入通知防洗版（同一個人在 15 秒內只彈一次提示）
     if (now - lastJoinToastTs > 15000 || lastKnownJoinSender !== msg.senderId) {
@@ -3464,8 +3700,8 @@ function handleRoomIncomingMessage(msg) {
       showToast(`👋 夥伴【${escapeHtml(msg.senderName || '新成員')}】已連線！`);
     }
 
-    // 關鍵防循環保護：8 秒內只回應一次 FULL，避免手機與電腦互相 JOIN 形成無窮發送風暴
-    if (now - lastJoinResponseTs > 8000) {
+    // 關鍵防循環保護：6 秒內只回應一次 FULL，避免手機與電腦互相 JOIN 形成無窮發送風暴
+    if (now - lastJoinResponseTs > 6000) {
       lastJoinResponseTs = now;
       broadcastFullStateToRoom();
     }
@@ -3473,8 +3709,9 @@ function handleRoomIncomingMessage(msg) {
   }
 
   if (msg.type === 'REQ_FULL') {
+    if (isHistoryReplay) return;
     const now = Date.now();
-    if (now - lastJoinResponseTs > 5000) {
+    if (now - lastJoinResponseTs > 3000) {
       lastJoinResponseTs = now;
       broadcastFullStateToRoom();
     }
@@ -3486,7 +3723,7 @@ function handleRoomIncomingMessage(msg) {
     if (!remote) return;
 
     isReceivingRemoteUpdate = true;
-    appState = remote;
+    mergeRemoteState(remote);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(appState)); } catch (e) {}
 
     renderPhasesConfig();
@@ -3495,103 +3732,154 @@ function handleRoomIncomingMessage(msg) {
     renderQuickTimerView();
     renderDailyPlanView();
     updateActiveTimerBanner();
+    syncScreenWakeLock();
 
     isReceivingRemoteUpdate = false;
     updateSaveStatusDisplay();
-    showToast(`🌸 已自房間同步【${escapeHtml(msg.senderName || '成員')}】更新的完整進度！`);
+    if (!isHistoryReplay) {
+      showToast(`🌸 已同步【${escapeHtml(msg.senderName || '跨裝置')}】的最新進度！`);
+    }
     return;
   }
 
   if (msg.type === 'DELTA' && msg.payload) {
     const p = msg.payload;
+    const eventTs = Number(p.updatedAt) || Number(msg.ts) || Date.now();
     isReceivingRemoteUpdate = true;
 
     if (p.kind === 'completed') {
       const day = appState.days.find(d => d.dayCountdown === Number(p.day));
       if (day && day[p.slot]) {
-        day[p.slot].completed = Boolean(p.val);
-        const cardEl = document.getElementById(`slot-card-${p.day}-${p.slot}`);
-        if (cardEl) cardEl.classList.toggle('slot-completed', day[p.slot].completed);
-        const chk = cardEl ? cardEl.querySelector('.done-checkbox') : null;
-        if (chk) chk.checked = day[p.slot].completed;
+        if (eventTs >= (day[p.slot].updatedAt || 0)) {
+          day[p.slot].completed = Boolean(p.val);
+          day[p.slot].updatedAt = eventTs;
+          appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
+          const cardEl = document.getElementById(`slot-card-${p.day}-${p.slot}`);
+          if (cardEl) cardEl.classList.toggle('slot-completed', day[p.slot].completed);
+          const chk = cardEl ? cardEl.querySelector('.done-checkbox') : null;
+          if (chk) chk.checked = day[p.slot].completed;
 
-        updateSingleDayRowSummaryDom(day);
-        renderAllStatistics();
-        saveState(false, false);
-        showToast(`🌸 ${escapeHtml(msg.senderName || '夥伴')} ${p.val ? '打勾完成了' : '取消了'} ${p.label || '時段'}！`);
+          updateSingleDayRowSummaryDom(day);
+          renderAllStatistics();
+          saveState(false, false);
+          if (!isHistoryReplay) {
+            showToast(`🌸 ${escapeHtml(msg.senderName || '夥伴')} ${p.val ? '打勾完成了' : '取消了'} ${p.label || '時段'}！`);
+          }
+        }
       }
     } else if (p.kind === 'subject') {
       const day = appState.days.find(d => d.dayCountdown === Number(p.day));
       if (day && day[p.slot]) {
-        day[p.slot].subject = p.val;
-        refreshSlotDom(day, p.slot);
-        renderAllStatistics();
-        saveState(false, false);
+        if (eventTs >= (day[p.slot].updatedAt || 0)) {
+          day[p.slot].subject = p.val;
+          day[p.slot].updatedAt = eventTs;
+          appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
+          refreshSlotDom(day, p.slot);
+          renderAllStatistics();
+          saveState(false, false);
+        }
       }
     } else if (p.kind === 'time') {
       const day = appState.days.find(d => d.dayCountdown === Number(p.day));
       if (day && day[p.slot]) {
-        if (p.startTime !== undefined) day[p.slot].startTime = p.startTime;
-        if (p.endTime !== undefined) day[p.slot].endTime = p.endTime;
-        if (p.durationMinutes !== undefined) {
-          day[p.slot].durationMinutes = p.durationMinutes;
-          day[p.slot].accumulatedMs = p.durationMinutes * 60000;
+        if (eventTs >= (day[p.slot].updatedAt || 0)) {
+          if (p.startTime !== undefined) day[p.slot].startTime = p.startTime;
+          if (p.endTime !== undefined) day[p.slot].endTime = p.endTime;
+          if (p.durationMinutes !== undefined) {
+            day[p.slot].durationMinutes = p.durationMinutes;
+            day[p.slot].accumulatedMs = p.durationMinutes * 60000;
+          }
+          day[p.slot].updatedAt = eventTs;
+          appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
+          refreshSlotDom(day, p.slot);
+          updateSingleDayRowSummaryDom(day);
+          renderAllStatistics();
+          saveState(false, false);
         }
-        refreshSlotDom(day, p.slot);
-        updateSingleDayRowSummaryDom(day);
-        renderAllStatistics();
-        saveState(false, false);
       }
     } else if (p.kind === 'timer') {
       const day = appState.days.find(d => d.dayCountdown === Number(p.day));
       if (day && day[p.slot]) {
-        day[p.slot].timerStatus = p.timerStatus || 'idle';
-        day[p.slot].startTime = p.startTime || '';
-        day[p.slot].endTime = p.endTime || '';
-        day[p.slot].durationMinutes = p.durationMinutes || 0;
-        day[p.slot].accumulatedMs = p.accumulatedMs || 0;
-        day[p.slot].lastResumeTimestamp = (p.timerStatus === 'running') ? Date.now() : null;
+        const localSlot = day[p.slot];
+        if (eventTs >= (localSlot.updatedAt || 0)) {
+          if (p.timerStatus === 'running') {
+            pauseOtherActiveSlots(day.dayCountdown, p.slot, eventTs);
+            currentActiveDayCountdown = day.dayCountdown;
+          }
+          if (p.subject !== undefined && p.subject !== '') {
+            localSlot.subject = p.subject;
+          }
+          if (p.task !== undefined && p.task !== '') {
+            localSlot.task = p.task;
+          }
+          localSlot.timerStatus = p.timerStatus || 'idle';
+          localSlot.startTime = p.startTime !== undefined ? p.startTime : localSlot.startTime;
+          localSlot.endTime = p.endTime !== undefined ? p.endTime : localSlot.endTime;
+          localSlot.durationMinutes = p.durationMinutes !== undefined ? p.durationMinutes : localSlot.durationMinutes;
+          localSlot.accumulatedMs = p.accumulatedMs !== undefined ? p.accumulatedMs : localSlot.accumulatedMs;
+          // 關鍵：保留原裝置按下開始/繼續時的真實毫秒時間戳，絕不用收到訊息的當下時間覆蓋！
+          localSlot.lastResumeTimestamp = (p.timerStatus === 'running')
+            ? (Number(p.lastResumeTimestamp) || Number(msg.ts) || Date.now())
+            : null;
+          localSlot.updatedAt = eventTs;
+          appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
 
-        refreshSlotDom(day, p.slot);
-        updateSingleDayRowSummaryDom(day);
-        updateActiveTimerBanner();
-        renderAllStatistics();
-        saveState(false, false);
-        if (p.timerStatus === 'running') {
-          showToast(`⏱️ ${escapeHtml(msg.senderName || '夥伴')} 開始了 ${p.label || ''} 專注計時！`);
-        } else if (p.timerStatus === 'ended') {
-          showToast(`⏹️ ${escapeHtml(msg.senderName || '夥伴')} 結束了計時（鎖定 ${formatMinutesToHM(p.durationMinutes)}）`);
+          refreshSlotDom(day, p.slot);
+          updateSingleDayRowSummaryDom(day);
+          updateActiveTimerBanner();
+          renderAllStatistics();
+          syncScreenWakeLock();
+          saveState(false, false);
+
+          if (!isHistoryReplay) {
+            if (p.timerStatus === 'running') {
+              showToast(`⏱️ ${escapeHtml(msg.senderName || '跨裝置')} 開始了 ${p.label || ''} 專注計時！`);
+            } else if (p.timerStatus === 'paused') {
+              showToast(`⏸️ ${escapeHtml(msg.senderName || '跨裝置')} 暫停了 ${p.label || ''} 計時`);
+            } else if (p.timerStatus === 'ended') {
+              showToast(`⏹️ ${escapeHtml(msg.senderName || '跨裝置')} 結束了計時（鎖定 ${formatMinutesToHM(localSlot.durationMinutes)}）`);
+            }
+          }
         }
       }
     } else if (p.kind === 'task') {
       const day = appState.days.find(d => d.dayCountdown === Number(p.day));
       if (day && day[p.slot]) {
-        day[p.slot].task = p.val || '';
-        const cardEl = document.getElementById(`slot-card-${p.day}-${p.slot}`);
-        const inputEl = cardEl ? cardEl.querySelector('.task-input') : null;
-        if (inputEl && document.activeElement !== inputEl) {
-          inputEl.value = day[p.slot].task;
+        if (eventTs >= (day[p.slot].updatedAt || 0)) {
+          day[p.slot].task = p.val || '';
+          day[p.slot].updatedAt = eventTs;
+          appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
+          const cardEl = document.getElementById(`slot-card-${p.day}-${p.slot}`);
+          const inputEl = cardEl ? cardEl.querySelector('.task-input') : null;
+          if (inputEl && document.activeElement !== inputEl) {
+            inputEl.value = day[p.slot].task;
+          }
+          saveState(false, false);
         }
-        saveState(false, false);
       }
     } else if (p.kind === 'calendar') {
       const day = appState.days.find(d => d.dayCountdown === Number(p.day));
       if (day) {
-        day.calendar = p.val || '';
-        const pureRow = document.getElementById(`pure-row-day-${p.day}`);
-        const inputEl = pureRow ? pureRow.querySelector('.pure-calendar-input') : null;
-        if (inputEl && document.activeElement !== inputEl) {
-          inputEl.value = day.calendar;
+        if (eventTs >= (day.calendarUpdatedAt || 0)) {
+          day.calendar = p.val || '';
+          day.calendarUpdatedAt = eventTs;
+          appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
+          const pureRow = document.getElementById(`pure-row-day-${p.day}`);
+          const inputEl = pureRow ? pureRow.querySelector('.pure-calendar-input') : null;
+          if (inputEl && document.activeElement !== inputEl) {
+            inputEl.value = day.calendar;
+          }
+          if (currentActiveDayCountdown === day.dayCountdown) {
+            const dailyInp = document.getElementById('dailyCalendarInput');
+            if (dailyInp && document.activeElement !== dailyInp) dailyInp.value = day.calendar;
+          }
+          saveState(false, false);
         }
-        if (currentActiveDayCountdown === day.dayCountdown) {
-          const dailyInp = document.getElementById('dailyCalendarInput');
-          if (dailyInp && document.activeElement !== dailyInp) dailyInp.value = day.calendar;
-        }
-        saveState(false, false);
       }
     } else if (p.kind === 'goal') {
       if (!appState.goals[p.subj]) appState.goals[p.subj] = {};
       appState.goals[p.subj][p.phaseKey] = p.val || '';
+      appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
       saveState(false, false);
       const textarea = document.querySelector(`.goal-textarea[data-goal-subj="${p.subj}"][data-goal-phase="${p.phaseKey}"]`);
       if (textarea && document.activeElement !== textarea) {
@@ -3600,6 +3888,7 @@ function handleRoomIncomingMessage(msg) {
     } else if (p.kind === 'phases') {
       if (Array.isArray(p.phases) && p.phases.length === 3) {
         appState.phases = p.phases;
+        appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
         saveState(false, false);
         renderPhasesConfig();
         updateAllRowPhaseTags();
@@ -3614,13 +3903,17 @@ function handleRoomIncomingMessage(msg) {
 }
 
 /**
- * 查詢房間最近一筆快取進度並依序回放最新異動
+ * 查詢房間最近快取進度並依序回放最新異動（支援跨裝置與手機重開瀏覽器無縫接續）
  */
+let isPollingRoomSnapshot = false;
 async function pollLatestRoomSnapshot(topic) {
+  if (!topic || isPollingRoomSnapshot) return;
+  isPollingRoomSnapshot = true;
   try {
-    const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1`);
+    const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1`, { cache: 'no-store' });
     if (!res.ok) return;
     const text = await res.text();
+    if (!text || !text.trim()) return;
     const lines = text.trim().split('\n');
     let fullSnapshotIndex = -1;
     let fullSnapshotData = null;
@@ -3633,7 +3926,7 @@ async function pollLatestRoomSnapshot(topic) {
           const data = await extractRoomMessagePayload(item);
           if (data) {
             items.push(data);
-            if (data.type === 'FULL' && data.compact && data.senderId !== myClientId) {
+            if (data.type === 'FULL' && data.compact) {
               fullSnapshotIndex = items.length - 1;
               fullSnapshotData = data;
             }
@@ -3642,20 +3935,22 @@ async function pollLatestRoomSnapshot(topic) {
       } catch (e) {}
     }
 
-    // 優先套用最新一筆完整快照
+    // 優先合併最新一筆完整快照
     if (fullSnapshotData) {
-      handleRoomIncomingMessage(fullSnapshotData);
+      handleRoomIncomingMessage(fullSnapshotData, true);
     }
 
-    // 依序回放快照之後的所有最新細項異動
+    // 依序回放快照之後的所有最新細項異動（例如手機開始計時、平板結束計時）
     const startIdx = fullSnapshotIndex >= 0 ? fullSnapshotIndex + 1 : 0;
     for (let i = startIdx; i < items.length; i++) {
-      if (items[i] && items[i].type === 'DELTA' && items[i].senderId !== myClientId) {
-        handleRoomIncomingMessage(items[i]);
+      if (items[i] && items[i].type === 'DELTA') {
+        handleRoomIncomingMessage(items[i], true);
       }
     }
   } catch (err) {
     console.warn('Poll room snapshot warning:', err);
+  } finally {
+    isPollingRoomSnapshot = false;
   }
 }
 
@@ -3673,7 +3968,11 @@ function leaveSharedRoom() {
   }
   isRoomConnected = false;
   currentRoomId = '';
-  localStorage.removeItem(ROOM_STORAGE_KEY);
+  localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify({
+    enabled: false,
+    roomId: '',
+    nickname: myNickname
+  }));
   setRoomNavbarStatus('disconnected');
   renderRoomModalState();
   updateSaveStatusDisplay();
@@ -3722,7 +4021,7 @@ function renderRoomModalState() {
   if (isRoomConnected && currentRoomId) {
     strip.classList.add('connected');
     if (titleEl) titleEl.textContent = `🟢 共同讀書房連線中（房號：${currentRoomId}）`;
-    if (descEl) descEl.textContent = `多人協作模式已啟動！任何人在手機、電腦上的修改或打勾，所有人的畫面將在 0.1 秒內自動同步！`;
+    if (descEl) descEl.textContent = `跨裝置即時協作已啟動！手機開始計時、平板或電腦可隨時接手暫停或結束，關螢幕或滑掉瀏覽器皆會持續精準計時！`;
     if (roomPill && roomText) {
       roomPill.classList.remove('hidden');
       roomText.textContent = currentRoomId;
@@ -3752,7 +4051,7 @@ function renderRoomModalState() {
   } else {
     strip.classList.remove('connected');
     if (titleEl) titleEl.textContent = '尚未加入共同房間（個人單機模式）';
-    if (descEl) descEl.textContent = '免登入 Google 帳號、免兩階段驗證！只要設定共同房號，不同人、不同手機或電腦皆可隨時進入，任何人打勾修改皆會即時推播給所有人！';
+    if (descEl) descEl.textContent = '免登入 Google 帳號、免兩階段驗證！只要設定共同房號，手機、平板、電腦皆可隨時連動計時與同步！';
     if (roomPill) roomPill.classList.add('hidden');
     if (leaveBtn) leaveBtn.classList.add('hidden');
     if (manualSection) manualSection.classList.add('hidden');
@@ -3773,7 +4072,7 @@ function getRoomParamFromUrl() {
 }
 
 /**
- * 初始化房間同步（支援網址參數 ?room=... 一鍵直接進房）
+ * 初始化房間同步（預設自動連線至 sakura-study-2026，確保手機、平板、電腦打開即自動聯通）
  */
 function initRoomSyncFromStorageOrUrl() {
   setupRoomSyncEventListeners();
@@ -3782,7 +4081,7 @@ function initRoomSyncFromStorageOrUrl() {
   const roomParam = getRoomParamFromUrl();
   if (roomParam && roomParam.trim()) {
     const cleanId = roomParam.trim();
-    connectToSharedRoom(cleanId, '訪客', false);
+    connectToSharedRoom(cleanId, '我', true);
     return;
   }
 
@@ -3791,6 +4090,12 @@ function initRoomSyncFromStorageOrUrl() {
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
+      if (parsed && parsed.enabled === false) {
+        // 使用者明確點選過「離開房間」
+        setRoomNavbarStatus('disconnected');
+        renderRoomModalState();
+        return;
+      }
       if (parsed && parsed.enabled && parsed.roomId) {
         connectToSharedRoom(parsed.roomId, parsed.nickname || '我', true);
         return;
@@ -3798,8 +4103,8 @@ function initRoomSyncFromStorageOrUrl() {
     } catch (e) {}
   }
 
-  setRoomNavbarStatus('disconnected');
-  renderRoomModalState();
+  // 3. 若未設定過，預設自動加入 sakura-study-2026，讓手機、平板、電腦免設定直接跨裝置聯通
+  connectToSharedRoom('sakura-study-2026', '我', true);
 }
 
 /**
@@ -3869,10 +4174,10 @@ function setupRoomSyncEventListeners() {
 
   if (pullBtn) {
     pullBtn.addEventListener('click', () => {
-      if (isRoomConnected && currentRoomId) {
+      if (currentRoomId) {
         broadcastToRoom({ type: 'REQ_FULL', roomId: currentRoomId, senderId: myClientId, ts: Date.now() });
         pollLatestRoomSnapshot(`sakura_room_${encodeURIComponent(currentRoomId)}`);
-        showToast('⬇️ 已向房間廣播索取最新進度！');
+        showToast('⬇️ 已向房間索取並同步最新進度！');
       }
     });
   }
@@ -3907,6 +4212,38 @@ function showToast(message) {
   }, 2800);
 }
 
+/**
+ * 當裝置從鎖屏、其他 App、或重新開啟瀏覽器回到畫面時，立即對齊真實時間並同步跨裝置狀態
+ */
+function handleAppWakeOrFocus() {
+  const active = findActiveTimerSlot();
+  if (active) {
+    currentActiveDayCountdown = active.day.dayCountdown;
+    const liveMs = getSlotLiveMs(active.slot);
+    const liveMins = Math.floor(liveMs / 60000);
+    if (liveMins !== active.slot.durationMinutes) {
+      active.slot.durationMinutes = liveMins;
+    }
+    const clockEl = document.getElementById(`ypt-clock-${active.day.dayCountdown}-${active.slotKey}`);
+    if (clockEl) clockEl.textContent = formatMsToClock(liveMs);
+    updateSingleDayRowSummaryDom(active.day);
+  }
+  renderQuickTimerView();
+  renderDailyPlanView();
+  updateActiveTimerBanner(active);
+  renderAllStatistics();
+  syncScreenWakeLock();
+
+  if (currentRoomId) {
+    const topic = `sakura_room_${encodeURIComponent(currentRoomId)}`;
+    if (!roomWs || roomWs.readyState === WebSocket.CLOSED || roomWs.readyState === WebSocket.CLOSING) {
+      connectToSharedRoom(currentRoomId, myNickname, true);
+    } else {
+      pollLatestRoomSnapshot(topic);
+    }
+  }
+}
+
 /* ==========================================================================
    啟動應用程式
    ========================================================================== */
@@ -3914,6 +4251,11 @@ function showToast(message) {
 document.addEventListener('DOMContentLoaded', () => {
   loadState();
   initCurrentActiveDay();
+  // 若重新打開瀏覽器時有正在計時的項目，自動切換至該天並維持計時
+  const initialActive = findActiveTimerSlot();
+  if (initialActive && initialActive.slot.timerStatus === 'running') {
+    currentActiveDayCountdown = initialActive.day.dayCountdown;
+  }
   renderPhasesConfig();
   renderMainScheduleTable();
   renderFullDashboard();
@@ -3924,34 +4266,53 @@ document.addEventListener('DOMContentLoaded', () => {
   startGlobalTimerTicker();
   initRoomSyncFromStorageOrUrl();
   switchMainTab('quick-timer');
+  syncScreenWakeLock();
 
-  // 切回分頁時立即以 Date.now() 對齊顯示（背景分頁的 setInterval 會被瀏覽器降速）
+  // 1. 螢幕關閉、切換其他 App、或滑掉瀏覽器瞬間：強制把最新計時狀態寫入本機快取
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
-    const active = findActiveTimerSlot();
-    if (active) {
-      const clockEl = document.getElementById(`ypt-clock-${active.day.dayCountdown}-${active.slotKey}`);
-      if (clockEl) clockEl.textContent = formatMsToClock(getSlotLiveMs(active.slot));
-      updateSingleDayRowSummaryDom(active.day);
-    }
-    updateActiveTimerBanner(active);
-    renderAllStatistics();
-
-    // Safari / iOS 螢幕喚醒時若 WebSocket 連線已休眠斷開，立即自動重新連線！
-    if (currentRoomId) {
-      if (!roomWs || roomWs.readyState === WebSocket.CLOSED || roomWs.readyState === WebSocket.CLOSING) {
-        connectToSharedRoom(currentRoomId, myNickname, true);
-      }
+    if (document.visibilityState === 'hidden') {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(appState)); } catch (e) {}
+    } else if (document.visibilityState === 'visible') {
+      handleAppWakeOrFocus();
     }
   });
 
-  // 多分頁同步：其他分頁修改資料時重新載入，避免互相覆蓋
+  window.addEventListener('pagehide', () => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(appState)); } catch (e) {}
+  });
+
+  window.addEventListener('pageshow', () => {
+    handleAppWakeOrFocus();
+  });
+
+  window.addEventListener('focus', () => {
+    if (document.visibilityState === 'visible') {
+      handleAppWakeOrFocus();
+    }
+  });
+
+  window.addEventListener('online', () => {
+    handleAppWakeOrFocus();
+  });
+
+  // 2. 定期背景輪詢保活（每 8 秒檢查一次房間快取與 WebSocket 狀態，確保跨裝置秒級穩定聯通）
+  setInterval(() => {
+    if (document.visibilityState === 'visible' && currentRoomId) {
+      if (!roomWs || roomWs.readyState === WebSocket.CLOSED || roomWs.readyState === WebSocket.CLOSING) {
+        connectToSharedRoom(currentRoomId, myNickname, true);
+      } else {
+        pollLatestRoomSnapshot(`sakura_room_${encodeURIComponent(currentRoomId)}`);
+      }
+    }
+  }, 8000);
+
+  // 3. 多分頁同步：同瀏覽器其他分頁修改資料時立即同步
   window.addEventListener('storage', (e) => {
     if (e.key !== STORAGE_KEY || !e.newValue) return;
     try {
       const synced = normalizeState(JSON.parse(e.newValue));
       if (!synced) return;
-      appState = synced;
+      mergeRemoteState(synced);
       renderPhasesConfig();
       renderMainScheduleTable();
       renderFullDashboard();
