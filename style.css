@@ -2396,95 +2396,1038 @@ body {
 }
 
 /* ==========================================================================
-   🌸 深色護眼夜間模式 (Dark Mode)
+   🖤 Antigravity 深色極簡風主題 (Monochrome Black / White / Grey, No Sakura)
    ========================================================================== */
 
 [data-theme="dark"] {
-  --bg-main: #181516;
-  --bg-card: #221E20;
-  --bg-subtle: #1C191A;
-  --bg-sakura-tint: #2C2225;
-  --bg-sakura-soft: #38292D;
-  --bg-header: rgba(24, 21, 22, 0.92);
+  --bg-main: #09090B;
+  --bg-card: #111114;
+  --bg-subtle: #18181C;
+  --bg-sakura-tint: #16161A;
+  --bg-sakura-soft: #1F1F24;
+  --bg-header: rgba(9, 9, 11, 0.92);
 
-  --sakura-primary: #FF8EA2;
-  --sakura-hover: #FFA4B5;
-  --sakura-light: #4A3036;
-  --sakura-border: #613C44;
-  --sakura-deep: #FFAEC0;
+  --sakura-primary: #F4F4F6;
+  --sakura-hover: #FFFFFF;
+  --sakura-light: #27272A;
+  --sakura-border: #2E2E34;
+  --sakura-deep: #FFFFFF;
 
-  --text-primary: #F7EFF1;
-  --text-secondary: #C0B4B7;
-  --text-muted: #8E8185;
+  --text-primary: #FAFAFA;
+  --text-secondary: #A1A1AA;
+  --text-muted: #71717A;
 
-  --border-light: #362E31;
-  --border-medium: #473C40;
+  --border-light: #222226;
+  --border-medium: #323238;
 
-  /* Subject Tag Colors in Dark Mode */
-  --subj-micro-bg: #4A232D;
-  --subj-micro-text: #FF9EB3;
-  --subj-micro-border: #6B3441;
+  /* Monochrome & Muted Architectural Subject Tags in Antigravity Dark Theme */
+  --subj-micro-bg: #1C1C21;
+  --subj-micro-text: #E4E4E7;
+  --subj-micro-border: #3F3F46;
 
-  --subj-macro-bg: #4A2C21;
-  --subj-macro-text: #FFAC91;
-  --subj-macro-border: #6B3E2F;
+  --subj-macro-bg: #1F1F24;
+  --subj-macro-text: #D4D4D8;
+  --subj-macro-border: #3F3F46;
 
-  --subj-econ-bg: #4A1E2E;
-  --subj-econ-text: #FF99BC;
-  --subj-econ-border: #6B2E45;
+  --subj-econ-bg: #232329;
+  --subj-econ-text: #FAFAFA;
+  --subj-econ-border: #52525B;
 
-  --subj-stat-bg: #1F364A;
-  --subj-stat-text: #8EC4F5;
-  --subj-stat-border: #2C4D69;
+  --subj-stat-bg: #18222D;
+  --subj-stat-text: #CBD5E1;
+  --subj-stat-border: #334155;
 
-  --subj-fin-bg: #1F3D2C;
-  --subj-fin-text: #8EE6B0;
-  --subj-fin-border: #2E5A40;
+  --subj-fin-bg: #16241E;
+  --subj-fin-text: #D1FAE5;
+  --subj-fin-border: #2D4A3E;
 
-  --subj-eng-bg: #35254A;
-  --subj-eng-text: #D2B0FA;
-  --subj-eng-border: #4D376B;
+  --subj-class-bg: #242118;
+  --subj-class-text: #E5E0D0;
+  --subj-class-border: #444034;
 
-  --subj-class-bg: #47371A;
-  --subj-class-text: #FFDE8A;
-  --subj-class-border: #6B5328;
+  --subj-other-bg: #18181B;
+  --subj-other-text: #A1A1AA;
+  --subj-other-border: #27272A;
 
-  --subj-other-bg: #2E2B2A;
-  --subj-other-text: #CCC6C4;
-  --subj-other-border: #474341;
+  --timer-running: #FAFAFA;
+  --timer-running-bg: #27272A;
+  --timer-paused: #D4D4D8;
+  --timer-paused-bg: #1F1F23;
+  --timer-done: #A1A1AA;
+  --timer-done-bg: #18181C;
 
-  --timer-running: #FF7590;
-  --timer-running-bg: #3D1C24;
-  --timer-paused: #FFA44D;
-  --timer-paused-bg: #3D2918;
-  --timer-done: #62C498;
-  --timer-done-bg: #1A3628;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.6);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.7);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.85);
 
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.60);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
 }
 
 [data-theme="dark"] body {
-  background-image: 
-    radial-gradient(circle at 12% 8%, rgba(74, 48, 54, 0.3) 0%, transparent 35%),
-    radial-gradient(circle at 88% 15%, rgba(44, 34, 37, 0.4) 0%, transparent 40%);
+  font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", sans-serif;
+  letter-spacing: -0.01em;
+  background-color: #09090B;
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* 極簡黑主題隱藏所有櫻花花瓣與花瓣按鈕 */
+[data-theme="dark"] #sakuraCanvas,
+[data-theme="dark"] #petalToggleBtn,
+[data-theme="dark"] #settingPetalsBox {
+  display: none !important;
+}
+
+[data-theme="dark"] .sakura-logo {
+  background: #18181C;
+  border: 1px solid #323238;
+  color: #FAFAFA;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .brand-badge {
+  background: #18181C;
+  color: #D4D4D8;
+  border: 1px solid #323238;
+}
+
+[data-theme="dark"] .tab-nav-btn.active {
+  background: #FAFAFA;
+  color: #09090B;
+  border-color: #FAFAFA;
+  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.12);
+}
+
+[data-theme="dark"] .btn-primary,
+[data-theme="dark"] .mode-chip.active,
+[data-theme="dark"] .filter-tab.active,
+[data-theme="dark"] .month-tab.active {
+  background: #FAFAFA !important;
+  color: #09090B !important;
+  border-color: #FAFAFA !important;
+  box-shadow: none !important;
+  font-weight: 700;
+}
+
+[data-theme="dark"] .btn-cloud {
+  background: #18181C;
+  color: #FAFAFA;
+  border-color: #323238;
 }
 
 [data-theme="dark"] input,
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
   color: var(--text-primary);
-  background-color: #272224;
+  background-color: #141418;
   border-color: var(--border-medium);
 }
 
-[data-theme="dark"] .stat-table th {
-  background-color: #292426;
+[data-theme="dark"] .stat-table th,
+[data-theme="dark"] .plan-table th {
+  background-color: #16161A !important;
+  color: #D4D4D8 !important;
+  border-color: #27272A !important;
 }
 
-[data-theme="dark"] .stat-table tbody tr:hover {
-  background-color: rgba(255, 142, 162, 0.08);
+[data-theme="dark"] .stat-table tbody tr:hover,
+[data-theme="dark"] .plan-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* ==========================================================================
+   🎨 雙主題切換器 (櫻花粉白 vs 極簡深黑)
+   ========================================================================== */
+.theme-dual-switcher {
+  display: inline-flex;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.theme-switch-pill {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.theme-switch-pill.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="dark"] .theme-switch-pill.active {
+  background: #FAFAFA;
+  color: #09090B;
+}
+
+/* ==========================================================================
+   🏠 第 1 頁：Notion 極簡首頁與可更換背景看板
+   ========================================================================== */
+.home-notion-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1220px;
+  margin: 0 auto;
+}
+
+.notion-cover-container {
+  position: relative;
+  border-radius: var(--radius-xl);
+  overflow: visible;
+}
+
+.notion-cover-banner {
+  position: relative;
+  height: 200px;
+  width: 100%;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-md);
+  background-size: cover;
+  background-position: center;
+  transition: background 0.35s ease;
+}
+
+/* 8 Built-in Notion Cover Presets */
+.notion-cover-banner[data-cover="cover-antigravity"],
+.swatch-antigravity {
+  background:
+    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.14) 0%, transparent 45%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(135deg, #09090B 0%, #18181B 55%, #27272A 100%);
+  background-size: 100% 100%, 28px 28px, 28px 28px, 100% 100%;
+}
+
+.notion-cover-banner[data-cover="cover-monolith"],
+.swatch-monolith {
+  background:
+    linear-gradient(125deg, #0D0D10 0%, #1E1E24 42%, #3A3A42 42.2%, #141418 75%, #09090B 100%);
+}
+
+.notion-cover-banner[data-cover="cover-cosmos"],
+.swatch-cosmos {
+  background:
+    radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent),
+    radial-gradient(1px 1px at 45% 70%, #e4e4e7, transparent),
+    radial-gradient(2px 2px at 75% 25%, #fafafa, transparent),
+    radial-gradient(1px 1px at 88% 60%, #a1a1aa, transparent),
+    radial-gradient(ellipse at 50% 0%, #27273A 0%, #0D0D14 65%, #050508 100%);
+}
+
+.notion-cover-banner[data-cover="cover-concrete"],
+.swatch-concrete {
+  background:
+    radial-gradient(circle at 15% 50%, rgba(255, 255, 255, 0.08) 0%, transparent 50%),
+    linear-gradient(135deg, #27272A 0%, #3F3F46 45%, #18181B 100%);
+}
+
+.notion-cover-banner[data-cover="cover-sakura"],
+.swatch-sakura {
+  background:
+    radial-gradient(circle at 20% 25%, rgba(255, 255, 255, 0.7) 0%, transparent 45%),
+    radial-gradient(circle at 82% 75%, rgba(223, 118, 139, 0.38) 0%, transparent 50%),
+    linear-gradient(130deg, #FCECEF 0%, #F7D6DD 48%, #E8B0BE 100%);
+}
+
+.notion-cover-banner[data-cover="cover-dawn"],
+.swatch-dawn {
+  background:
+    linear-gradient(165deg, #F6E6E4 0%, #E8C5C8 40%, #9E7B86 78%, #4A3E47 100%);
+}
+
+.notion-cover-banner[data-cover="cover-ocean"],
+.swatch-ocean {
+  background:
+    linear-gradient(135deg, #1E293B 0%, #334155 48%, #64748B 100%);
+}
+
+.notion-cover-banner[data-cover="cover-ink"],
+.swatch-ink {
+  background:
+    radial-gradient(circle at 75% 30%, #E4E4E7 0%, transparent 55%),
+    linear-gradient(135deg, #F4F4F5 0%, #D4D4D8 55%, #A1A1AA 100%);
+}
+
+.notion-cover-actions {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  z-index: 5;
+}
+
+.cover-action-btn {
+  background: rgba(15, 15, 18, 0.68);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #FAFAFA;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cover-action-btn:hover {
+  background: rgba(15, 15, 18, 0.88);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.cover-picker-popover {
+  position: absolute;
+  right: 16px;
+  top: 208px;
+  width: min(460px, calc(100vw - 32px));
+  background: var(--bg-card);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 14px;
+  z-index: 80;
+}
+
+.cover-picker-popover.hidden {
+  display: none !important;
+}
+
+.cover-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.cover-picker-close {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.cover-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 560px) {
+  .cover-presets-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.cover-preset-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 6px;
+  font-size: 11.5px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cover-preset-item:hover,
+.cover-preset-item.active {
+  border-color: var(--sakura-primary);
+  transform: translateY(-1px);
+}
+
+.cover-swatch {
+  width: 100%;
+  height: 36px;
+  border-radius: 4px;
+  border: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+.cover-custom-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+/* Home Hero Bar */
+.home-hero-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+}
+
+.home-hero-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+
+.home-live-date-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.home-today-pill {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--sakura-primary);
+  color: #FFFFFF;
+}
+
+[data-theme="dark"] .home-today-pill {
+  background: #FAFAFA;
+  color: #09090B;
+}
+
+.home-live-clock {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.home-date-heading {
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.home-day-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.home-selected-day-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sakura-deep);
+  padding: 2px 10px;
+  background: var(--bg-sakura-soft);
+  border-radius: var(--radius-sm);
+}
+
+.home-countdown-card {
+  min-width: 260px;
+  background: var(--bg-sakura-tint);
+  border: 1px solid var(--sakura-border);
+  border-radius: var(--radius-lg);
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.countdown-top-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.countdown-main-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.countdown-big-num {
+  font-family: "JetBrains Mono", "SF Mono", "Inter", sans-serif;
+  font-size: 42px;
+  font-weight: 900;
+  line-height: 1.05;
+  color: var(--sakura-deep);
+  letter-spacing: -0.03em;
+}
+
+.countdown-unit {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.countdown-sub-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.countdown-progress-track {
+  width: 100%;
+  height: 6px;
+  background: var(--border-light);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.countdown-progress-fill {
+  height: 100%;
+  background: var(--sakura-primary);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* Home Workspace Grid */
+.home-workspace-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .home-workspace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.home-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.home-done-counter {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sakura-deep);
+  background: var(--bg-sakura-soft);
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.home-slots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.home-slot-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  transition: border-color 0.2s ease;
+}
+
+.home-slot-item.is-completed {
+  opacity: 0.82;
+  border-left: 3px solid var(--timer-done);
+}
+
+.home-slot-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.home-slot-period {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-slot-controls-row {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 560px) {
+  .home-slot-controls-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.home-memo-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.home-memo-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.home-upcoming-section {
+  border-top: 1px solid var(--border-light);
+  padding-top: 12px;
+}
+
+.home-upcoming-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.home-upcoming-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.home-upcoming-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.home-upcoming-item:hover {
+  border-color: var(--sakura-primary);
+  background: var(--bg-sakura-tint);
+}
+
+.home-mini-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.home-mini-stat {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hms-label {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.hms-val {
+  font-family: "JetBrains Mono", "SF Mono", sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   ⏱️ 第 2 頁：讀書計時器正下方「短期休息 & 累積休息」雙重面板
+   ========================================================================== */
+.quick-rest-panel {
+  margin-top: 18px;
+  padding: 14px 18px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+  transition: all 0.25s ease;
+}
+
+@media (max-width: 560px) {
+  .quick-rest-panel {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .quick-rest-divider {
+    display: none;
+  }
+}
+
+.quick-rest-panel.is-resting {
+  background: var(--bg-sakura-tint);
+  border-color: #4E8C6F;
+  box-shadow: 0 0 0 2px rgba(78, 140, 111, 0.18);
+}
+
+[data-theme="dark"] .quick-rest-panel.is-resting {
+  background: #161E1A;
+  border-color: #52B788;
+}
+
+.quick-rest-divider {
+  width: 1px;
+  height: 48px;
+  background: var(--border-medium);
+}
+
+.quick-rest-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.rest-box-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rest-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.quick-rest-panel.is-resting .rest-dot {
+  background: #4E8C6F;
+  box-shadow: 0 0 8px #4E8C6F;
+}
+
+.rest-box-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.rest-box-clock {
+  font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.quick-rest-panel.is-resting .short-rest-box .rest-box-clock {
+  color: #3B7A57;
+}
+
+[data-theme="dark"] .quick-rest-panel.is-resting .short-rest-box .rest-box-clock {
+  color: #74C69D;
+}
+
+.rest-box-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   🗓️ 第 3 頁：Notion 日曆資料庫 (月曆形態 + 每格 3 條橫線直接輸入工作)
+   ========================================================================== */
+.notion-cal-top-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.notion-cal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.notion-month-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.month-tab {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  padding: 5px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.month-tab:hover {
+  border-color: var(--sakura-primary);
+  color: var(--text-primary);
+}
+
+.month-tab.active {
+  background: var(--sakura-primary);
+  color: #FFFFFF;
+  border-color: var(--sakura-primary);
+}
+
+.notion-cal-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cal-nav-btn-group {
+  display: flex;
+  gap: 4px;
+}
+
+.notion-cal-guide-strip {
+  padding: 8px 18px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.notion-calendar-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.notion-calendar-board {
+  min-width: 880px;
+}
+
+.notion-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--border-medium);
+  background: var(--bg-subtle);
+}
+
+.notion-weekday-cell {
+  padding: 8px 10px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  border-right: 1px solid var(--border-light);
+}
+
+.notion-weekday-cell:last-child {
+  border-right: none;
+}
+
+.notion-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+/* 每一天欄位：上方第一格為日期欄，下方由 3 條橫線隔出 3 個工作輸入格 */
+.notion-cal-cell {
+  border-right: 1px solid var(--border-medium);
+  border-bottom: 1px solid var(--border-medium);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  min-height: 146px;
+  transition: background 0.15s ease;
+}
+
+.notion-cal-cell:nth-child(7n) {
+  border-right: none;
+}
+
+.notion-cal-cell.outside-month {
+  background: var(--bg-subtle);
+  opacity: 0.72;
+}
+
+.notion-cal-cell.is-today {
+  box-shadow: inset 0 0 0 1.5px var(--sakura-primary);
+}
+
+/* 第一格：日期與行事曆備忘欄（點擊進入當日詳細編輯畫面） */
+.cal-cell-date-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  min-height: 36px;
+  border-bottom: 1.5px solid var(--border-medium);
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.15s ease;
+  gap: 4px;
+}
+
+.cal-cell-date-row:hover {
+  background: var(--bg-sakura-soft);
+}
+
+.cal-date-left-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.cal-countdown-mini {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.cal-memo-pill {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--sakura-deep);
+  background: var(--bg-sakura-tint);
+  border: 1px solid var(--sakura-border);
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 92px;
+}
+
+.cal-date-num {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.cal-date-num.today-circle {
+  background: #E05A47;
+  color: #FFFFFF;
+  padding: 0 7px;
+  font-weight: 800;
+}
+
+/* 日期下方的三個格子（由三條橫線分隔：早、午、晚工作輸入格） */
+.cal-cell-slot-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  min-height: 36px;
+  border-bottom: 1px solid var(--border-light);
+  background: transparent;
+}
+
+.cal-cell-slot-row:last-child {
+  border-bottom: none;
+}
+
+.cal-cell-slot-row:focus-within {
+  background: var(--bg-sakura-tint);
+}
+
+.cal-slot-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.cal-slot-tag.has-subj {
+  color: var(--sakura-deep);
+  border-color: var(--sakura-border);
+  background: var(--bg-sakura-soft);
+}
+
+.cal-slot-input {
+  width: 100%;
+  border: none !important;
+  background: transparent !important;
+  font-size: 12px;
+  color: var(--text-primary);
+  padding: 3px 2px;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.cal-slot-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.55;
+  font-size: 11px;
+}
+
+.cal-slot-done-dot {
+  font-size: 11px;
+  color: var(--timer-done);
+  flex-shrink: 0;
 }
 
 /* ==========================================================================
