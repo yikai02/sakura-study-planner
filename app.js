@@ -1872,7 +1872,10 @@ function applyHomeCover() {
   if (typeof document === 'undefined' || !appState) return;
   const banner = document.getElementById('homeCoverBanner');
   if (!banner) return;
-  const cover = appState.homeCover || (appSettings.theme === 'dark' ? 'cover-antigravity' : 'cover-sakura');
+  let cover = appState.homeCover;
+  if (!cover || cover === 'cover-sakura' || cover === 'cover-antigravity') {
+    cover = appSettings.theme === 'dark' ? 'cover-antigravity' : 'cover-sakura';
+  }
 
   if (cover.startsWith('url:') || cover.startsWith('data:')) {
     const rawUrl = cover.startsWith('url:') ? cover.slice(4) : cover;
@@ -3983,16 +3986,43 @@ function setupEventListeners() {
   }
 
   // 10B. 雙主題切換器（🌸 日系櫻花粉白 vs 🖤 Antigravity 極簡深黑）
+  function switchThemeMode(themeChoice) {
+    const isDark = (themeChoice === 'dark');
+    appSettings.theme = isDark ? 'dark' : 'sakura';
+    if (!appState.homeCover || appState.homeCover === 'cover-sakura' || appState.homeCover === 'cover-antigravity') {
+      appState.homeCover = isDark ? 'cover-antigravity' : 'cover-sakura';
+      appState.updatedAt = Date.now();
+      saveState(false, false);
+    }
+    saveAppSettings();
+    applyHomeCover();
+    showToast(isDark ? '🖤 已切換為 Antigravity 極簡深黑主題' : '🌸 已切換為日系櫻花粉白主題');
+  }
+
   const dualSwitcher = document.getElementById('themeDualSwitcher');
   if (dualSwitcher) {
     dualSwitcher.addEventListener('click', (e) => {
-      const btn = e.target.closest('.theme-switch-btn');
-      if (!btn || !btn.dataset.themeVal) return;
-      const themeVal = btn.dataset.themeVal;
-      appSettings.theme = themeVal;
-      saveAppSettings();
-      applyHomeCover();
-      showToast(themeVal === 'dark' ? '🖤 已切換為 Antigravity 極簡深黑主題' : '🌸 已切換為日系櫻花粉白主題');
+      const btn = e.target.closest('.theme-switch-pill, .theme-switch-btn, button');
+      if (!btn) return;
+      const themeVal = btn.dataset.themeChoice || btn.dataset.themeVal || (btn.id === 'themeBtnDark' ? 'dark' : 'sakura');
+      if (!themeVal) return;
+      switchThemeMode(themeVal);
+    });
+  }
+
+  const btnSakuraDirect = document.getElementById('themeBtnSakura');
+  if (btnSakuraDirect) {
+    btnSakuraDirect.addEventListener('click', (e) => {
+      e.stopPropagation();
+      switchThemeMode('sakura');
+    });
+  }
+
+  const btnDarkDirect = document.getElementById('themeBtnDark');
+  if (btnDarkDirect) {
+    btnDarkDirect.addEventListener('click', (e) => {
+      e.stopPropagation();
+      switchThemeMode('dark');
     });
   }
 
@@ -4492,10 +4522,7 @@ function setupEventListeners() {
   const themeToggleBtn = document.getElementById('themeToggleBtn');
   if (themeToggleBtn) {
     themeToggleBtn.addEventListener('click', () => {
-      appSettings.theme = appSettings.theme === 'dark' ? 'sakura' : 'dark';
-      saveAppSettings();
-      applyHomeCover();
-      showToast(appSettings.theme === 'dark' ? '🖤 已切換為 Antigravity 極簡深黑主題' : '🌸 已切換為日系櫻花粉白主題');
+      switchThemeMode(appSettings.theme === 'dark' ? 'sakura' : 'dark');
     });
   }
 
@@ -4521,9 +4548,7 @@ function setupEventListeners() {
   const settingThemeSelect = document.getElementById('settingThemeSelect');
   if (settingThemeSelect) {
     settingThemeSelect.addEventListener('change', (e) => {
-      appSettings.theme = e.target.value === 'dark' ? 'dark' : 'sakura';
-      saveAppSettings();
-      applyHomeCover();
+      switchThemeMode(e.target.value === 'dark' ? 'dark' : 'sakura');
     });
   }
 
@@ -5863,7 +5888,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261108_v1').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261108_v2').then((reg) => {
         console.log('🌸 PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);
