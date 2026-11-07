@@ -1,12 +1,26 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-theme="auto">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>小櫻讀書計劃表 🌸 YPT 專注計時 × Numbers 統計儀表板</title>
+  
+  <!-- PWA & Mobile Web App Manifest -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#DF768B" id="themeColorMeta" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="小櫻讀書" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+  <link rel="shortcut icon" href="icons/icon-192.png" />
+
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+
+  <!-- Floating Falling Sakura Petals Background Canvas -->
+  <canvas id="sakuraCanvas" class="sakura-canvas" aria-hidden="true"></canvas>
 
   <!-- Top Navigation & Floating Active YPT Timer Bar -->
   <header class="top-navbar">
@@ -56,9 +70,22 @@
       </div>
     </div>
 
-    <!-- Right Actions: Save Status, Room Sync, Settings Modal Open -->
+    <!-- Right Actions: Quick Toggles (Theme, Sound, Petals), Save Status, Room Sync, Settings Modal -->
     <div class="top-actions">
-      <div class="save-indicator" id="saveIndicator" title="所有變更皆自動儲存於瀏覽器 localStorage">
+      <!-- Quick Atmosphere Controls -->
+      <div class="quick-atmosphere-controls">
+        <button id="themeToggleBtn" class="icon-toggle-btn" type="button" title="切換深色夜間護眼 / 淺色櫻花模式">
+          <span id="themeToggleIcon">🌙</span>
+        </button>
+        <button id="soundToggleBtn" class="icon-toggle-btn" type="button" title="切換專注和弦鐘聲音效（開/關）">
+          <span id="soundToggleIcon">🔔</span>
+        </button>
+        <button id="petalToggleBtn" class="icon-toggle-btn active" type="button" title="切換落櫻飄落動效（開/關）">
+          <span id="petalToggleIcon">🌸</span>
+        </button>
+      </div>
+
+      <div class="save-indicator" id="saveIndicator" title="所有變更皆自動儲存於瀏覽器 localStorage 與雲端">
         <span class="dot" id="saveIndicatorDot"></span>
         <span id="saveStatusText">已自動儲存</span>
       </div>
@@ -101,6 +128,19 @@
             <div class="quick-active-badge-bar">
               <span class="quick-status-dot" id="quickStatusDot"></span>
               <span class="quick-status-text" id="quickStatusText">點選科目開始計時</span>
+            </div>
+
+            <!-- Mode Selector: Free Stopwatch vs Pomodoro -->
+            <div class="timer-mode-selector" id="timerModeSelector">
+              <button type="button" class="mode-chip active" data-mode="stopwatch">
+                <span class="mode-chip-icon">⏱️</span> 自由計時
+              </button>
+              <button type="button" class="mode-chip" data-mode="pomodoro-25">
+                <span class="mode-chip-icon">🍅</span> 番茄 25分
+              </button>
+              <button type="button" class="mode-chip" data-mode="pomodoro-50">
+                <span class="mode-chip-icon">🎯</span> 衝刺 50分
+              </button>
             </div>
 
             <div class="quick-clock-display" id="quickClockDisplay">00:00:00</div>
@@ -320,6 +360,39 @@
          分頁 4：📊 統計列表（5 大統計量表與衝刺指標）
          ========================================================================= -->
     <section id="tabStatisticsDashboard" class="tab-view">
+      <!-- 🌸 85天衝刺智能讀書診斷報告 (AI Study Diagnostics) -->
+      <div class="card diagnostic-card" style="margin-bottom: 20px;">
+        <div class="card-header">
+          <div>
+            <div class="card-title"><span class="icon">🌸</span> 智能讀書診斷與衝刺建議</div>
+            <div class="card-subtitle">依據目前真實專注時長、時段分佈與衝刺階段自動生成</div>
+          </div>
+          <span class="diagnostic-badge" id="diagPaceBadge">衝刺狀態計算中...</span>
+        </div>
+        <div class="card-body">
+          <div class="diag-content-grid">
+            <div class="diag-advice-box">
+              <div class="diag-advice-title">💡 衝刺診斷建議</div>
+              <p class="diag-advice-text" id="diagAdviceText">載入進度數據中...</p>
+            </div>
+            <div class="diag-metrics-row">
+              <div class="diag-metric-item">
+                <span class="diag-metric-label">☀️ 早中晚黃金時段分佈</span>
+                <div class="period-ratio-bar" id="periodRatioBar">
+                  <div class="ratio-segment morning" id="ratioMorningBar" style="width: 33%;" title="早上時段">早 33%</div>
+                  <div class="ratio-segment noon" id="ratioNoonBar" style="width: 33%;" title="下午時段">中 33%</div>
+                  <div class="ratio-segment night" id="ratioNightBar" style="width: 34%;" title="晚上時段">晚 34%</div>
+                </div>
+              </div>
+              <div class="diag-metric-item">
+                <span class="diag-metric-label">⚖️ 科目均衡度診斷</span>
+                <span class="diag-metric-val" id="diagSubjectBalance">分析中...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Overall 85-Day KPI Card -->
       <div class="card" style="margin-bottom: 20px;">
         <div class="card-header">
@@ -481,6 +554,50 @@
             <input id="importJsonInput" type="file" accept=".json,application/json" style="display:none;" />
             <button id="loadPdfPlanBtn" class="btn" type="button" title="載入原 Numbers 表中已預排好的科目與範圍">帶入原表預排範圍</button>
             <button id="toggleLayoutBtn" class="btn btn-subtle" type="button">切換行事曆左右並排 ◫</button>
+          </div>
+        </div>
+
+        <!-- Atmosphere, Dark Mode, Sound & PWA Section -->
+        <div class="settings-section" style="margin-top: 20px; border-top: 1px solid var(--border-light); padding-top: 15px;">
+          <div class="settings-sec-title">🎨 專注氛圍、護眼深色與提示音效</div>
+          <p class="settings-sec-desc">依據讀書環境自訂深淺色與溫和音效提示：</p>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 12px;">
+            <div class="setting-item-box">
+              <span class="setting-label">🌙 外觀主題模式</span>
+              <select id="settingThemeSelect" class="form-input" style="padding: 6px 10px;">
+                <option value="auto">⏱️ 自動（夜間 19:00~05:00 切換深色）</option>
+                <option value="dark">🌙 深色夜間護眼模式</option>
+                <option value="light">🌸 淺色日系櫻花模式</option>
+              </select>
+            </div>
+            <div class="setting-item-box">
+              <span class="setting-label">🔔 專注提示音效</span>
+              <select id="settingSoundSelect" class="form-input" style="padding: 6px 10px;">
+                <option value="on">🔔 開啟（清脆和弦鐘聲）</option>
+                <option value="off">🔕 靜音模式</option>
+              </select>
+            </div>
+            <div class="setting-item-box">
+              <span class="setting-label">🌸 浪漫落櫻飄落動效</span>
+              <select id="settingPetalsSelect" class="form-input" style="padding: 6px 10px;">
+                <option value="on">🌸 開啟（浪漫櫻花飄落）</option>
+                <option value="off">🍂 關閉動效</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- PWA Mobile Home Screen Installation Section -->
+        <div class="settings-section" style="margin-top: 20px; border-top: 1px solid var(--border-light); padding-top: 15px;">
+          <div class="settings-sec-title">📲 安裝至手機 / 平板桌面 App</div>
+          <p class="settings-sec-desc">本程式支援 PWA 技術，安裝後如同獨立 App：全螢幕無網址列、離線極速開跑！</p>
+          <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <button id="pwaInstallBtn" class="btn btn-primary" type="button" style="display: none;">
+              ✨ 一鍵加到桌面 / 安裝 App
+            </button>
+            <div class="pwa-guide-tip">
+              <strong>💡 iOS / iPad 快速加入主畫面：</strong>在 Safari 底部點選<strong>「分享（向上箭頭 ⎋）」➔「加入主畫面 ⊞」</strong>即可獲得全螢幕原生 App 體驗！
+            </div>
           </div>
         </div>
 

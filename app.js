@@ -5,6 +5,18 @@
 
 const STORAGE_KEY = 'sakura_study_planner_v1';
 const ROOM_STORAGE_KEY = 'sakura_shared_room_v2';
+const SETTINGS_STORAGE_KEY = 'sakura_user_settings_v1';
+
+// 使用者偏好設定（深色模式、提示音效、落櫻動效）
+let appSettings = {
+  theme: 'auto',   // 'auto', 'dark', 'light'
+  sound: 'on',     // 'on', 'off'
+  petals: 'on'     // 'on', 'off'
+};
+
+// 計時模式（自由正計時、25分鐘番茄鐘、50分鐘衝刺鐘）
+let currentTimerMode = 'stopwatch'; // 'stopwatch', 'pomodoro-25', 'pomodoro-50'
+let deferredPwaPrompt = null;
 
 // 多人即時同步房全域變數（免註冊・免 Google 帳號・免兩階段驗證）
 const myClientId = 'usr_' + Math.random().toString(36).slice(2, 9);
@@ -15,6 +27,217 @@ let myNickname = '我';
 let roomReconnectTimeout = null;
 let isReceivingRemoteUpdate = false;
 let roomDebounceTimer = null;
+
+/* ==========================================================================
+   🎵 Web Audio API 柔和和弦鐘聲與專注提示音（免外載音檔、零延遲、離線可用）
+   ========================================================================== */
+let audioCtx = null;
+function getAudioContext() {
+  if (!audioCtx && typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioCtx();
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+  return audioCtx;
+}
+
+function playChime(type = 'complete') {
+  if (appSettings.sound === 'off') return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    if (type === 'start') {
+      // 專注開始：微風柔和雙音（上升音階）
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.18);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.42);
+    } else if (type === 'pause') {
+      // 專注暫停：輕柔微音
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520, now);
+      gain.gain.setValueAtTime(0.06, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.26);
+    } else if (type === 'complete' || type === 'pomodoro') {
+      // 專注達成：悠揚櫻花四重和弦鐘聲（Crystal Bell: C5, E5, G5, C6）
+      const notes = [523.25, 659.25, 783.99, 1046.50];
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        const startT = now + idx * 0.1;
+        osc.frequency.setValueAtTime(freq, startT);
+        gain.gain.setValueAtTime(0, startT);
+        gain.gain.linearRampToValueAtTime(0.12, startT + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0008, startT + 0.9);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startT);
+        osc.stop(startT + 0.95);
+      });
+    }
+  } catch (e) {
+    console.warn('Audio chime notice:', e);
+  }
+}
+
+/* ==========================================================================
+   🌙 深色夜間護眼模式與偏好設定管理器
+   ========================================================================== */
+function loadAppSettings() {
+  try {
+    const s = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (s) {
+      appSettings = { ...appSettings, ...JSON.parse(s) };
+    }
+  } catch (e) {}
+  applyTheme();
+  updateAtmosphereUi();
+}
+
+function saveAppSettings() {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(appSettings));
+  } catch (e) {}
+  applyTheme();
+  updateAtmosphereUi();
+}
+
+function applyTheme() {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  let effective = appSettings.theme;
+  if (effective === 'auto') {
+    const hr = new Date().getHours();
+    effective = (hr >= 19 || hr < 5) ? 'dark' : 'light';
+  }
+  root.setAttribute('data-theme', effective);
+  const meta = document.getElementById('themeColorMeta');
+  if (meta) {
+    meta.content = effective === 'dark' ? '#181516' : '#DF768B';
+  }
+}
+
+function updateAtmosphereUi() {
+  if (typeof document === 'undefined') return;
+  const themeIcon = document.getElementById('themeToggleIcon');
+  if (themeIcon) {
+    if (appSettings.theme === 'dark') themeIcon.textContent = '🌙';
+    else if (appSettings.theme === 'light') themeIcon.textContent = '☀️';
+    else themeIcon.textContent = '⏱️';
+  }
+
+  const soundBtn = document.getElementById('soundToggleBtn');
+  const soundIcon = document.getElementById('soundToggleIcon');
+  if (soundBtn && soundIcon) {
+    const on = appSettings.sound === 'on';
+    soundBtn.classList.toggle('active', on);
+    soundIcon.textContent = on ? '🔔' : '🔕';
+  }
+
+  const petalBtn = document.getElementById('petalToggleBtn');
+  const petalIcon = document.getElementById('petalToggleIcon');
+  if (petalBtn && petalIcon) {
+    const on = appSettings.petals === 'on';
+    petalBtn.classList.toggle('active', on);
+    petalIcon.textContent = on ? '🌸' : '🍂';
+  }
+
+  const themeSel = document.getElementById('settingThemeSelect');
+  if (themeSel) themeSel.value = appSettings.theme;
+  const soundSel = document.getElementById('settingSoundSelect');
+  if (soundSel) soundSel.value = appSettings.sound;
+  const petalSel = document.getElementById('settingPetalsSelect');
+  if (petalSel) petalSel.value = appSettings.petals;
+}
+
+/* ==========================================================================
+   🌸 浪漫櫻花落瓣 Canvas 動畫 (超低能耗飄落)
+   ========================================================================== */
+function initSakuraPetalsCanvas() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+  const canvas = document.getElementById('sakuraCanvas');
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  let width = (canvas.width = window.innerWidth);
+  let height = (canvas.height = window.innerHeight);
+
+  window.addEventListener('resize', () => {
+    width = canvas.width = window.innerWidth;
+    height = canvas.height = window.innerHeight;
+  });
+
+  const petals = [];
+  const TOTAL = 26;
+  for (let i = 0; i < TOTAL; i++) {
+    petals.push({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      size: Math.random() * 8 + 6,
+      speedX: Math.random() * 1.2 - 0.2,
+      speedY: Math.random() * 1.3 + 0.7,
+      rotation: Math.random() * 360,
+      rotSpeed: Math.random() * 2 - 1,
+      opacity: Math.random() * 0.4 + 0.35
+    });
+  }
+
+  function renderPetals() {
+    if (appSettings.petals === 'off') {
+      ctx.clearRect(0, 0, width, height);
+      requestAnimationFrame(renderPetals);
+      return;
+    }
+
+    ctx.clearRect(0, 0, width, height);
+    for (let i = 0; i < petals.length; i++) {
+      const p = petals[i];
+      p.x += p.speedX;
+      p.y += p.speedY;
+      p.rotation += p.rotSpeed;
+
+      if (p.y > height + 25) {
+        p.y = -25;
+        p.x = Math.random() * width;
+      }
+      if (p.x > width + 25) p.x = -25;
+      if (p.x < -25) p.x = width + 25;
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.fillStyle = `rgba(247, 178, 194, ${p.opacity})`;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.bezierCurveTo(p.size / 2, -p.size / 2, p.size, 0, 0, p.size * 1.5);
+      ctx.bezierCurveTo(-p.size, 0, -p.size / 2, -p.size / 2, 0, 0);
+      ctx.fill();
+      ctx.restore();
+    }
+    requestAnimationFrame(renderPetals);
+  }
+
+  renderPetals();
+}
 
 // 主表格下拉選單科目選項
 const SUBJECT_OPTIONS = ['', '個經', '總經', '經濟', '統計', '財管', '英文', '上課', '其他'];
@@ -649,6 +872,98 @@ function renderAllStatistics() {
   renderSubjectCountTable(stats);
   renderSubjectTimeTable(stats);
   renderAdvancedStatTable(stats);
+  renderStudyDiagnostics(stats);
+}
+
+/**
+ * 🌸 85 天衝刺智能讀書診斷報告卡片渲染
+ */
+function renderStudyDiagnostics(stats) {
+  if (typeof document === 'undefined') return;
+  const diagText = document.getElementById('diagAdviceText');
+  const paceBadge = document.getElementById('diagPaceBadge');
+  const morningBar = document.getElementById('ratioMorningBar');
+  const noonBar = document.getElementById('ratioNoonBar');
+  const nightBar = document.getElementById('ratioNightBar');
+  const balanceEl = document.getElementById('diagSubjectBalance');
+
+  if (!diagText || !stats) return;
+
+  // 1. 計算早中晚三時段累積時長比例
+  let mTotal = 0, nTotal = 0, eTotal = 0;
+  appState.days.forEach(d => {
+    mTotal += getSlotEffectiveMinutes(d.morning);
+    nTotal += getSlotEffectiveMinutes(d.noon);
+    eTotal += getSlotEffectiveMinutes(d.night);
+  });
+  const sumPeriod = mTotal + nTotal + eTotal;
+  let mPct = 33, nPct = 33, ePct = 34;
+  if (sumPeriod > 0) {
+    mPct = Math.round((mTotal / sumPeriod) * 100);
+    nPct = Math.round((nTotal / sumPeriod) * 100);
+    ePct = Math.max(0, 100 - mPct - nPct);
+  }
+
+  if (morningBar) {
+    morningBar.style.width = `${Math.max(12, mPct)}%`;
+    morningBar.textContent = `早 ${mPct}% (${formatMinutesToHM(mTotal)})`;
+  }
+  if (noonBar) {
+    noonBar.style.width = `${Math.max(12, nPct)}%`;
+    noonBar.textContent = `中 ${nPct}% (${formatMinutesToHM(nTotal)})`;
+  }
+  if (nightBar) {
+    nightBar.style.width = `${Math.max(12, ePct)}%`;
+    nightBar.textContent = `晚 ${ePct}% (${formatMinutesToHM(eTotal)})`;
+  }
+
+  // 2. 核心考科均衡度分析
+  const subjMins = stats.total.subjectMinutes || {};
+  const mainSubjs = ['經濟', '統計', '財管', '英文'];
+  let maxSubj = mainSubjs[0], maxM = subjMins[maxSubj] || 0;
+  let minSubj = mainSubjs[0], minM = subjMins[minSubj] || 0;
+  mainSubjs.forEach(s => {
+    const val = subjMins[s] || 0;
+    if (val > maxM) { maxM = val; maxSubj = s; }
+    if (val < minM) { minM = val; minSubj = s; }
+  });
+
+  if (balanceEl) {
+    if (sumPeriod === 0) {
+      balanceEl.textContent = '尚無讀書紀錄，點選快捷計時即可獲得診斷！';
+    } else {
+      balanceEl.innerHTML = `最高時數：<strong style="color:var(--sakura-deep)">${maxSubj} (${formatMinutesToHM(maxM)})</strong> ｜ 最需加強：<strong>${minSubj} (${formatMinutesToHM(minM)})</strong>`;
+    }
+  }
+
+  // 3. 目前衝刺階段與個人化智慧診斷建議
+  const todayCd = getTodayDayCountdown();
+  const phaseIdx = getPhaseIndexForDay(todayCd);
+  const currentPhase = appState.phases[phaseIdx] || DEFAULT_PHASES[0];
+  const phaseDaysLeft = Math.max(0, todayCd - (currentPhase.endDay || 1) + 1);
+
+  if (paceBadge) {
+    paceBadge.textContent = `${currentPhase.name}（倒數剩餘 ${phaseDaysLeft} 天）`;
+  }
+
+  if (sumPeriod === 0) {
+    diagText.textContent = `🌸 歡迎使用 85 天衝刺讀書計劃！今天是 Day ${todayCd}，處於「${currentPhase.name}」。建議每天保持 5~7 小時高效專注，立即在「快捷計時」點選科目開始你的第一堂自習吧！`;
+  } else {
+    const totalHours = (sumPeriod / 60).toFixed(1);
+    let bestPeriodName = '早晨時段';
+    if (nTotal >= mTotal && nTotal >= eTotal) bestPeriodName = '下午時段';
+    if (eTotal >= mTotal && eTotal >= nTotal) bestPeriodName = '晚間時段';
+
+    let advice = `🌸 目前 85 天累計專注達 <strong>${totalHours} 小時</strong>！你在 <strong>${bestPeriodName}</strong> 的專注力最高。`;
+    if (maxM > 0 && minM === 0) {
+      advice += ` 目前 ${maxSubj} 投入時數最多，建議今日適度排入 <strong>${minSubj}</strong> 進行基礎章節鞏固，避免考科落差。`;
+    } else if (maxM > minM * 2.5 && minM > 0) {
+      advice += ` 各科分配中 ${maxSubj} 遙遙領先，可適度分流 30% 時間給 <strong>${minSubj}</strong> 刷考古題，維持多科並進手感！`;
+    } else {
+      advice += ` 各主要考科時間分佈良好且均衡！繼續保持「${currentPhase.name}」的穩定節奏，金榜題名必在眼前！🌸`;
+    }
+    diagText.innerHTML = advice;
+  }
 }
 
 /**
@@ -1293,7 +1608,15 @@ function updateQuickTimerDom() {
   const active = findActiveTimerSlot();
   if (active) {
     const liveMs = getSlotLiveMs(active.slot);
-    clockEl.textContent = formatMsToClock(liveMs);
+    if (currentTimerMode === 'pomodoro-25') {
+      const targetMs = 25 * 60 * 1000;
+      clockEl.textContent = formatMsToClock(Math.max(0, targetMs - liveMs));
+    } else if (currentTimerMode === 'pomodoro-50') {
+      const targetMs = 50 * 60 * 1000;
+      clockEl.textContent = formatMsToClock(Math.max(0, targetMs - liveMs));
+    } else {
+      clockEl.textContent = formatMsToClock(liveMs);
+    }
 
     const isRunning = active.slot.timerStatus === 'running';
     if (dotEl) {
@@ -1302,9 +1625,10 @@ function updateQuickTimerDom() {
 
     const slotObj = SLOT_KEYS.find(k => k.key === active.slotKey);
     const slotLabel = slotObj ? `${slotObj.icon} ${slotObj.label}時段` : active.slotLabel;
+    const modeName = currentTimerMode === 'pomodoro-25' ? '【25分番茄鐘】' : (currentTimerMode === 'pomodoro-50' ? '【50分衝刺鐘】' : '');
 
     if (isRunning) {
-      textEl.innerHTML = `⏱️ 正在專注：<strong style="color:var(--sakura-deep);font-size:15px;">${escapeHtml(active.slot.subject || '自訂科目')}</strong>（依開始時間 ${active.slot.startTime || ''} 歸於 ${slotLabel}）`;
+      textEl.innerHTML = `⏱️ 正在專注：<strong style="color:var(--sakura-deep);font-size:15px;">${escapeHtml(active.slot.subject || '自訂科目')}</strong> ${modeName}（依開始時間 ${active.slot.startTime || ''} 歸於 ${slotLabel}）`;
     } else {
       textEl.innerHTML = `⏸️ 專注已暫停：<strong style="color:var(--timer-paused);">${escapeHtml(active.slot.subject || '自訂科目')}</strong>（休息不計入專注時長）`;
     }
@@ -1315,9 +1639,17 @@ function updateQuickTimerDom() {
       pauseResumeBtn.className = 'btn btn-lg ' + (isRunning ? 'btn-pause' : 'btn-resume');
     }
   } else {
-    clockEl.textContent = '00:00:00';
+    if (currentTimerMode === 'pomodoro-25') {
+      clockEl.textContent = '00:25:00';
+      textEl.textContent = '🍅 已就緒！點選下方科目，即刻開始 25 分鐘番茄鐘專注倒數';
+    } else if (currentTimerMode === 'pomodoro-50') {
+      clockEl.textContent = '00:50:00';
+      textEl.textContent = '🎯 已就緒！點選下方科目，即刻開始 50 分鐘衝刺專注倒數';
+    } else {
+      clockEl.textContent = '00:00:00';
+      textEl.textContent = '🌸 點選下方科目，一鍵立即開始自由專注計時';
+    }
     if (dotEl) dotEl.className = 'quick-status-dot';
-    textEl.textContent = '🌸 點選下方科目，一鍵立即開始專注計時';
     if (actionsRow) actionsRow.style.display = 'none';
   }
 }
@@ -2199,6 +2531,7 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     appState.updatedAt = now;
 
     showToast(`▶ 開始計時：${day.dateDisplay} ${getSlotLabel(slotKey)} ${slot.subject ? `(${slot.subject})` : ''}`);
+    playChime('start');
   } else if (action === 'ypt-pause') {
     if (slot.timerStatus === 'running' && slot.lastResumeTimestamp) {
       slot.accumulatedMs = (slot.accumulatedMs || 0) + Math.max(0, now - slot.lastResumeTimestamp);
@@ -2210,6 +2543,7 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     appState.updatedAt = now;
 
     showToast(`⏸ 已暫停計時（目前已累計 ${formatMinutesToHM(slot.durationMinutes)}）`);
+    playChime('pause');
   } else if (action === 'ypt-resume') {
     pauseOtherActiveSlots(day.dayCountdown, slotKey, now - 1);
     slot.timerStatus = 'running';
@@ -2218,6 +2552,7 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     appState.updatedAt = now;
 
     showToast(`▶ 繼續計時：${day.dateDisplay} ${getSlotLabel(slotKey)} ${slot.subject ? `(${slot.subject})` : ''}`);
+    playChime('start');
   } else if (action === 'ypt-stop') {
     if (slot.timerStatus === 'running' && slot.lastResumeTimestamp) {
       slot.accumulatedMs = (slot.accumulatedMs || 0) + Math.max(0, now - slot.lastResumeTimestamp);
@@ -2235,6 +2570,7 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     appState.updatedAt = now;
 
     showToast(`⏹ 結束計時！已記錄時長：${formatMinutesToHM(netMinutes)}`);
+    playChime('complete');
   }
 
   // 立即寫入本機 localStorage，並立即雙通道廣播給所有跨裝置（不等待防抖延遲，確保按完馬上關螢幕也 100% 同步）
@@ -2327,6 +2663,23 @@ function startGlobalTimerTicker() {
 
     if (active && active.slot.timerStatus === 'running') {
       const liveMs = getSlotLiveMs(active.slot);
+
+      // 番茄鐘倒數達成自動結算與打勾
+      if (currentTimerMode === 'pomodoro-25' || currentTimerMode === 'pomodoro-50') {
+        const targetM = currentTimerMode === 'pomodoro-25' ? 25 : 50;
+        const targetMs = targetM * 60000;
+        if (liveMs >= targetMs) {
+          handleYptTimerAction('ypt-stop', active.day.dayCountdown, active.slotKey);
+          active.slot.completed = true;
+          saveState();
+          playChime('pomodoro');
+          showToast(`🍅 恭喜達成 ${targetM} 分鐘專注目標！已鎖定讀書時長並自動為您打勾！`);
+          renderQuickTimerView();
+          renderDailyPlanView();
+          return;
+        }
+      }
+
       const clockStr = formatMsToClock(liveMs);
       const clockEl = document.getElementById(`ypt-clock-${active.day.dayCountdown}-${active.slotKey}`);
       if (clockEl) {
@@ -2335,7 +2688,10 @@ function startGlobalTimerTicker() {
 
       if (typeof document !== 'undefined' && document.title !== undefined) {
         const subj = active.slot.subject || '專注中';
-        document.title = `⏱️ ${clockStr} ${subj}｜小櫻讀書計劃表`;
+        const titleTime = (currentTimerMode === 'pomodoro-25' || currentTimerMode === 'pomodoro-50')
+          ? formatMsToClock(Math.max(0, (currentTimerMode === 'pomodoro-25' ? 25 : 50) * 60000 - liveMs))
+          : clockStr;
+        document.title = `⏱️ ${titleTime} ${subj}｜小櫻讀書計劃表`;
       }
 
       const currentMinuteBucket = Math.floor(liveMs / 60000);
@@ -3155,6 +3511,7 @@ function setupEventListeners() {
 
   if (openSettingsModalBtn && settingsModal) {
     openSettingsModalBtn.addEventListener('click', () => {
+      updateAtmosphereUi();
       settingsModal.classList.remove('hidden');
     });
   }
@@ -3167,6 +3524,100 @@ function setupEventListeners() {
     settingsModal.addEventListener('click', (e) => {
       if (e.target === settingsModal) {
         settingsModal.classList.add('hidden');
+      }
+    });
+  }
+
+  // 14. 專注氛圍控制（深色模式、提示音、櫻花落瓣動效）
+  const themeToggleBtn = document.getElementById('themeToggleBtn');
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      if (appSettings.theme === 'auto') appSettings.theme = 'dark';
+      else if (appSettings.theme === 'dark') appSettings.theme = 'light';
+      else appSettings.theme = 'auto';
+      saveAppSettings();
+      const name = appSettings.theme === 'dark' ? '深色夜間護眼' : (appSettings.theme === 'light' ? '淺色日系櫻花' : '自動（夜間19:00~05:00深色）');
+      showToast(`🎨 已切換外觀模式：${name}`);
+    });
+  }
+
+  const soundToggleBtn = document.getElementById('soundToggleBtn');
+  if (soundToggleBtn) {
+    soundToggleBtn.addEventListener('click', () => {
+      appSettings.sound = appSettings.sound === 'on' ? 'off' : 'on';
+      saveAppSettings();
+      showToast(appSettings.sound === 'on' ? '🔔 已開啟專注和弦鐘聲提示音' : '🔕 已切換為靜音模式');
+      if (appSettings.sound === 'on') playChime('start');
+    });
+  }
+
+  const petalToggleBtn = document.getElementById('petalToggleBtn');
+  if (petalToggleBtn) {
+    petalToggleBtn.addEventListener('click', () => {
+      appSettings.petals = appSettings.petals === 'on' ? 'off' : 'on';
+      saveAppSettings();
+      showToast(appSettings.petals === 'on' ? '🌸 已開啟落櫻飄落動效' : '🍂 已關閉落櫻動效');
+    });
+  }
+
+  const settingThemeSelect = document.getElementById('settingThemeSelect');
+  if (settingThemeSelect) {
+    settingThemeSelect.addEventListener('change', (e) => {
+      appSettings.theme = e.target.value;
+      saveAppSettings();
+    });
+  }
+
+  const settingSoundSelect = document.getElementById('settingSoundSelect');
+  if (settingSoundSelect) {
+    settingSoundSelect.addEventListener('change', (e) => {
+      appSettings.sound = e.target.value;
+      saveAppSettings();
+    });
+  }
+
+  const settingPetalsSelect = document.getElementById('settingPetalsSelect');
+  if (settingPetalsSelect) {
+    settingPetalsSelect.addEventListener('change', (e) => {
+      appSettings.petals = e.target.value;
+      saveAppSettings();
+    });
+  }
+
+  // 15. 番茄鐘 / 自由計時模式切換
+  const timerModeSelector = document.getElementById('timerModeSelector');
+  if (timerModeSelector) {
+    timerModeSelector.addEventListener('click', (e) => {
+      const chip = e.target.closest('.mode-chip');
+      if (!chip || !chip.dataset.mode) return;
+      timerModeSelector.querySelectorAll('.mode-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      currentTimerMode = chip.dataset.mode;
+      updateQuickTimerDom();
+      if (currentTimerMode === 'pomodoro-25') {
+        showToast('🍅 已切換為 25 分鐘番茄鐘模式');
+      } else if (currentTimerMode === 'pomodoro-50') {
+        showToast('🎯 已切換為 50 分鐘衝刺專注模式');
+      } else {
+        showToast('⏱️ 已切換為自由正計時模式');
+      }
+    });
+  }
+
+  // 16. PWA 桌面應用程式安裝按鈕
+  const pwaInstallBtn = document.getElementById('pwaInstallBtn');
+  if (pwaInstallBtn) {
+    pwaInstallBtn.addEventListener('click', async () => {
+      if (deferredPwaPrompt) {
+        deferredPwaPrompt.prompt();
+        const { outcome } = await deferredPwaPrompt.userChoice;
+        if (outcome === 'accepted') {
+          showToast('🌸 感謝安裝！已成功將小櫻讀書計劃表加到桌面！');
+        }
+        deferredPwaPrompt = null;
+        pwaInstallBtn.style.display = 'none';
+      } else {
+        showToast('💡 提示：在瀏覽器選單點選「加到主畫面」或「安裝應用程式」即可！');
       }
     });
   }
@@ -3947,6 +4398,20 @@ async function pollLatestRoomSnapshot(topic) {
         handleRoomIncomingMessage(items[i], true);
       }
     }
+
+    // 若 ntfy 快取內沒有任何訊息（例如所有裝置皆關機超過 12 小時），自動自 GitHub 雲端備份還原最新進度
+    if (items.length === 0) {
+      try {
+        const backupRes = await fetch(`./data/backup-latest.json?t=${Date.now()}`);
+        if (backupRes.ok) {
+          const backupData = await backupRes.json();
+          if (backupData && backupData.type === 'FULL' && backupData.compact) {
+            handleRoomIncomingMessage(backupData, true);
+            console.log('🌸 已自動自 GitHub 雲端備份還原最新進度！');
+          }
+        }
+      } catch (e) {}
+    }
   } catch (err) {
     console.warn('Poll room snapshot warning:', err);
   } finally {
@@ -4249,8 +4714,11 @@ function handleAppWakeOrFocus() {
    ========================================================================== */
 
 document.addEventListener('DOMContentLoaded', () => {
+  loadAppSettings();
   loadState();
   initCurrentActiveDay();
+  initSakuraPetalsCanvas();
+
   // 若重新打開瀏覽器時有正在計時的項目，自動切換至該天並維持計時
   const initialActive = findActiveTimerSlot();
   if (initialActive && initialActive.slot.timerStatus === 'running') {
@@ -4267,6 +4735,25 @@ document.addEventListener('DOMContentLoaded', () => {
   initRoomSyncFromStorageOrUrl();
   switchMainTab('quick-timer');
   syncScreenWakeLock();
+
+  // 註冊 PWA Service Worker (支援離線秒開與快取)
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        console.log('🌸 PWA ServiceWorker registered:', reg.scope);
+      }).catch((err) => {
+        console.warn('PWA registration warning:', err);
+      });
+    });
+  }
+
+  // 攔截 PWA 安裝提示事件
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPwaPrompt = e;
+    const pwaBtn = document.getElementById('pwaInstallBtn');
+    if (pwaBtn) pwaBtn.style.display = 'inline-block';
+  });
 
   // 1. 螢幕關閉、切換其他 App、或滑掉瀏覽器瞬間：強制把最新計時狀態寫入本機快取
   document.addEventListener('visibilitychange', () => {

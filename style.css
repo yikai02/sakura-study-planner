@@ -2347,3 +2347,316 @@ body {
   color: var(--text-secondary);
   line-height: 1.5;
 }
+
+/* ==========================================================================
+   🌸 深色護眼夜間模式 (Dark Mode)
+   ========================================================================== */
+
+[data-theme="dark"] {
+  --bg-main: #181516;
+  --bg-card: #221E20;
+  --bg-subtle: #1C191A;
+  --bg-sakura-tint: #2C2225;
+  --bg-sakura-soft: #38292D;
+  --bg-header: rgba(24, 21, 22, 0.92);
+
+  --sakura-primary: #FF8EA2;
+  --sakura-hover: #FFA4B5;
+  --sakura-light: #4A3036;
+  --sakura-border: #613C44;
+  --sakura-deep: #FFAEC0;
+
+  --text-primary: #F7EFF1;
+  --text-secondary: #C0B4B7;
+  --text-muted: #8E8185;
+
+  --border-light: #362E31;
+  --border-medium: #473C40;
+
+  /* Subject Tag Colors in Dark Mode */
+  --subj-micro-bg: #4A232D;
+  --subj-micro-text: #FF9EB3;
+  --subj-micro-border: #6B3441;
+
+  --subj-macro-bg: #4A2C21;
+  --subj-macro-text: #FFAC91;
+  --subj-macro-border: #6B3E2F;
+
+  --subj-econ-bg: #4A1E2E;
+  --subj-econ-text: #FF99BC;
+  --subj-econ-border: #6B2E45;
+
+  --subj-stat-bg: #1F364A;
+  --subj-stat-text: #8EC4F5;
+  --subj-stat-border: #2C4D69;
+
+  --subj-fin-bg: #1F3D2C;
+  --subj-fin-text: #8EE6B0;
+  --subj-fin-border: #2E5A40;
+
+  --subj-eng-bg: #35254A;
+  --subj-eng-text: #D2B0FA;
+  --subj-eng-border: #4D376B;
+
+  --subj-class-bg: #47371A;
+  --subj-class-text: #FFDE8A;
+  --subj-class-border: #6B5328;
+
+  --subj-other-bg: #2E2B2A;
+  --subj-other-text: #CCC6C4;
+  --subj-other-border: #474341;
+
+  --timer-running: #FF7590;
+  --timer-running-bg: #3D1C24;
+  --timer-paused: #FFA44D;
+  --timer-paused-bg: #3D2918;
+  --timer-done: #62C498;
+  --timer-done-bg: #1A3628;
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.60);
+}
+
+[data-theme="dark"] body {
+  background-image: 
+    radial-gradient(circle at 12% 8%, rgba(74, 48, 54, 0.3) 0%, transparent 35%),
+    radial-gradient(circle at 88% 15%, rgba(44, 34, 37, 0.4) 0%, transparent 40%);
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  color: var(--text-primary);
+  background-color: #272224;
+  border-color: var(--border-medium);
+}
+
+[data-theme="dark"] .stat-table th {
+  background-color: #292426;
+}
+
+[data-theme="dark"] .stat-table tbody tr:hover {
+  background-color: rgba(255, 142, 162, 0.08);
+}
+
+/* ==========================================================================
+   🌸 櫻花飄落背景動態 Canvas
+   ========================================================================== */
+.sakura-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 99;
+  opacity: 0.85;
+  transition: opacity 0.5s ease;
+}
+
+.sakura-canvas.hidden {
+  display: none;
+}
+
+/* ==========================================================================
+   🌸 導覽列快捷氛圍控制 (深色、音效、櫻花飄落)
+   ========================================================================== */
+.quick-atmosphere-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-toggle-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 6px 9px;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  color: var(--text-primary);
+}
+
+.icon-toggle-btn:hover {
+  background: var(--bg-sakura-soft);
+  border-color: var(--sakura-border);
+  transform: translateY(-1px);
+}
+
+.icon-toggle-btn.active {
+  background: var(--bg-sakura-tint);
+  border-color: var(--sakura-primary);
+  box-shadow: 0 0 0 2px var(--sakura-light);
+}
+
+/* ==========================================================================
+   ⏱️ 計時模式切換按鈕群 (自由計時 / 番茄鐘 25分 / 衝刺 50分)
+   ========================================================================== */
+.timer-mode-selector {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.mode-chip {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mode-chip:hover {
+  background: var(--bg-sakura-soft);
+  color: var(--sakura-primary);
+  border-color: var(--sakura-border);
+}
+
+.mode-chip.active {
+  background: var(--sakura-primary);
+  color: #FFFFFF;
+  border-color: var(--sakura-primary);
+  box-shadow: 0 2px 8px rgba(223, 118, 139, 0.35);
+}
+
+/* ==========================================================================
+   📊 85 天衝刺智能讀書診斷報告卡片
+   ========================================================================== */
+.diagnostic-card {
+  border-left: 4px solid var(--sakura-primary);
+  background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-sakura-tint) 100%);
+}
+
+.diagnostic-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: var(--bg-sakura-soft);
+  color: var(--sakura-deep);
+  border: 1px solid var(--sakura-border);
+}
+
+.diag-content-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.diag-advice-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+}
+
+.diag-advice-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sakura-deep);
+  margin-bottom: 4px;
+}
+
+.diag-advice-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.diag-metrics-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 768px) {
+  .diag-metrics-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.diag-metric-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diag-metric-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.diag-metric-val {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.period-ratio-bar {
+  display: flex;
+  height: 22px;
+  border-radius: 11px;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 700;
+  color: #FFFFFF;
+  text-align: center;
+  line-height: 22px;
+}
+
+.ratio-segment.morning {
+  background: #E89E58;
+}
+
+.ratio-segment.noon {
+  background: #5D9CEC;
+}
+
+.ratio-segment.night {
+  background: #7E62A6;
+}
+
+/* ==========================================================================
+   📲 PWA 安裝導引與設定區塊
+   ========================================================================== */
+.setting-item-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setting-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.pwa-guide-tip {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  background: var(--bg-sakura-soft);
+  border: 1px dashed var(--sakura-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  flex: 1;
+}
