@@ -703,6 +703,7 @@ function getSlotLiveMs(slot) {
  * 若計時器正在執行或暫停，也會即時換算為分鐘數以同步更新統計表
  */
 function getSlotEffectiveMinutes(slot) {
+  if (!slot) return 0;
   if (slot.timerStatus === 'running' || slot.timerStatus === 'paused') {
     const liveMs = getSlotLiveMs(slot);
     if (liveMs <= 0) return 0;
@@ -893,8 +894,8 @@ function renderStudyDiagnostics(stats) {
   let mTotal = 0, nTotal = 0, eTotal = 0;
   appState.days.forEach(d => {
     mTotal += getSlotEffectiveMinutes(d.morning);
-    nTotal += getSlotEffectiveMinutes(d.noon);
-    eTotal += getSlotEffectiveMinutes(d.night);
+    nTotal += getSlotEffectiveMinutes(d.afternoon);
+    eTotal += getSlotEffectiveMinutes(d.evening);
   });
   const sumPeriod = mTotal + nTotal + eTotal;
   let mPct = 33, nPct = 33, ePct = 34;
@@ -918,7 +919,7 @@ function renderStudyDiagnostics(stats) {
   }
 
   // 2. 核心考科均衡度分析
-  const subjMins = stats.total.subjectMinutes || {};
+  const subjMins = (stats.overall && stats.overall.overallSubjectMinutes) || {};
   const mainSubjs = ['經濟', '統計', '財管', '英文'];
   let maxSubj = mainSubjs[0], maxM = subjMins[maxSubj] || 0;
   let minSubj = mainSubjs[0], minM = subjMins[minSubj] || 0;
