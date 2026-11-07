@@ -109,7 +109,8 @@ body {
 .top-navbar {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 1000 !important;
+  pointer-events: auto !important;
   background: var(--bg-header);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -322,6 +323,9 @@ body {
 
 /* Main Container */
 .app-container {
+  position: relative !important;
+  z-index: 10 !important;
+  pointer-events: auto !important;
   max-width: 1720px;
   margin: 0 auto;
   padding: 20px 24px 60px;
@@ -1407,13 +1411,15 @@ body {
   position: fixed;
   bottom: 20px;
   right: 20px;
-  z-index: 999;
+  z-index: 9999 !important;
+  pointer-events: none !important;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .toast {
+  pointer-events: auto !important;
   background: #3A3335;
   color: #FFFFFF;
   padding: 10px 16px;
@@ -2450,13 +2456,33 @@ body {
   width: 100vw;
   height: 100vh;
   pointer-events: none !important;
-  z-index: 0 !important;
+  z-index: 1 !important;
   opacity: 0.85;
   transition: opacity 0.5s ease;
 }
 
 .sakura-canvas.hidden {
-  display: none;
+  display: none !important;
+}
+
+/* 全域所有按鈕與可點擊元件，保證觸控與點擊穿透、杜絕 Safari 延遲與疊層攔截 */
+button,
+.btn,
+.tab-nav-btn,
+.quick-subj-btn,
+.ypt-btn,
+.mode-chip,
+.filter-tab,
+.icon-toggle-btn,
+.jump-to-daily-btn {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+  z-index: 11;
 }
 
 /* ==========================================================================

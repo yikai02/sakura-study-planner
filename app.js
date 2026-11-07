@@ -172,71 +172,79 @@ function updateAtmosphereUi() {
    🌸 浪漫櫻花落瓣 Canvas 動畫 (超低能耗飄落)
    ========================================================================== */
 function initSakuraPetalsCanvas() {
-  if (typeof document === 'undefined' || typeof window === 'undefined') return;
-  const canvas = document.getElementById('sakuraCanvas');
-  if (!canvas || !canvas.getContext) return;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  try {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    const canvas = document.getElementById('sakuraCanvas');
+    if (!canvas || !canvas.getContext) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-  let width = (canvas.width = window.innerWidth);
-  let height = (canvas.height = window.innerHeight);
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
 
-  window.addEventListener('resize', () => {
-    width = canvas.width = window.innerWidth;
-    height = canvas.height = window.innerHeight;
-  });
-
-  const petals = [];
-  const TOTAL = 26;
-  for (let i = 0; i < TOTAL; i++) {
-    petals.push({
-      x: Math.random() * width,
-      y: Math.random() * height,
-      size: Math.random() * 8 + 6,
-      speedX: Math.random() * 1.2 - 0.2,
-      speedY: Math.random() * 1.3 + 0.7,
-      rotation: Math.random() * 360,
-      rotSpeed: Math.random() * 2 - 1,
-      opacity: Math.random() * 0.4 + 0.35
+    window.addEventListener('resize', () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
     });
-  }
 
-  function renderPetals() {
-    if (appSettings.petals === 'off') {
-      ctx.clearRect(0, 0, width, height);
-      requestAnimationFrame(renderPetals);
-      return;
+    const petals = [];
+    const TOTAL = 26;
+    for (let i = 0; i < TOTAL; i++) {
+      petals.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        size: Math.random() * 8 + 6,
+        speedX: Math.random() * 1.2 - 0.2,
+        speedY: Math.random() * 1.3 + 0.7,
+        rotation: Math.random() * 360,
+        rotSpeed: Math.random() * 2 - 1,
+        opacity: Math.random() * 0.4 + 0.35
+      });
     }
 
-    ctx.clearRect(0, 0, width, height);
-    for (let i = 0; i < petals.length; i++) {
-      const p = petals[i];
-      p.x += p.speedX;
-      p.y += p.speedY;
-      p.rotation += p.rotSpeed;
-
-      if (p.y > height + 25) {
-        p.y = -25;
-        p.x = Math.random() * width;
+    function renderPetals() {
+      if (appSettings.petals === 'off') {
+        ctx.clearRect(0, 0, width, height);
+        if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(renderPetals);
+        return;
       }
-      if (p.x > width + 25) p.x = -25;
-      if (p.x < -25) p.x = width + 25;
 
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate((p.rotation * Math.PI) / 180);
-      ctx.fillStyle = `rgba(247, 178, 194, ${p.opacity})`;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.bezierCurveTo(p.size / 2, -p.size / 2, p.size, 0, 0, p.size * 1.5);
-      ctx.bezierCurveTo(-p.size, 0, -p.size / 2, -p.size / 2, 0, 0);
-      ctx.fill();
-      ctx.restore();
+      ctx.clearRect(0, 0, width, height);
+      for (let i = 0; i < petals.length; i++) {
+        const p = petals[i];
+        p.x += p.speedX;
+        p.y += p.speedY;
+        p.rotation += p.rotSpeed;
+
+        if (p.y > height + 25) {
+          p.y = -25;
+          p.x = Math.random() * width;
+        }
+        if (p.x > width + 25) p.x = -25;
+        if (p.x < -25) p.x = width + 25;
+
+        if (ctx.save) {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate((p.rotation * Math.PI) / 180);
+          ctx.fillStyle = `rgba(247, 178, 194, ${p.opacity})`;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.bezierCurveTo(p.size / 2, -p.size / 2, p.size, 0, 0, p.size * 1.5);
+          ctx.bezierCurveTo(-p.size, 0, -p.size / 2, -p.size / 2, 0, 0);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+      if (typeof requestAnimationFrame !== 'undefined') {
+        requestAnimationFrame(renderPetals);
+      }
     }
-    requestAnimationFrame(renderPetals);
-  }
 
-  renderPetals();
+    renderPetals();
+  } catch (err) {
+    console.warn('Canvas init non-critical error:', err);
+  }
 }
 
 // 主表格下拉選單科目選項
@@ -4715,32 +4723,61 @@ function handleAppWakeOrFocus() {
    ========================================================================== */
 
 document.addEventListener('DOMContentLoaded', () => {
-  loadAppSettings();
-  loadState();
-  initCurrentActiveDay();
-  initSakuraPetalsCanvas();
+  try {
+    loadAppSettings();
+    loadState();
+    initCurrentActiveDay();
+  } catch (err) {
+    console.error('State load error:', err);
+  }
+
+  // 🌸 關鍵：優先綁定所有按鈕與互動監聽器，確保任何畫面皆 100% 可點擊！
+  try {
+    setupEventListeners();
+  } catch (err) {
+    console.error('Setup event listeners error:', err);
+  }
+
+  try {
+    initSakuraPetalsCanvas();
+  } catch (err) {
+    console.warn('Canvas init error:', err);
+  }
 
   // 若重新打開瀏覽器時有正在計時的項目，自動切換至該天並維持計時
-  const initialActive = findActiveTimerSlot();
-  if (initialActive && initialActive.slot.timerStatus === 'running') {
-    currentActiveDayCountdown = initialActive.day.dayCountdown;
+  try {
+    const initialActive = findActiveTimerSlot();
+    if (initialActive && initialActive.slot.timerStatus === 'running') {
+      currentActiveDayCountdown = initialActive.day.dayCountdown;
+    }
+  } catch (err) {
+    console.warn('Active timer recovery warning:', err);
   }
-  renderPhasesConfig();
-  renderMainScheduleTable();
-  renderFullDashboard();
-  renderQuickTimerView();
-  renderDailyPlanView();
-  updateActiveTimerBanner();
-  setupEventListeners();
-  startGlobalTimerTicker();
-  initRoomSyncFromStorageOrUrl();
-  switchMainTab('quick-timer');
-  syncScreenWakeLock();
+
+  try {
+    renderPhasesConfig();
+    renderMainScheduleTable();
+    renderFullDashboard();
+    renderQuickTimerView();
+    renderDailyPlanView();
+    updateActiveTimerBanner();
+  } catch (err) {
+    console.error('Initial rendering error:', err);
+  }
+
+  try {
+    startGlobalTimerTicker();
+    initRoomSyncFromStorageOrUrl();
+    switchMainTab('quick-timer');
+    syncScreenWakeLock();
+  } catch (err) {
+    console.error('App bootstrap error:', err);
+  }
 
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261107_v3').then((reg) => {
         console.log('🌸 PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);

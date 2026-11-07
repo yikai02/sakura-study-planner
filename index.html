@@ -15,7 +15,24 @@
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
   <link rel="shortcut icon" href="icons/icon-192.png" />
 
-  <link rel="stylesheet" href="style.css" />
+  <script>
+    // 🌸 強制反註冊舊版 Service Worker 並清除所有舊快取，確保永遠取得最新版本程式碼
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for (var i = 0; i < regs.length; i++) {
+          regs[i].unregister();
+        }
+      }).catch(function() {});
+    }
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      caches.keys().then(function(names) {
+        for (var i = 0; i < names.length; i++) {
+          caches.delete(names[i]);
+        }
+      }).catch(function() {});
+    }
+  </script>
+  <link rel="stylesheet" href="style.css?v=20261107_v3" />
 </head>
 <body>
 
@@ -716,7 +733,7 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-  <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
+  <script src="app.js?v=20261107_v3"></script>
 </body>
 </html>
