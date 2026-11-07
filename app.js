@@ -12,9 +12,9 @@ const STORAGE_KEY = 'sakura_study_planner_v1';
 const ROOM_STORAGE_KEY = 'sakura_shared_room_v2';
 const SETTINGS_STORAGE_KEY = 'sakura_user_settings_v1';
 
-// 使用者偏好設定（僅保留兩種主題：sakura 櫻花粉白 / dark 極簡深黑）
+// 使用者偏好設定（僅保留兩種主題：dark 極簡深灰 / sakura 櫻花粉白）
 let appSettings = {
-  theme: 'sakura', // 'sakura' | 'dark'
+  theme: 'dark',   // 預設深灰色護眼極簡風格
   sound: 'on',     // 'on', 'off'
   petals: 'on'     // 'on', 'off'
 };
@@ -108,25 +108,27 @@ function playChime(type = 'complete') {
    ========================================================================== */
 function loadAppSettings() {
   try {
-    const s = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    const s = localStorage.getItem(SETTINGS_STORAGE_KEY) || localStorage.getItem('sakura_planner_settings_v1');
     if (s) {
       appSettings = { ...appSettings, ...JSON.parse(s) };
     }
   } catch (e) {}
-  // 嚴格僅保留兩種主題：'dark' (Antigravity 極簡深黑) 或 'sakura' (櫻花粉白)
-  if (appSettings.theme !== 'dark') {
-    appSettings.theme = 'sakura';
+  // 嚴格僅保留兩種主題：'dark' (Antigravity 深灰極簡) 或 'sakura' (櫻花粉白)
+  if (appSettings.theme !== 'sakura') {
+    appSettings.theme = 'dark';
   }
   applyTheme();
   updateAtmosphereUi();
 }
 
 function saveAppSettings() {
-  if (appSettings.theme !== 'dark') {
-    appSettings.theme = 'sakura';
+  if (appSettings.theme !== 'sakura') {
+    appSettings.theme = 'dark';
   }
   try {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(appSettings));
+    const serialized = JSON.stringify(appSettings);
+    localStorage.setItem(SETTINGS_STORAGE_KEY, serialized);
+    localStorage.setItem('sakura_planner_settings_v1', serialized);
   } catch (e) {}
   applyTheme();
   updateAtmosphereUi();
@@ -135,7 +137,7 @@ function saveAppSettings() {
 function applyTheme() {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
-  const effective = appSettings.theme === 'dark' ? 'dark' : 'sakura';
+  const effective = appSettings.theme === 'sakura' ? 'sakura' : 'dark';
   root.setAttribute('data-theme', effective);
   if (document.body) {
     document.body.setAttribute('data-theme', effective);
@@ -143,7 +145,7 @@ function applyTheme() {
 
   const meta = document.getElementById('themeColorMeta');
   if (meta) {
-    meta.content = effective === 'dark' ? '#09090B' : '#DF768B';
+    meta.content = effective === 'dark' ? '#141519' : '#FAF8F5';
   }
 
   const brandLogo = document.getElementById('brandLogoIcon');
@@ -598,27 +600,32 @@ function applyRestoredDataIfMissing(state) {
 /**
  * 🌸 時段智慧校正守護：
  * 依開始時間判定規範（早上 05:00~12:00, 下午 12:00~19:00, 晚上 19:00~05:00）
- * 若早上時段記錄了 12:00 後 (如 14:01) 開始的讀書時間，自動轉移至下午時段，徹底避免時段錯置！
+ * 檢核所有時段（早、午、晚），若其 startTime 屬於其他時段且目標時段尚未被填寫，自動智慧遷移！
  */
 function healMisplacedTimeSlots(state) {
   if (!state || !Array.isArray(state.days)) return;
+  const slotList = ['morning', 'afternoon', 'evening'];
   state.days.forEach(day => {
-    if (day.morning && day.morning.startTime) {
-      const hr = parseInt(day.morning.startTime.split(':')[0], 10);
-      if (hr >= 12 && hr < 19) {
-        const m = day.morning;
-        const a = day.afternoon;
-        if (a && (!a.durationMinutes || a.durationMinutes === 0)) {
-          day.afternoon = { ...m };
-          const mmdd = day.isoDate.slice(5);
-          const pre = PDF_PREPLANNED_DATA[mmdd];
-          day.morning = createEmptySlot(
-            pre && pre.morning ? pre.morning[0] : '',
-            pre && pre.morning ? pre.morning[1] : ''
-          );
+    slotList.forEach(currSlotKey => {
+      const currSlot = day[currSlotKey];
+      if (currSlot && currSlot.startTime && (currSlot.durationMinutes > 0 || currSlot.timerStatus !== 'idle')) {
+        const correctSlotKey = getSlotKeyFromStartTime(currSlot.startTime);
+        if (correctSlotKey !== currSlotKey) {
+          const targetSlot = day[correctSlotKey];
+          if (targetSlot && (!targetSlot.durationMinutes || targetSlot.durationMinutes === 0) && targetSlot.timerStatus === 'idle') {
+            const mmdd = day.isoDate ? day.isoDate.slice(5) : '';
+            const pre = PDF_PREPLANNED_DATA[mmdd];
+            const restoredEmpty = createEmptySlot(
+              pre && pre[currSlotKey] ? pre[currSlotKey][0] : '',
+              pre && pre[currSlotKey] ? pre[currSlotKey][1] : ''
+            );
+            day[correctSlotKey] = { ...currSlot };
+            day[correctSlotKey].updatedAt = Date.now();
+            day[currSlotKey] = restoredEmpty;
+          }
         }
       }
-    }
+    });
   });
 }
 
@@ -4028,20 +4035,7 @@ function setupEventListeners() {
     });
   }
 
-  // 10B. 雙主題切換器（🌸 日系櫻花粉白 vs 🖤 Antigravity 極簡深黑）
-  function switchThemeMode(themeChoice) {
-    const isDark = (themeChoice === 'dark');
-    appSettings.theme = isDark ? 'dark' : 'sakura';
-    if (!appState.homeCover || appState.homeCover === 'cover-sakura' || appState.homeCover === 'cover-antigravity') {
-      appState.homeCover = isDark ? 'cover-antigravity' : 'cover-sakura';
-      appState.updatedAt = Date.now();
-      saveState(false, false);
-    }
-    saveAppSettings();
-    applyHomeCover();
-    showToast(isDark ? '🖤 已切換為 Antigravity 極簡深黑主題' : '🌸 已切換為日系櫻花粉白主題');
-  }
-
+  // 10B. 雙主題切換器（🌸 日系櫻花粉白 vs 🖤 Antigravity 極簡深灰）
   const dualSwitcher = document.getElementById('themeDualSwitcher');
   if (dualSwitcher) {
     dualSwitcher.addEventListener('click', (e) => {
@@ -5409,6 +5403,27 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
           const chk = cardEl ? cardEl.querySelector('.done-checkbox') : null;
           if (chk) chk.checked = day[p.slot].completed;
 
+          // 同步更新 Notion 日曆上的完成小勾
+          const calCell = document.querySelector(`[data-cal-cell-day="${p.day}"]`);
+          if (calCell) {
+            const slotIndex = p.slot === 'morning' ? 0 : (p.slot === 'afternoon' ? 1 : 2);
+            const slotRows = calCell.querySelectorAll('.cal-cell-slot-row');
+            if (slotRows && slotRows[slotIndex]) {
+              let dot = slotRows[slotIndex].querySelector('.cal-slot-done-dot');
+              if (day[p.slot].completed) {
+                if (!dot) {
+                  dot = document.createElement('span');
+                  dot.className = 'cal-slot-done-dot';
+                  dot.title = '已完成';
+                  dot.textContent = '✓';
+                  slotRows[slotIndex].appendChild(dot);
+                }
+              } else if (dot) {
+                dot.remove();
+              }
+            }
+          }
+
           updateSingleDayRowSummaryDom(day);
           renderAllStatistics();
           saveState(false, false);
@@ -5425,6 +5440,15 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
           day[p.slot].updatedAt = eventTs;
           appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
           refreshSlotDom(day, p.slot);
+
+          // 同步更新 Notion 日曆上的科目標籤
+          const calTag = document.querySelector(`.cal-slot-tag[data-cycle-subj-day="${p.day}"][data-cycle-subj-slot="${p.slot}"]`);
+          if (calTag) {
+            const shortLabel = p.slot === 'morning' ? '早' : (p.slot === 'afternoon' ? '午' : '晚');
+            calTag.textContent = day[p.slot].subject || shortLabel;
+            calTag.classList.toggle('has-subj', Boolean(day[p.slot].subject));
+          }
+
           renderAllStatistics();
           saveState(false, false);
         }
@@ -5513,6 +5537,11 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
           if (inputEl && document.activeElement !== inputEl) {
             inputEl.value = day[p.slot].task;
           }
+          // 同步更新 Notion 日曆中的工作輸入框
+          const calInput = document.querySelector(`.cal-slot-input[data-day="${p.day}"][data-slot="${p.slot}"]`);
+          if (calInput && document.activeElement !== calInput) {
+            calInput.value = day[p.slot].task;
+          }
           saveState(false, false);
         }
       }
@@ -5533,6 +5562,25 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
             if (dailyInp && document.activeElement !== dailyInp) dailyInp.value = day.calendar;
             const homeInp = document.getElementById('homeCalendarMemoInput');
             if (homeInp && document.activeElement !== homeInp) homeInp.value = day.calendar;
+          }
+          // 同步更新 Notion 日曆格子上的備忘標籤
+          const calCell = document.querySelector(`[data-cal-cell-day="${p.day}"]`);
+          if (calCell) {
+            const dateMeta = calCell.querySelector('.cal-date-left-meta');
+            if (dateMeta) {
+              let memoPill = dateMeta.querySelector('.cal-memo-pill');
+              if (day.calendar) {
+                if (!memoPill) {
+                  memoPill = document.createElement('span');
+                  memoPill.className = 'cal-memo-pill';
+                  dateMeta.appendChild(memoPill);
+                }
+                memoPill.title = day.calendar;
+                memoPill.textContent = day.calendar;
+              } else if (memoPill) {
+                memoPill.remove();
+              }
+            }
           }
           saveState(false, false);
         }
@@ -5916,6 +5964,8 @@ function handleAppWakeOrFocus() {
   }
   renderQuickTimerView();
   renderDailyPlanView();
+  renderHomeView();
+  renderPureCalendarTable();
   updateActiveTimerBanner(active);
   renderAllStatistics();
   syncScreenWakeLock();

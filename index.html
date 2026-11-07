@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-Hant" data-theme="sakura">
+<html lang="zh-Hant" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
@@ -7,7 +7,7 @@
   
   <!-- PWA & Mobile Web App Manifest -->
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#DF768B" id="themeColorMeta" />
+  <meta name="theme-color" content="#141519" id="themeColorMeta" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="小櫻讀書" />
@@ -19,15 +19,17 @@
     // 立即依據 localStorage 套用主題，防止畫面閃爍並確保離線/秒開時主題正確
     (function() {
       try {
-        var raw = localStorage.getItem('sakura_planner_settings_v1');
+        var raw = localStorage.getItem('sakura_user_settings_v1') || localStorage.getItem('sakura_planner_settings_v1');
+        var theme = 'dark'; // 預設深灰色護眼極簡主題，舒適沉穩無大面積刺眼白光
         if (raw) {
           var s = JSON.parse(raw);
-          if (s && s.theme === 'dark') {
-            document.documentElement.setAttribute('data-theme', 'dark');
-            var meta = document.getElementById('themeColorMeta');
-            if (meta) meta.content = '#121215';
+          if (s && s.theme === 'sakura') {
+            theme = 'sakura';
           }
         }
+        document.documentElement.setAttribute('data-theme', theme);
+        var meta = document.getElementById('themeColorMeta');
+        if (meta) meta.content = (theme === 'dark' ? '#141418' : '#FAF8F5');
       } catch (e) {}
     })();
 
@@ -47,7 +49,7 @@
       }).catch(function() {});
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=20261108_v4" />
+  <link rel="stylesheet" href="style.css?v=20261108_v5" />
 </head>
 <body>
 
@@ -110,10 +112,10 @@
     <div class="top-actions">
       <!-- Two-Theme Switcher (Sakura vs Antigravity Dark) -->
       <div class="theme-dual-switcher" id="themeDualSwitcher" role="group" aria-label="主題風格選擇">
-        <button type="button" class="theme-switch-pill active" data-theme-choice="sakura" data-theme-val="sakura" id="themeBtnSakura" title="櫻花粉白主題" onclick="window.switchThemeMode && window.switchThemeMode('sakura')">
+        <button type="button" class="theme-switch-pill" data-theme-choice="sakura" data-theme-val="sakura" id="themeBtnSakura" title="櫻花粉白主題" onclick="window.switchThemeMode && window.switchThemeMode('sakura')">
           🌸 櫻花
         </button>
-        <button type="button" class="theme-switch-pill" data-theme-choice="dark" data-theme-val="dark" id="themeBtnDark" title="Antigravity 深色極簡風" onclick="window.switchThemeMode && window.switchThemeMode('dark')">
+        <button type="button" class="theme-switch-pill active" data-theme-choice="dark" data-theme-val="dark" id="themeBtnDark" title="Antigravity 深色極簡風" onclick="window.switchThemeMode && window.switchThemeMode('dark')">
           🖤 極簡黑
         </button>
       </div>
@@ -974,6 +976,6 @@
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261108_v4"></script>
+  <script src="app.js?v=20261108_v5"></script>
 </body>
 </html>

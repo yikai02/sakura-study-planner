@@ -488,7 +488,7 @@ body {
 .phase-name-input:hover,
 .phase-name-input:focus {
   border-color: var(--sakura-primary);
-  background: #FFFFFF;
+  background: var(--bg-card);
   outline: none;
 }
 
@@ -509,7 +509,7 @@ body {
   font-weight: 600;
   text-align: center;
   color: var(--text-primary);
-  background: #FFFFFF;
+  background: var(--bg-subtle);
 }
 
 .phase-day-input:focus {
@@ -667,12 +667,12 @@ body {
 
 .goal-textarea:hover {
   border-color: var(--sakura-border);
-  background: #FFFFFF;
+  background: var(--bg-card);
 }
 
 .goal-textarea:focus {
   border-color: var(--sakura-primary);
-  background: #FFFFFF;
+  background: var(--bg-card);
   outline: none;
   box-shadow: 0 0 0 2px rgba(223, 118, 139, 0.15);
 }
@@ -723,8 +723,8 @@ body {
   border-radius: 999px;
   font-size: 12.5px;
   font-weight: 600;
-  border: 1px solid var(--border-medium);
-  background: #FFFFFF;
+  border: 1px solid var(--border-light);
+  background: var(--bg-subtle);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s;
@@ -750,10 +750,10 @@ body {
 
 .search-input {
   padding: 6px 11px;
-  border: 1px solid var(--border-medium);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   font-size: 12.5px;
-  background: #FFFFFF;
+  background: var(--bg-subtle);
   color: var(--text-primary);
   min-width: 210px;
 }
@@ -939,7 +939,7 @@ body {
 
 .calendar-input:hover,
 .calendar-input:focus {
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-color: var(--sakura-primary);
   outline: none;
 }
@@ -950,7 +950,7 @@ body {
   overflow-x: auto;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-light);
-  background: #FFFFFF;
+  background: var(--bg-card);
   box-shadow: var(--shadow-sm);
 }
 
@@ -968,11 +968,11 @@ body {
 }
 
 .pure-calendar-table th {
-  background: #F5EFEA;
+  background: #F4EDE6;
   color: var(--text-primary);
   font-weight: 700;
   padding: 11px 12px;
-  border-bottom: 1.5px solid var(--border-medium);
+  border-bottom: 1px solid var(--border-medium);
   border-right: 1px solid var(--border-light);
   text-align: center;
   white-space: nowrap;
@@ -983,24 +983,24 @@ body {
   border-bottom: 1px solid var(--border-light);
   border-right: 1px solid var(--border-light);
   vertical-align: middle;
-  background: #FFFFFF;
+  background: var(--bg-card);
   transition: background-color 0.12s;
 }
 
 .pure-calendar-table tbody tr:nth-child(even) td {
-  background: #FDFCFB;
+  background: var(--bg-subtle);
 }
 
 .pure-calendar-table tbody tr:hover td {
-  background: #FFF8F9;
+  background: var(--bg-sakura-tint);
 }
 
 .pure-calendar-table tbody tr.row-active-timer td {
-  background: #FFF2F5 !important;
+  background: var(--bg-sakura-soft) !important;
 }
 
 .pure-calendar-table tbody tr.row-complete-all td {
-  background: #F4FAF6;
+  background: #EEF6F1;
 }
 
 .pure-calendar-input {
@@ -1020,7 +1020,7 @@ body {
 
 .pure-calendar-input:hover,
 .pure-calendar-input:focus {
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-color: var(--sakura-primary);
   outline: none;
   box-shadow: 0 0 0 2px rgba(223, 118, 139, 0.15);
@@ -1170,8 +1170,8 @@ body {
 }
 
 .ypt-btn {
-  border: 1px solid var(--border-medium);
-  background: #FFFFFF;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
   color: var(--text-primary);
   font-size: 11px;
   font-weight: 600;
@@ -1515,7 +1515,7 @@ body {
 }
 
 .modal-card {
-  background: #FFFFFF;
+  background: var(--bg-card);
   border-radius: var(--radius-xl);
   max-width: 680px;
   width: 100%;
@@ -1635,8 +1635,8 @@ body {
   font-size: 11.5px;
   padding: 4px 9px;
   border-radius: 999px;
-  background: #FFFFFF;
-  border: 1px solid var(--border-medium);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
   color: var(--text-secondary);
 }
 
@@ -1648,8 +1648,8 @@ body {
 .sync-mobile-card {
   padding: 14px 16px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #FFF6F8 0%, #FFFFFF 100%);
-  border: 1.5px solid var(--sakura-border);
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1705,10 +1705,10 @@ body {
   width: 100%;
   padding: 7px 10px;
   border-radius: 6px;
-  border: 1px solid var(--border-medium);
+  border: 1px solid var(--border-light);
   font-size: 11.5px;
   font-family: "SF Mono", monospace;
-  background: #FFFFFF;
+  background: var(--bg-subtle);
   color: var(--text-secondary);
 }
 
@@ -1755,11 +1755,11 @@ body {
   width: 100%;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border-medium);
+  border: 1px solid var(--border-light);
   font-size: 13px;
   font-family: inherit;
   color: var(--text-primary);
-  background: #FFFFFF;
+  background: var(--bg-subtle);
   transition: border-color 0.15s;
 }
 
@@ -2408,70 +2408,71 @@ body {
 html[data-theme="dark"],
 body[data-theme="dark"],
 [data-theme="dark"] {
-  --bg-main: #121215;
-  --bg-card: #18181D;
-  --bg-subtle: #202026;
-  --bg-sakura-tint: #1C1C22;
-  --bg-sakura-soft: #24242C;
-  --bg-header: rgba(18, 18, 21, 0.95);
+  /* 暖炭灰 × 高級冷杉深灰層次調色盤（消除大面積亮白與生硬刺眼高對比） */
+  --bg-main: #141519;
+  --bg-card: #1D1E24;
+  --bg-subtle: #262730;
+  --bg-sakura-tint: #21222B;
+  --bg-sakura-soft: #2A2B37;
+  --bg-header: rgba(20, 21, 25, 0.95);
 
-  --sakura-primary: #ECECEE;
-  --sakura-hover: #FFFFFF;
-  --sakura-light: #2A2A33;
-  --sakura-border: #32323D;
-  --sakura-deep: #ECECEE;
+  --sakura-primary: #9B9EAE;
+  --sakura-hover: #D0D2DE;
+  --sakura-light: #2A2B38;
+  --sakura-border: #3A3D4D;
+  --sakura-deep: #D4D6E2;
 
-  --text-primary: #F3F3F5;
-  --text-secondary: #A0A0AA;
-  --text-muted: #72727D;
+  --text-primary: #ECEEF4;
+  --text-secondary: #9DA1B2;
+  --text-muted: #6C7082;
 
-  --border-light: #26262F;
-  --border-medium: #363642;
+  --border-light: #2B2E3B;
+  --border-medium: #3B3F50;
 
-  /* Monochrome & Muted Architectural Subject Tags in Antigravity Dark Theme */
-  --subj-micro-bg: #201E22;
-  --subj-micro-text: #E4E4E7;
-  --subj-micro-border: #3F3F46;
+  /* 墨韻文青建築灰階標籤配色 */
+  --subj-micro-bg: #282428;
+  --subj-micro-text: #E0C0C8;
+  --subj-micro-border: #4A3A40;
 
-  --subj-macro-bg: #222022;
-  --subj-macro-text: #D4D4D8;
-  --subj-macro-border: #3F3F46;
+  --subj-macro-bg: #282320;
+  --subj-macro-text: #E2BCAB;
+  --subj-macro-border: #4A3A32;
 
-  --subj-econ-bg: #242226;
-  --subj-econ-text: #FAFAFA;
-  --subj-econ-border: #52525B;
+  --subj-econ-bg: #282226;
+  --subj-econ-text: #E2B8C8;
+  --subj-econ-border: #4A3542;
 
-  --subj-stat-bg: #1A222B;
-  --subj-stat-text: #CBD5E1;
-  --subj-stat-border: #334155;
+  --subj-stat-bg: #1E2530;
+  --subj-stat-text: #B4CCE0;
+  --subj-stat-border: #2F3E52;
 
-  --subj-fin-bg: #18241F;
-  --subj-fin-text: #D1FAE5;
-  --subj-fin-border: #2D4A3E;
+  --subj-fin-bg: #1C2722;
+  --subj-fin-text: #B2DEC4;
+  --subj-fin-border: #2A4839;
 
-  --subj-class-bg: #24221A;
-  --subj-class-text: #E5E0D0;
-  --subj-class-border: #444034;
+  --subj-class-bg: #28241C;
+  --subj-class-text: #DFD3B2;
+  --subj-class-border: #48402A;
 
-  --subj-other-bg: #1C1C20;
-  --subj-other-text: #A1A1AA;
-  --subj-other-border: #2A2A30;
+  --subj-other-bg: #222329;
+  --subj-other-text: #B4B6C2;
+  --subj-other-border: #363844;
 
-  --timer-running: #ECECEE;
-  --timer-running-bg: #2A2A33;
-  --timer-paused: #D4D4D8;
-  --timer-paused-bg: #22222A;
-  --timer-done: #A1A1AA;
-  --timer-done-bg: #1C1C22;
+  --timer-running: #D07B8E;
+  --timer-running-bg: #2E2227;
+  --timer-paused: #C88D4B;
+  --timer-paused-bg: #2D251C;
+  --timer-done: #5AA47E;
+  --timer-done-bg: #1B2921;
 
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.65);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 10px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
 }
 
 html[data-theme="dark"] body,
@@ -2479,12 +2480,12 @@ body[data-theme="dark"],
 [data-theme="dark"] body {
   font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", sans-serif;
   letter-spacing: -0.01em;
-  background-color: #121215 !important;
+  background-color: #141519 !important;
   background-image:
     linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px) !important;
   background-size: 40px 40px !important;
-  color: #F3F3F5 !important;
+  color: #ECEEF4 !important;
 }
 
 /* 極簡黑主題隱藏所有櫻花花瓣與花瓣按鈕 */
@@ -2495,37 +2496,37 @@ body[data-theme="dark"],
 }
 
 [data-theme="dark"] .sakura-logo {
-  background: #18181C !important;
-  border: 1px solid #323238 !important;
-  color: #FAFAFA !important;
+  background: #1D1E24 !important;
+  border: 1px solid #3A3D4D !important;
+  color: #ECEEF4 !important;
   box-shadow: none !important;
 }
 
 [data-theme="dark"] .brand-badge {
-  background: #18181C !important;
-  color: #D4D4D8 !important;
-  border: 1px solid #323238 !important;
+  background: #1D1E24 !important;
+  color: #9DA1B2 !important;
+  border: 1px solid #3A3D4D !important;
 }
 
 [data-theme="dark"] .main-tabs-nav {
-  background: #141418 !important;
-  border: 1px solid #27272A !important;
+  background: #181920 !important;
+  border: 1px solid #2B2E3B !important;
 }
 
 [data-theme="dark"] .tab-nav-btn {
-  color: #A1A1AA !important;
+  color: #9DA1B2 !important;
 }
 
 [data-theme="dark"] .tab-nav-btn:hover {
-  color: #FAFAFA !important;
-  background: #1F1F24 !important;
+  color: #ECEEF4 !important;
+  background: #252732 !important;
 }
 
 [data-theme="dark"] .tab-nav-btn.active {
-  background: #FAFAFA !important;
-  color: #09090B !important;
-  border-color: #FAFAFA !important;
-  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.12) !important;
+  background: #323544 !important;
+  color: #F0F2F8 !important;
+  border-color: #484D60 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
 [data-theme="dark"] .card {
@@ -2543,6 +2544,21 @@ body[data-theme="dark"],
   border-color: var(--border-light) !important;
 }
 
+[data-theme="dark"] .quick-header-card {
+  background: var(--bg-card) !important;
+  border-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .active-timer-banner {
+  background: #232530 !important;
+  border-color: #4D5266 !important;
+}
+
+[data-theme="dark"] .active-timer-banner.paused {
+  background: #26231E !important;
+  border-color: var(--timer-paused) !important;
+}
+
 [data-theme="dark"] .quick-subj-btn {
   background: var(--bg-card) !important;
   border-color: var(--border-light) !important;
@@ -2558,12 +2574,14 @@ body[data-theme="dark"],
   border-color: var(--border-light) !important;
 }
 
+/* Notion 日曆深灰護眼樣式 */
 [data-theme="dark"] .notion-cal-weekdays {
-  background: var(--bg-subtle) !important;
+  background: #181920 !important;
   border-bottom-color: var(--border-light) !important;
 }
 
 [data-theme="dark"] .notion-weekday-cell {
+  color: var(--text-secondary) !important;
   border-right-color: var(--border-light) !important;
 }
 
@@ -2574,21 +2592,59 @@ body[data-theme="dark"],
 }
 
 [data-theme="dark"] .notion-cal-cell.outside-month {
-  background: var(--bg-subtle) !important;
-  opacity: 0.8 !important;
+  background: #17181E !important;
+  opacity: 0.75 !important;
 }
 
 [data-theme="dark"] .cal-cell-date-row {
   border-bottom-color: var(--border-light) !important;
 }
 
+[data-theme="dark"] .cal-cell-date-row:hover {
+  background: #252732 !important;
+}
+
 [data-theme="dark"] .cal-cell-slot-row {
   border-bottom-color: rgba(255, 255, 255, 0.05) !important;
 }
 
+[data-theme="dark"] .cal-cell-slot-row:focus-within {
+  background: #262834 !important;
+}
+
+[data-theme="dark"] .cal-countdown-mini {
+  background: #272935 !important;
+  color: var(--text-secondary) !important;
+}
+
+[data-theme="dark"] .cal-slot-tag {
+  background: #252733 !important;
+  color: var(--text-secondary) !important;
+  border-color: #353849 !important;
+}
+
+[data-theme="dark"] .cal-slot-tag.has-subj {
+  background: #2E3140 !important;
+  color: var(--text-primary) !important;
+  border-color: #42465C !important;
+}
+
+[data-theme="dark"] .cal-memo-pill {
+  background: #2A2D3A !important;
+  color: #D4D6E2 !important;
+  border-color: #3D4255 !important;
+}
+
+/* 每日專注深灰色塊 */
 [data-theme="dark"] .daily-nav-card {
   background: var(--bg-card) !important;
   border-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .daily-calendar-input {
+  background: #17181F !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-primary) !important;
 }
 
 [data-theme="dark"] .daily-slot-card {
@@ -2596,104 +2652,131 @@ body[data-theme="dark"],
   border-color: var(--border-light) !important;
 }
 
+[data-theme="dark"] .daily-slot-card.completed {
+  background: #1B231F !important;
+  border-color: #2D4A38 !important;
+}
+
 [data-theme="dark"] .daily-slot-card-header {
   background: var(--bg-subtle) !important;
   border-bottom-color: var(--border-light) !important;
 }
 
-[data-theme="dark"] .modal-content {
-  background: #111114 !important;
-  border-color: #2E2E34 !important;
+[data-theme="dark"] .daily-timer-strip {
+  background: #17181E !important;
+  border-color: var(--border-light) !important;
+}
+
+/* 彈窗與設定面板 */
+[data-theme="dark"] .modal-content,
+[data-theme="dark"] .modal-card {
+  background: #1B1C22 !important;
+  border-color: #353949 !important;
 }
 
 [data-theme="dark"] .modal-header {
-  background: #16161A !important;
-  border-bottom-color: #27272A !important;
+  background: #20222A !important;
+  border-bottom-color: var(--border-light) !important;
 }
 
 [data-theme="dark"] .settings-section {
-  background: #141418 !important;
-  border-color: #27272A !important;
+  background: #17181E !important;
+  border-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .room-pill,
+[data-theme="dark"] .sync-mobile-card {
+  background: #1E2028 !important;
+  border-color: var(--border-light) !important;
 }
 
 [data-theme="dark"] .btn-primary,
 [data-theme="dark"] .mode-chip.active,
 [data-theme="dark"] .filter-tab.active,
 [data-theme="dark"] .month-tab.active {
-  background: #FAFAFA !important;
-  color: #09090B !important;
-  border-color: #FAFAFA !important;
-  box-shadow: none !important;
+  background: #363B4C !important;
+  color: #FFFFFF !important;
+  border-color: #4F556E !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25) !important;
   font-weight: 700;
 }
 
+[data-theme="dark"] .btn-primary:hover,
+[data-theme="dark"] .filter-tab.active:hover,
+[data-theme="dark"] .month-tab.active:hover {
+  background: #42485C !important;
+  border-color: #5D6480 !important;
+}
+
 [data-theme="dark"] .btn-cloud {
-  background: #18181C !important;
-  color: #FAFAFA !important;
-  border-color: #323238 !important;
+  background: #232632 !important;
+  color: #ECEEF4 !important;
+  border-color: #3B4054 !important;
+}
+
+[data-theme="dark"] .btn-cloud:hover {
+  background: #2B2F3E !important;
 }
 
 [data-theme="dark"] input,
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
   color: var(--text-primary) !important;
-  background-color: #141418 !important;
+  background-color: #17181F !important;
   border-color: var(--border-medium) !important;
 }
 
-[data-theme="dark"] .stat-table th,
-[data-theme="dark"] .plan-table th {
-  background-color: #16161A !important;
-  color: #D4D4D8 !important;
-  border-color: #27272A !important;
+[data-theme="dark"] input:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus {
+  background-color: #1A1C24 !important;
+  border-color: #555B74 !important;
+  box-shadow: 0 0 0 3px rgba(85, 91, 116, 0.25) !important;
 }
 
-[data-theme="dark"] .stat-table tbody tr:hover,
-[data-theme="dark"] .plan-table tbody tr:hover {
-  background-color: rgba(255, 255, 255, 0.03);
+/* 表格深灰底色與斑馬紋（徹底告別白光刺眼） */
+[data-theme="dark"] .plan-table tbody td,
+[data-theme="dark"] .pure-calendar-table tbody td,
+[data-theme="dark"] .stat-table tbody td {
+  background-color: #1D1E24 !important;
+  border-color: var(--border-light) !important;
+  color: var(--text-primary) !important;
 }
 
-/* ==========================================================================
-   🎨 雙主題切換器 (櫻花粉白 vs 極簡深黑)
-   ========================================================================== */
-.theme-dual-switcher {
-  display: inline-flex;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-light);
-  border-radius: 999px;
-  padding: 2px;
-  gap: 2px;
-  position: relative;
-  z-index: 100;
+[data-theme="dark"] .plan-table tbody tr:nth-child(even) td,
+[data-theme="dark"] .pure-calendar-table tbody tr:nth-child(even) td,
+[data-theme="dark"] .stat-table tbody tr:nth-child(even) td {
+  background-color: #181920 !important;
 }
 
-.theme-switch-pill {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 999px;
-  cursor: pointer !important;
-  pointer-events: auto !important;
-  transition: all 0.18s ease;
-  white-space: nowrap;
-  position: relative;
-  z-index: 101;
+[data-theme="dark"] .plan-table tbody tr:hover td,
+[data-theme="dark"] .pure-calendar-table tbody tr:hover td,
+[data-theme="dark"] .stat-table tbody tr:hover td {
+  background-color: #262834 !important;
 }
 
-.theme-switch-pill.active {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-sm);
+[data-theme="dark"] .plan-table th,
+[data-theme="dark"] .pure-calendar-table th,
+[data-theme="dark"] .stat-table th {
+  background-color: #16171E !important;
+  color: #D2D5E0 !important;
+  border-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .plan-table tbody tr.row-active-timer td {
+  background-color: #2A232E !important;
+}
+
+[data-theme="dark"] .plan-table tbody tr.row-complete-all td.summary-cell {
+  background-color: #1E2A22 !important;
 }
 
 html[data-theme="dark"] .theme-switch-pill.active,
 body[data-theme="dark"] .theme-switch-pill.active,
 [data-theme="dark"] .theme-switch-pill.active {
-  background: #FAFAFA !important;
-  color: #09090B !important;
+  background: #323544 !important;
+  color: #F0F2F8 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25) !important;
 }
 
 /* ==========================================================================
