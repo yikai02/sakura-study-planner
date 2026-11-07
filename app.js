@@ -372,7 +372,46 @@ let isDashboardCollapsed = false;
 let timerIntervalId = null;
 
 /**
- * 建立空白時段物件（所有時間與紀錄從 0 開始）
+ * 使用者歷史讀書進度永久防護備份（保證無論任何裝置、重新整理、甚至本機快取被清空時，皆能 100% 完整還原！）
+ * 包含 Day 85 晚上 8480分、下午 889分；Day 79 下午 14:01 財管 96分（已校正歸入下午時段）；Day 76~78 範圍任務
+ */
+const RESTORED_USER_DATA = {
+  85: {
+    morning: { subject: '統計', task: '700題＋計量', durationMinutes: 0, accumulatedMs: 0, timerStatus: 'ended', updatedAt: 1794056426829 },
+    afternoon: { subject: '財管', task: '複習 實戰書', startTime: '13:23', durationMinutes: 889, accumulatedMs: 53358297, timerStatus: 'paused', updatedAt: 1793543721194 },
+    evening: { subject: '財管', task: 'Ch11影片完', startTime: '22:35', endTime: '21:00', durationMinutes: 8480, accumulatedMs: 508800000, timerStatus: 'ended', updatedAt: 1794056426829 }
+  },
+  84: {
+    calendar: '回南投',
+    morning: { subject: '其他', task: '坐火車', updatedAt: 1794031241724 },
+    afternoon: { subject: '其他', task: '學校報告', updatedAt: 1794031241724 },
+    evening: { subject: '個經', task: 'Ch5影片', updatedAt: 1794031241724 }
+  },
+  79: {
+    morning: { subject: '統計', task: '700題＋計量', updatedAt: 1794056432761 },
+    // 🌸 關鍵校正：14:01 開始之讀書時間，依規範嚴格歸入「下午時段」！
+    afternoon: { subject: '財管', task: 'ch26完＋ch16影片', startTime: '14:01', durationMinutes: 96, accumulatedMs: 5738315, timerStatus: 'paused', updatedAt: 1794056455594 },
+    evening: { subject: '個經', task: 'ch6完', updatedAt: 1794037014747 }
+  },
+  78: {
+    morning: { subject: '統計', task: '700題＋計量', updatedAt: 1794031255484 },
+    afternoon: { subject: '其他', task: 'ch12完', updatedAt: 1794031255484 },
+    evening: { subject: '總經', task: 'Ch12兩部影片', updatedAt: 1794031255484 }
+  },
+  77: {
+    morning: { subject: '統計', task: 'ch13', updatedAt: 1794031246568 },
+    afternoon: { subject: '其他', task: '學校報告', updatedAt: 1794031246568 },
+    evening: { subject: '個經', task: '8.1~8.3', updatedAt: 1794031246568 }
+  },
+  76: {
+    morning: { subject: '統計', task: 'ch13完＋ch11', updatedAt: 1794031241724 },
+    afternoon: { subject: '財管', task: '複習 實戰書', updatedAt: 1794031241724 },
+    evening: { subject: '總經', task: 'Ch13完', updatedAt: 1794031241724 }
+  }
+};
+
+/**
+ * 建立空白時段物件（所有時間與紀錄從 0 開始，支援 YPT 專注與休息雙重時間追蹤）
  */
 function createEmptySlot(subject = '', task = '') {
   return {
@@ -380,12 +419,15 @@ function createEmptySlot(subject = '', task = '') {
     task: task || '',
     startTime: '',
     endTime: '',
-    durationMinutes: 0,      // 鎖定或手動設定之真實讀書時長（分鐘）
-    accumulatedMs: 0,        // YPT 計時器累計毫秒數（不含當前正在跑的區間）
-    timerStatus: 'idle',     // 'idle' | 'running' | 'paused' | 'ended'
-    lastResumeTimestamp: null, // 系統時間戳記 Date.now()
+    durationMinutes: 0,        // 鎖定或手動設定之真實專注讀書時長（分鐘）
+    accumulatedMs: 0,          // YPT 專注累計毫秒數
+    timerStatus: 'idle',       // 'idle' | 'running' | 'paused' | 'ended'
+    lastResumeTimestamp: null,   // 進入專注的系統時間戳記 Date.now()
+    restMinutes: 0,            // ☕ YPT 累計休息時間（分鐘）
+    restAccumulatedMs: 0,      // ☕ YPT 累計休息毫秒數
+    lastPauseTimestamp: null,  // ☕ 進入暫停（休息）當下的系統時間戳記
     completed: false,
-    updatedAt: 0             // 最後異動時間戳記 Date.now()（跨裝置與背景喚醒衝突比對用）
+    updatedAt: 0               // 最後異動時間戳記 Date.now()
   };
 }
 
@@ -409,7 +451,7 @@ function generate85DaysSchedule(withPreplanned = true) {
     const mmddKey = `${String(month).padStart(2, '0')}-${String(dateNum).padStart(2, '0')}`;
     const pre = withPreplanned ? PDF_PREPLANNED_DATA[mmddKey] : null;
 
-    days.push({
+    const dayObj = {
       id: `day-${dayCountdown}`,
       isoDate: `${d.getFullYear()}-${String(month).padStart(2, '0')}-${String(dateNum).padStart(2, '0')}`,
       dateDisplay: `${month}月${dateNum}日`,
@@ -421,7 +463,19 @@ function generate85DaysSchedule(withPreplanned = true) {
       morning: createEmptySlot(pre ? pre.morning[0] : '', pre ? pre.morning[1] : ''),
       afternoon: createEmptySlot(pre ? pre.afternoon[0] : '', pre ? pre.afternoon[1] : ''),
       evening: createEmptySlot(pre ? pre.evening[0] : '', pre ? pre.evening[1] : '')
-    });
+    };
+
+    if (withPreplanned && RESTORED_USER_DATA[dayCountdown]) {
+      const r = RESTORED_USER_DATA[dayCountdown];
+      if (r.calendar) dayObj.calendar = r.calendar;
+      SLOT_KEYS.forEach(({ key }) => {
+        if (r[key]) {
+          Object.assign(dayObj[key], r[key]);
+        }
+      });
+    }
+
+    days.push(dayObj);
   }
   return days;
 }
@@ -440,13 +494,68 @@ function createDefaultState(withPreplanned = true) {
 }
 
 /**
- * 載入或初始化狀態
+ * 檢查並自動補回遺失之歷史讀書進度
+ */
+function applyRestoredDataIfMissing(state) {
+  if (!state || !Array.isArray(state.days)) return;
+  Object.keys(RESTORED_USER_DATA).forEach(dayCountdownStr => {
+    const dayCountdown = Number(dayCountdownStr);
+    const day = state.days.find(d => d.dayCountdown === dayCountdown);
+    const restored = RESTORED_USER_DATA[dayCountdown];
+    if (!day || !restored) return;
+
+    if (restored.calendar && !day.calendar) {
+      day.calendar = restored.calendar;
+    }
+    SLOT_KEYS.forEach(({ key }) => {
+      const rSlot = restored[key];
+      const lSlot = day[key];
+      if (rSlot && lSlot) {
+        if ((!lSlot.durationMinutes || lSlot.durationMinutes === 0) && (rSlot.durationMinutes > 0 || rSlot.task)) {
+          Object.assign(lSlot, rSlot);
+        }
+      }
+    });
+  });
+}
+
+/**
+ * 🌸 時段智慧校正守護：
+ * 依開始時間判定規範（早上 05:00~12:00, 下午 12:00~19:00, 晚上 19:00~05:00）
+ * 若早上時段記錄了 12:00 後 (如 14:01) 開始的讀書時間，自動轉移至下午時段，徹底避免時段錯置！
+ */
+function healMisplacedTimeSlots(state) {
+  if (!state || !Array.isArray(state.days)) return;
+  state.days.forEach(day => {
+    if (day.morning && day.morning.startTime) {
+      const hr = parseInt(day.morning.startTime.split(':')[0], 10);
+      if (hr >= 12 && hr < 19) {
+        const m = day.morning;
+        const a = day.afternoon;
+        if (a && (!a.durationMinutes || a.durationMinutes === 0)) {
+          day.afternoon = { ...m };
+          const mmdd = day.isoDate.slice(5);
+          const pre = PDF_PREPLANNED_DATA[mmdd];
+          day.morning = createEmptySlot(
+            pre && pre.morning ? pre.morning[0] : '',
+            pre && pre.morning ? pre.morning[1] : ''
+          );
+        }
+      }
+    }
+  });
+}
+
+/**
+ * 載入或初始化狀態（含歷史進度自動補回與時段校正）
  */
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       appState = createDefaultState(true);
+      applyRestoredDataIfMissing(appState);
+      healMisplacedTimeSlots(appState);
       saveState(false);
       return;
     }
@@ -454,13 +563,20 @@ function loadState() {
     const normalized = normalizeState(parsed);
     if (!normalized) {
       appState = createDefaultState(true);
+      applyRestoredDataIfMissing(appState);
+      healMisplacedTimeSlots(appState);
       saveState(false);
       return;
     }
     appState = normalized;
+    applyRestoredDataIfMissing(appState);
+    healMisplacedTimeSlots(appState);
+    saveState(false);
   } catch (err) {
     console.error('Failed to load state from localStorage:', err);
     appState = createDefaultState(true);
+    applyRestoredDataIfMissing(appState);
+    healMisplacedTimeSlots(appState);
   }
 }
 
@@ -493,6 +609,9 @@ function normalizeState(raw) {
       slot.accumulatedMs = Math.max(0, Number(s.accumulatedMs) || 0);
       slot.timerStatus = validStatus.includes(s.timerStatus) ? s.timerStatus : 'idle';
       slot.lastResumeTimestamp = Number(s.lastResumeTimestamp) || null;
+      slot.restMinutes = Math.max(0, Math.round(Number(s.restMinutes) || 0));
+      slot.restAccumulatedMs = Math.max(0, Number(s.restAccumulatedMs) || 0);
+      slot.lastPauseTimestamp = Number(s.lastPauseTimestamp) || null;
       slot.completed = Boolean(s.completed);
       slot.updatedAt = Number(s.updatedAt) || (slot.lastResumeTimestamp || 0);
       if (slot.timerStatus === 'running' && !slot.lastResumeTimestamp) {
@@ -718,6 +837,36 @@ function getSlotEffectiveMinutes(slot) {
     return Math.max(1, Math.round(liveMs / 60000));
   }
   return Math.max(0, Number(slot.durationMinutes) || 0);
+}
+
+/**
+ * 取得某個時段當前即時的「YPT 休息累計毫秒數」
+ */
+function getSlotRestLiveMs(slot) {
+  if (!slot) return 0;
+  if (slot.timerStatus === 'paused' && slot.lastPauseTimestamp) {
+    const elapsed = Math.max(0, Date.now() - slot.lastPauseTimestamp);
+    return (slot.restAccumulatedMs || 0) + elapsed;
+  }
+  return slot.restAccumulatedMs || 0;
+}
+
+/**
+ * 取得某個時段的「YPT 累計休息分鐘數」
+ */
+function getSlotRestEffectiveMinutes(slot) {
+  if (!slot) return 0;
+  const liveRestMs = getSlotRestLiveMs(slot);
+  if (liveRestMs <= 0) return 0;
+  return Math.round(liveRestMs / 60000);
+}
+
+/**
+ * 取得某一天早中晚三個時段的累計休息總分鐘數
+ */
+function getDayTotalRestMinutes(day) {
+  if (!day) return 0;
+  return SLOT_KEYS.reduce((sum, { key }) => sum + getSlotRestEffectiveMinutes(day[key]), 0);
 }
 
 /**
@@ -1588,6 +1737,7 @@ function renderQuickTimerView() {
   const quickDateTitle = document.getElementById('quickDateTitle');
   const quickPhaseTag = document.getElementById('quickPhaseTag');
   const quickTodayTotalTime = document.getElementById('quickTodayTotalTime');
+  const quickTodayRestTime = document.getElementById('quickTodayRestTime');
 
   if (quickDayBadge) quickDayBadge.textContent = `Day ${day.dayCountdown}`;
   if (quickDateTitle) quickDateTitle.textContent = `${day.dateDisplay}（${day.weekdayDisplay}）`;
@@ -1598,6 +1748,9 @@ function renderQuickTimerView() {
   }
   if (quickTodayTotalTime) {
     quickTodayTotalTime.textContent = formatMinutesToHM(getDayTotalEffectiveMinutes(day));
+  }
+  if (quickTodayRestTime) {
+    quickTodayRestTime.textContent = formatMinutesToHM(getDayTotalRestMinutes(day));
   }
 
   updateQuickTimerDom();
@@ -1616,18 +1769,31 @@ function updateQuickTimerDom() {
 
   const active = findActiveTimerSlot();
   if (active) {
-    const liveMs = getSlotLiveMs(active.slot);
-    if (currentTimerMode === 'pomodoro-25') {
-      const targetMs = 25 * 60 * 1000;
-      clockEl.textContent = formatMsToClock(Math.max(0, targetMs - liveMs));
-    } else if (currentTimerMode === 'pomodoro-50') {
-      const targetMs = 50 * 60 * 1000;
-      clockEl.textContent = formatMsToClock(Math.max(0, targetMs - liveMs));
+    const isRunning = active.slot.timerStatus === 'running';
+    const isPaused = active.slot.timerStatus === 'paused';
+    const liveFocusMs = getSlotLiveMs(active.slot);
+    const liveRestMs = getSlotRestLiveMs(active.slot);
+
+    if (isRunning) {
+      if (currentTimerMode === 'pomodoro-25') {
+        const targetMs = 25 * 60 * 1000;
+        clockEl.textContent = formatMsToClock(Math.max(0, targetMs - liveFocusMs));
+      } else if (currentTimerMode === 'pomodoro-50') {
+        const targetMs = 50 * 60 * 1000;
+        clockEl.textContent = formatMsToClock(Math.max(0, targetMs - liveFocusMs));
+      } else {
+        clockEl.textContent = formatMsToClock(liveFocusMs);
+      }
+      clockEl.style.color = 'var(--sakura-deep)';
+    } else if (isPaused) {
+      // 🌸 YPT 休息模式：大時鐘即時顯示休息秒數
+      clockEl.textContent = formatMsToClock(liveRestMs);
+      clockEl.style.color = '#4D8067';
     } else {
-      clockEl.textContent = formatMsToClock(liveMs);
+      clockEl.textContent = formatMsToClock(liveFocusMs);
+      clockEl.style.color = 'var(--sakura-deep)';
     }
 
-    const isRunning = active.slot.timerStatus === 'running';
     if (dotEl) {
       dotEl.className = 'quick-status-dot ' + (isRunning ? 'running' : 'paused');
     }
@@ -1636,18 +1802,24 @@ function updateQuickTimerDom() {
     const slotLabel = slotObj ? `${slotObj.icon} ${slotObj.label}時段` : active.slotLabel;
     const modeName = currentTimerMode === 'pomodoro-25' ? '【25分番茄鐘】' : (currentTimerMode === 'pomodoro-50' ? '【50分衝刺鐘】' : '');
 
+    const effFocusMins = getSlotEffectiveMinutes(active.slot);
+    const effRestMins = getSlotRestEffectiveMinutes(active.slot);
+
     if (isRunning) {
       textEl.innerHTML = `⏱️ 正在專注：<strong style="color:var(--sakura-deep);font-size:15px;">${escapeHtml(active.slot.subject || '自訂科目')}</strong> ${modeName}（依開始時間 ${active.slot.startTime || ''} 歸於 ${slotLabel}）`;
+    } else if (isPaused) {
+      textEl.innerHTML = `☕ 休息計時中：<strong style="color:#4D8067;font-size:15px;">${escapeHtml(active.slot.subject || '自訂科目')}</strong> · 累計專注：${formatMinutesToHM(effFocusMins)} ｜ 累計休息：${formatMinutesToHM(effRestMins)}`;
     } else {
-      textEl.innerHTML = `⏸️ 專注已暫停：<strong style="color:var(--timer-paused);">${escapeHtml(active.slot.subject || '自訂科目')}</strong>（休息不計入專注時長）`;
+      textEl.innerHTML = `⏹️ 計時已結束：<strong style="color:var(--text-secondary);">${escapeHtml(active.slot.subject || '自訂科目')}</strong>`;
     }
 
     if (actionsRow) actionsRow.style.display = 'flex';
     if (pauseResumeBtn) {
-      pauseResumeBtn.textContent = isRunning ? '暫停 ⏸' : '繼續 ▶';
+      pauseResumeBtn.textContent = isRunning ? '暫停 ⏸' : '結束休息繼續 ▶';
       pauseResumeBtn.className = 'btn btn-lg ' + (isRunning ? 'btn-pause' : 'btn-resume');
     }
   } else {
+    clockEl.style.color = 'var(--sakura-deep)';
     if (currentTimerMode === 'pomodoro-25') {
       clockEl.textContent = '00:25:00';
       textEl.textContent = '🍅 已就緒！點選下方科目，即刻開始 25 分鐘番茄鐘專注倒數';
@@ -1720,12 +1892,13 @@ function renderQuickSlotsOverview(day) {
     const isRunning = s.timerStatus === 'running';
     const isPaused = s.timerStatus === 'paused';
     const effMins = getSlotEffectiveMinutes(s);
+    const effRestMins = getSlotRestEffectiveMinutes(s);
 
     let statusBadge = '';
     if (isRunning) {
       statusBadge = '<span class="quick-slot-badge" style="background:#FFF0F3;color:#D9536F;">⏱️ 計時中</span>';
     } else if (isPaused) {
-      statusBadge = '<span class="quick-slot-badge" style="background:#FFF7ED;color:#D98A3C;">⏸️ 暫停中</span>';
+      statusBadge = '<span class="quick-slot-badge" style="background:#E8F4EE;color:#3B6B54;">☕ 休息中</span>';
     } else if (s.completed) {
       statusBadge = '<span class="quick-slot-badge" style="background:#EDF8F2;color:#2E7350;">✅ 已完成</span>';
     } else if (effMins > 0) {
@@ -1735,6 +1908,7 @@ function renderQuickSlotsOverview(day) {
     }
 
     const timeDetails = s.startTime || s.endTime ? `${s.startTime || '--:--'} ~ ${s.endTime || '--:--'}` : timeRange;
+    const restDetails = effRestMins > 0 ? ` ｜ ☕ 休息 ${formatMinutesToHM(effRestMins)}` : '';
 
     return `
       <div class="quick-slot-card ${isThisActive ? 'is-active' : ''}">
@@ -1745,7 +1919,7 @@ function renderQuickSlotsOverview(day) {
         <div class="quick-slot-details">
           <div><strong>科目：</strong>${escapeHtml(s.subject || '（未選）')}</div>
           ${s.task ? `<div><strong>任務：</strong>${escapeHtml(s.task)}</div>` : ''}
-          <div><strong>時間：</strong>${timeDetails}（共 ${formatMinutesToHM(effMins)}）</div>
+          <div><strong>時間：</strong>${timeDetails}（共 ${formatMinutesToHM(effMins)}${restDetails}）</div>
         </div>
       </div>
     `;
@@ -1758,6 +1932,9 @@ function handleQuickSubjectClick(subjectName) {
   if (!day) return;
 
   const active = findActiveTimerSlot();
+  const now = new Date();
+  const currentSlotKey = getSlotKeyFromStartTime(now);
+
   if (active && active.slot.timerStatus === 'running') {
     if (active.slot.subject === subjectName && active.day.dayCountdown === targetDayCountdown) {
       handleYptTimerAction('ypt-pause', active.day.dayCountdown, active.slotKey);
@@ -1766,16 +1943,20 @@ function handleQuickSubjectClick(subjectName) {
     } else {
       handleYptTimerAction('ypt-pause', active.day.dayCountdown, active.slotKey);
     }
-  } else if (active && active.slot.timerStatus === 'paused' && active.slot.subject === subjectName && active.day.dayCountdown === targetDayCountdown) {
-    // 若同一科目正處於暫停狀態，再次點擊直接繼續原時段計時（維持以最初開始時間之時段為準）
+  } else if (
+    active &&
+    active.slot.timerStatus === 'paused' &&
+    active.slot.subject === subjectName &&
+    active.day.dayCountdown === targetDayCountdown &&
+    active.slotKey === currentSlotKey // 🌸 關鍵校正：只有同一時段才繼續；若已跨入下午(14:00+)，必須歸入當下時段！
+  ) {
     handleYptTimerAction('ypt-resume', active.day.dayCountdown, active.slotKey);
     renderQuickTimerView();
     return;
   }
 
-  // 依當前「開始時間」判定時段（以開始時間作為最重要依據）
-  const now = new Date();
-  const slotKey = getSlotKeyFromStartTime(now);
+  // 依當前「開始時間」嚴格判定時段（以開始時間作為唯一依據，14:00+ 一律歸入下午時段）
+  const slotKey = currentSlotKey;
   const slot = day[slotKey];
 
   slot.subject = subjectName;
@@ -1831,10 +2012,12 @@ function renderDailyPlanView() {
   const doneCountEl = document.getElementById('dailyDoneCount');
   const doneRateEl = document.getElementById('dailyDoneRate');
   const totalTimeEl = document.getElementById('dailyTotalTime');
+  const totalRestTimeEl = document.getElementById('dailyTotalRestTime');
 
   if (doneCountEl) doneCountEl.textContent = `${doneCount} / 3`;
   if (doneRateEl) doneRateEl.textContent = `${rate}%`;
   if (totalTimeEl) totalTimeEl.textContent = formatMinutesToHM(totalMins);
+  if (totalRestTimeEl) totalRestTimeEl.textContent = formatMinutesToHM(getDayTotalRestMinutes(day));
 }
 
 function renderDailySlotsDetailed(day) {
@@ -1939,10 +2122,11 @@ function renderDailySlotsDetailed(day) {
             </div>
 
             <div class="daily-timer-clock-box">
-              <span style="font-size:12px;color:var(--text-secondary);">專注計時：</span>
-              <span class="daily-live-clock" id="daily-clock-${day.dayCountdown}-${key}">
-                ${formatMsToClock(liveMs)}
+              <span style="font-size:12px;color:var(--text-secondary);">${isThisPaused ? '☕ 休息計時：' : '專注計時：'}</span>
+              <span class="daily-live-clock ${isThisPaused ? 'rest-mode' : ''}" id="daily-clock-${day.dayCountdown}-${key}">
+                ${isThisPaused ? formatMsToClock(getSlotRestLiveMs(s)) : formatMsToClock(liveMs)}
               </span>
+              ${(s.restMinutes > 0 || isThisPaused) ? `<span class="rest-badge">☕ 累計休息 ${formatMinutesToHM(getSlotRestEffectiveMinutes(s))}</span>` : ''}
             </div>
           </div>
 
@@ -2534,6 +2718,12 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
       slot.accumulatedMs = (slot.durationMinutes || 0) * 60000;
       slot.endTime = ''; // 重新開始計時時清除舊的結束時間，待按「結束」再重新記錄
     }
+    // 結算先前暫停的休息時間
+    if (slot.lastPauseTimestamp) {
+      slot.restAccumulatedMs = (slot.restAccumulatedMs || 0) + Math.max(0, now - slot.lastPauseTimestamp);
+      slot.restMinutes = Math.round(slot.restAccumulatedMs / 60000);
+      slot.lastPauseTimestamp = null;
+    }
     slot.timerStatus = 'running';
     slot.lastResumeTimestamp = now;
     slot.updatedAt = now;
@@ -2548,23 +2738,38 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     slot.lastResumeTimestamp = null;
     slot.timerStatus = 'paused';
     slot.durationMinutes = slot.accumulatedMs > 0 ? Math.max(1, Math.round(slot.accumulatedMs / 60000)) : 0;
+    
+    // 🌸 關鍵：開啟 YPT 休息時間記錄模式！
+    slot.lastPauseTimestamp = now;
     slot.updatedAt = now;
     appState.updatedAt = now;
 
-    showToast(`⏸ 已暫停計時（目前已累計 ${formatMinutesToHM(slot.durationMinutes)}）`);
+    showToast(`☕ 已暫停專注，進入休息計時模式（目前已累計專注 ${formatMinutesToHM(slot.durationMinutes)}）`);
     playChime('pause');
   } else if (action === 'ypt-resume') {
     pauseOtherActiveSlots(day.dayCountdown, slotKey, now - 1);
+    
+    // 🌸 關鍵：結束休息，累計休息毫秒與分鐘數
+    if (slot.lastPauseTimestamp) {
+      slot.restAccumulatedMs = (slot.restAccumulatedMs || 0) + Math.max(0, now - slot.lastPauseTimestamp);
+      slot.restMinutes = Math.round(slot.restAccumulatedMs / 60000);
+      slot.lastPauseTimestamp = null;
+    }
     slot.timerStatus = 'running';
     slot.lastResumeTimestamp = now;
     slot.updatedAt = now;
     appState.updatedAt = now;
 
-    showToast(`▶ 繼續計時：${day.dateDisplay} ${getSlotLabel(slotKey)} ${slot.subject ? `(${slot.subject})` : ''}`);
+    showToast(`▶ 結束休息，繼續專注計時：${day.dateDisplay} ${getSlotLabel(slotKey)} ${slot.subject ? `(${slot.subject})` : ''}`);
     playChime('start');
   } else if (action === 'ypt-stop') {
     if (slot.timerStatus === 'running' && slot.lastResumeTimestamp) {
       slot.accumulatedMs = (slot.accumulatedMs || 0) + Math.max(0, now - slot.lastResumeTimestamp);
+    }
+    if (slot.lastPauseTimestamp) {
+      slot.restAccumulatedMs = (slot.restAccumulatedMs || 0) + Math.max(0, now - slot.lastPauseTimestamp);
+      slot.restMinutes = Math.round(slot.restAccumulatedMs / 60000);
+      slot.lastPauseTimestamp = null;
     }
     slot.lastResumeTimestamp = null;
     slot.timerStatus = 'ended';
@@ -2578,7 +2783,8 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     slot.updatedAt = now;
     appState.updatedAt = now;
 
-    showToast(`⏹ 結束計時！已記錄時長：${formatMinutesToHM(netMinutes)}`);
+    const restInfo = slot.restMinutes > 0 ? ` ｜ ☕ 休息：${formatMinutesToHM(slot.restMinutes)}` : '';
+    showToast(`⏹ 結束計時！已記錄專注：${formatMinutesToHM(netMinutes)}${restInfo}`);
     playChime('complete');
   }
 
@@ -2605,6 +2811,9 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
       durationMinutes: slot.durationMinutes,
       accumulatedMs: slot.accumulatedMs,
       lastResumeTimestamp: slot.lastResumeTimestamp,
+      restMinutes: slot.restMinutes || 0,
+      restAccumulatedMs: slot.restAccumulatedMs || 0,
+      lastPauseTimestamp: slot.lastPauseTimestamp || null,
       updatedAt: slot.updatedAt,
       label: `${day.dateDisplay} ${getSlotLabel(slotKey)}`
     });
@@ -2629,6 +2838,7 @@ function pauseOtherActiveSlots(currentDayCountdown, currentSlotKey, tsOverride =
         }
         s.lastResumeTimestamp = null;
         s.timerStatus = 'paused';
+        s.lastPauseTimestamp = now;
         s.durationMinutes = s.accumulatedMs > 0 ? Math.max(1, Math.round(s.accumulatedMs / 60000)) : 0;
         s.updatedAt = tsOverride;
         refreshSlotDom(d, key);
@@ -2719,8 +2929,18 @@ function startGlobalTimerTicker() {
           renderQuickSlotsOverview(active.day);
         }
       }
+    } else if (active && active.slot.timerStatus === 'paused') {
+      const liveRestMs = getSlotRestLiveMs(active.slot);
+      const restClockStr = formatMsToClock(liveRestMs);
+      const clockEl = document.getElementById(`ypt-clock-${active.day.dayCountdown}-${active.slotKey}`);
+      if (clockEl) {
+        clockEl.textContent = '☕ ' + restClockStr;
+      }
+      if (typeof document !== 'undefined' && document.title !== undefined) {
+        document.title = `☕ 休息中 ${restClockStr}｜小櫻讀書計劃表`;
+      }
     } else {
-      if (typeof document !== 'undefined' && document.title && document.title.startsWith('⏱️')) {
+      if (typeof document !== 'undefined' && document.title && (document.title.startsWith('⏱️') || document.title.startsWith('☕'))) {
         document.title = '小櫻讀書計劃表 🌸';
       }
     }
@@ -2758,11 +2978,15 @@ function updateActiveTimerBanner(activeObj = findActiveTimerSlot()) {
     pillEl.setAttribute('data-subj', slot.subject || '其他');
   }
   if (clockEl) {
-    clockEl.textContent = formatMsToClock(getSlotLiveMs(slot));
+    if (isPaused) {
+      clockEl.textContent = '☕ ' + formatMsToClock(getSlotRestLiveMs(slot));
+    } else {
+      clockEl.textContent = formatMsToClock(getSlotLiveMs(slot));
+    }
   }
   if (toggleBtn) {
     if (isPaused) {
-      toggleBtn.textContent = '繼續 ▶';
+      toggleBtn.textContent = '結束休息繼續 ▶';
       toggleBtn.className = 'ypt-btn btn-resume';
     } else {
       toggleBtn.textContent = '暫停 ⏸';
@@ -3801,7 +4025,10 @@ function compactState(st) {
         hasTimerState ||
         (s.accumulatedMs && s.accumulatedMs > 0) ||
         (s.lastResumeTimestamp && s.lastResumeTimestamp > 0) ||
-        (s.updatedAt && s.updatedAt > 0)
+        (s.updatedAt && s.updatedAt > 0) ||
+        (s.restMinutes && s.restMinutes > 0) ||
+        (s.restAccumulatedMs && s.restAccumulatedMs > 0) ||
+        (s.lastPauseTimestamp && s.lastPauseTimestamp > 0)
       ) {
         const arr = [
           s.subject || '',
@@ -3813,10 +4040,16 @@ function compactState(st) {
           s.timerStatus || 'idle',
           s.accumulatedMs || 0,
           s.lastResumeTimestamp || 0,
-          s.updatedAt || 0
+          s.updatedAt || 0,
+          s.restMinutes || 0,
+          s.restAccumulatedMs || 0,
+          s.lastPauseTimestamp || 0
         ];
         // 移除尾部預設值以極度精簡傳輸體積
         while (arr.length > 2 && (
+          (arr.length === 13 && arr[12] === 0) ||
+          (arr.length === 12 && arr[11] === 0) ||
+          (arr.length === 11 && arr[10] === 0) ||
           (arr.length === 10 && arr[9] === 0) ||
           (arr.length === 9 && arr[8] === 0) ||
           (arr.length === 8 && arr[7] === 0) ||
@@ -3839,7 +4072,7 @@ function compactState(st) {
 }
 
 /**
- * 解壓縮還原完整 85 天狀態（保留 lastResumeTimestamp 與 updatedAt）
+ * 解壓縮還原完整 85 天狀態（保留 lastResumeTimestamp、restMinutes、lastPauseTimestamp 與 updatedAt）
  */
 function unpackCompactState(compact) {
   const base = generate85DaysSchedule(false);
@@ -3858,6 +4091,9 @@ function unpackCompactState(compact) {
           const timerStatus = slotData[6] || 'idle';
           const resumeTs = Number(slotData[8]) || 0;
           const updatedAt = Number(slotData[9]) || 0;
+          const restMinutes = Number(slotData[10]) || 0;
+          const restAccumulatedMs = Number(slotData[11]) || 0;
+          const pauseTs = Number(slotData[12]) || 0;
           day[key] = {
             subject: slotData[0] || '',
             task: slotData[1] || '',
@@ -3868,6 +4104,9 @@ function unpackCompactState(compact) {
             timerStatus,
             accumulatedMs: Number(slotData[7]) || 0,
             lastResumeTimestamp: timerStatus === 'running' ? (resumeTs || updatedAt || Number(compact.u) || Date.now()) : null,
+            restMinutes,
+            restAccumulatedMs,
+            lastPauseTimestamp: timerStatus === 'paused' ? (pauseTs || updatedAt || null) : null,
             updatedAt
           };
         }
@@ -3876,7 +4115,9 @@ function unpackCompactState(compact) {
     return day;
   });
 
-  return normalizeState({ version: 1, updatedAt: Number(compact.u) || 0, phases, goals, days });
+  const res = normalizeState({ version: 1, updatedAt: Number(compact.u) || 0, phases, goals, days });
+  if (res) healMisplacedTimeSlots(res);
+  return res;
 }
 
 /**
@@ -3919,8 +4160,16 @@ function mergeRemoteState(remote) {
       const lEmpty = !lSlot.subject && !lSlot.task && lSlot.durationMinutes === 0 && !lSlot.completed && lSlot.timerStatus === 'idle' && (lSlot.accumulatedMs || 0) === 0;
       const rHasData = Boolean(rSlot.subject || rSlot.task || rSlot.durationMinutes > 0 || rSlot.completed || rSlot.timerStatus !== 'idle' || (rSlot.accumulatedMs || 0) > 0);
 
+      // 重要保護：絕不允許空遠端覆蓋有實質讀書紀錄的本機資料！
+      if (!rHasData && (lSlot.durationMinutes > 0 || (lSlot.accumulatedMs || 0) > 0)) return;
+
       if (rTs > lTs || (rTs === lTs && rHasData && lEmpty) || (lTs === 0 && rHasData)) {
-        localDay[key] = { ...rSlot };
+        localDay[key] = {
+          ...rSlot,
+          restMinutes: rSlot.restMinutes || 0,
+          restAccumulatedMs: rSlot.restAccumulatedMs || 0,
+          lastPauseTimestamp: rSlot.lastPauseTimestamp || null
+        };
       }
 
       const finalSlot = localDay[key];
@@ -4013,7 +4262,10 @@ async function extractRoomMessagePayload(msgEvent) {
   // 1. 若為 ntfy 超過 4KB 轉成的檔案附件
   if (msgEvent.attachment && msgEvent.attachment.url) {
     try {
-      const res = await fetch(msgEvent.attachment.url);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(msgEvent.attachment.url, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         return await res.json();
       }
@@ -4277,6 +4529,15 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
           localSlot.endTime = p.endTime !== undefined ? p.endTime : localSlot.endTime;
           localSlot.durationMinutes = p.durationMinutes !== undefined ? p.durationMinutes : localSlot.durationMinutes;
           localSlot.accumulatedMs = p.accumulatedMs !== undefined ? p.accumulatedMs : localSlot.accumulatedMs;
+          if (p.restMinutes !== undefined) localSlot.restMinutes = p.restMinutes;
+          if (p.restAccumulatedMs !== undefined) localSlot.restAccumulatedMs = p.restAccumulatedMs;
+          if (p.timerStatus === 'paused') {
+            localSlot.lastPauseTimestamp = (p.lastPauseTimestamp !== undefined && p.lastPauseTimestamp !== null)
+              ? Number(p.lastPauseTimestamp)
+              : (Number(msg.ts) || Date.now());
+          } else if (p.timerStatus === 'running' || p.timerStatus === 'idle' || p.timerStatus === 'ended') {
+            localSlot.lastPauseTimestamp = null;
+          }
           // 關鍵：保留原裝置按下開始/繼續時的真實毫秒時間戳，絕不用收到訊息的當下時間覆蓋！
           localSlot.lastResumeTimestamp = (p.timerStatus === 'running')
             ? (Number(p.lastResumeTimestamp) || Number(msg.ts) || Date.now())

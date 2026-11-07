@@ -1930,7 +1930,48 @@ body {
 .quick-today-stat {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.quick-stat-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rest-stat-line .quick-stat-val {
+  color: #4D8067;
+  font-size: 14.5px;
+}
+
+[data-theme="dark"] .rest-stat-line .quick-stat-val {
+  color: #8ED4B0;
+}
+
+.rest-badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #3B6B54;
+  background: #E8F4EE;
+  border: 1px solid #BCE0CD;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .rest-badge {
+  color: #8ED4B0;
+  background: #1C3328;
+  border-color: #2D5240;
+}
+
+.daily-live-clock.rest-mode {
+  color: #4D8067 !important;
+}
+
+[data-theme="dark"] .daily-live-clock.rest-mode {
+  color: #8ED4B0 !important;
 }
 
 .quick-stat-label {

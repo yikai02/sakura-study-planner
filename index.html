@@ -32,7 +32,7 @@
       }).catch(function() {});
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=20261107_v3" />
+  <link rel="stylesheet" href="style.css?v=20261107_v4" />
 </head>
 <body>
 
@@ -134,8 +134,14 @@
             <button id="quickSwitchDayBtn" class="btn btn-xs btn-subtle" type="button" title="切換選取的日期">切換日期 ▾</button>
           </div>
           <div class="quick-today-stat">
-            <span class="quick-stat-label">今日累計專注時長</span>
-            <span class="quick-stat-val" id="quickTodayTotalTime">0小時 0分</span>
+            <div class="quick-stat-line">
+              <span class="quick-stat-label">今日專注：</span>
+              <span class="quick-stat-val" id="quickTodayTotalTime">0小時 0分</span>
+            </div>
+            <div class="quick-stat-line rest-stat-line">
+              <span class="quick-stat-label">☕ 累計休息：</span>
+              <span class="quick-stat-val" id="quickTodayRestTime">0分</span>
+            </div>
           </div>
         </div>
 
@@ -251,8 +257,12 @@
               <span class="sum-val" id="dailyDoneRate">0%</span>
             </div>
             <div class="daily-sum-box">
-              <span class="sum-label">今日總讀書時間</span>
+              <span class="sum-label">今日專注總時長</span>
               <span class="sum-val" id="dailyTotalTime">0小時 0分</span>
+            </div>
+            <div class="daily-sum-box">
+              <span class="sum-label">☕ 今日累計休息</span>
+              <span class="sum-val" id="dailyTotalRestTime" style="color:var(--text-secondary);">0分</span>
             </div>
           </div>
         </div>
@@ -734,6 +744,6 @@
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261107_v3"></script>
+  <script src="app.js?v=20261107_v4"></script>
 </body>
 </html>
