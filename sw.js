@@ -2,7 +2,7 @@
    小櫻讀書計劃表 🌸 Service Worker (PWA 離線快取與加速服務)
    ========================================================================== */
 
-const CACHE_NAME = 'sakura-study-v2.2.2';
+const CACHE_NAME = 'sakura-study-v2.2.4';
 const STATIC_ASSETS = [
   './',
   'index.html',

@@ -4103,6 +4103,7 @@ function setupEventListeners() {
         showToast(`已更換背景看板：${item.title || ''}`);
         if (isRoomConnected && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: appState.updatedAt });
+          broadcastFullStateToRoom();
         }
       }
     });
@@ -4124,28 +4125,72 @@ function setupEventListeners() {
       showToast('🎨 已成功套用自訂圖片背板！');
       if (isRoomConnected && !isReceivingRemoteUpdate) {
         broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: appState.updatedAt });
+        broadcastFullStateToRoom();
       }
+    });
+  }
+
+  /**
+   * 壓縮上傳之首頁看板圖片為輕量 JPEG 格式（約 20KB~35KB），確保跨裝置推播與即時雲端同步不超量
+   */
+  function compressCoverImageFile(file, maxWidth = 1000, maxHeight = 360, quality = 0.74) {
+    return new Promise((resolve, reject) => {
+      if (!file) return reject(new Error('未選擇圖片檔案'));
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('讀取圖片檔案失敗'));
+      reader.onload = (evt) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('解析圖片檔案失敗'));
+        img.onload = () => {
+          let w = img.width || 1000;
+          let h = img.height || 360;
+          const scale = Math.min(maxWidth / w, maxHeight / h, 1);
+          const targetW = Math.max(1, Math.round(w * scale));
+          const targetH = Math.max(1, Math.round(h * scale));
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject(new Error('Canvas 繪圖元件無法初始化'));
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(dataUrl);
+        };
+        img.src = evt.target.result;
+      };
+      reader.readAsDataURL(file);
     });
   }
 
   const customCoverFileInput = document.getElementById('customCoverFileInput');
   if (customCoverFileInput) {
-    customCoverFileInput.addEventListener('change', (e) => {
+    customCoverFileInput.addEventListener('change', async (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
-      if (file.size > 2 * 1024 * 1024) {
-        showToast('⚠️ 圖片過大（建議小於 2MB）');
+      if (file.size > 15 * 1024 * 1024) {
+        showToast('⚠️ 圖片過大（請選擇 15MB 以內的圖片）');
         return;
       }
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        appState.homeCover = evt.target.result;
+      showToast('⏳ 正在壓縮並同步背景看板至所有裝置...');
+      try {
+        const compressed = await compressCoverImageFile(file, 1000, 360, 0.74);
+        appState.homeCover = compressed;
         appState.updatedAt = Date.now();
         saveState();
         applyHomeCover();
-        showToast('📁 已成功上傳並套用自訂封面！');
-      };
-      reader.readAsDataURL(file);
+        showToast('📁 已成功上傳並同步自訂封面至所有裝置！');
+        if (isRoomConnected && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: appState.updatedAt });
+          broadcastFullStateToRoom();
+        }
+      } catch (err) {
+        console.error('Cover upload compression error:', err);
+        showToast('⚠️ 圖片處理失敗，請重試');
+      }
     });
   }
 
@@ -5334,6 +5379,8 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
     renderFullDashboard();
     renderQuickTimerView();
     renderDailyPlanView();
+    renderHomeView();
+    applyHomeCover();
     updateActiveTimerBanner();
     syncScreenWakeLock();
 
@@ -5495,6 +5542,9 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
         appState.homeCover = p.val;
         applyHomeCover();
         saveState(false, false);
+        if (!isHistoryReplay) {
+          showToast(`🎨 ${escapeHtml(msg.senderName || '跨裝置')} 更新了首頁看板背景！`);
+        }
       }
     } else if (p.kind === 'goal') {
       if (!appState.goals[p.subj]) appState.goals[p.subj] = {};

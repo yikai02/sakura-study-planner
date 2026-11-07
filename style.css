@@ -1,69 +1,69 @@
 :root {
-  /* Japanese Soft Sakura & Warm Gray-White Palette */
-  --bg-main: #FAF7F5;
-  --bg-card: #FFFFFF;
-  --bg-subtle: #F4EFEA;
-  --bg-sakura-tint: #FDF6F7;
-  --bg-sakura-soft: #FCECEF;
-  --bg-header: rgba(255, 255, 255, 0.88);
+  /* Japanese Soft Wabi-Sabi Stationery Palette (文青和諧日系色系) */
+  --bg-main: #FAF8F5;
+  --bg-card: #FDFCFA;
+  --bg-subtle: #F5F1EB;
+  --bg-sakura-tint: #FAF3F4;
+  --bg-sakura-soft: #F5EAEB;
+  --bg-header: rgba(250, 248, 245, 0.92);
 
-  --sakura-primary: #DF768B;
-  --sakura-hover: #CC5F75;
-  --sakura-light: #F7D6DD;
-  --sakura-border: #EED5DB;
-  --sakura-deep: #A64458;
+  --sakura-primary: #D97288;
+  --sakura-hover: #C55E74;
+  --sakura-light: #F4D3DA;
+  --sakura-border: #E8D2D7;
+  --sakura-deep: #963D50;
 
-  --text-primary: #3A3335;
-  --text-secondary: #6E6568;
-  --text-muted: #9E9497;
+  --text-primary: #342E30;
+  --text-secondary: #6A6265;
+  --text-muted: #988F93;
 
-  --border-light: #EAE3DF;
-  --border-medium: #DDD3CE;
+  --border-light: #ECE5DE;
+  --border-medium: #DDD6CF;
 
-  /* Subject Tag Colors (Soft Japanese Tones) */
-  --subj-micro-bg: #FDE8EC;
-  --subj-micro-text: #B84A62;
-  --subj-micro-border: #F5C2CE;
+  /* Subject Tag Colors (Soft Harmonious Japanese Stationery Tones) */
+  --subj-micro-bg: #FAF0F2;
+  --subj-micro-text: #B2465C;
+  --subj-micro-border: #F0C7D0;
 
-  --subj-macro-bg: #FCE3D8;
-  --subj-macro-text: #B55435;
-  --subj-macro-border: #F2BFA9;
+  --subj-macro-bg: #FAF0EB;
+  --subj-macro-text: #AC5035;
+  --subj-macro-border: #EFC5B2;
 
-  --subj-econ-bg: #F9E0E8;
-  --subj-econ-text: #9E3B5A;
-  --subj-econ-border: #EBB5C6;
+  --subj-econ-bg: #F7EDF1;
+  --subj-econ-text: #963853;
+  --subj-econ-border: #E7BDCB;
 
-  --subj-stat-bg: #E1EDF7;
-  --subj-stat-text: #36648B;
-  --subj-stat-border: #B9D4EC;
+  --subj-stat-bg: #EEF4F9;
+  --subj-stat-text: #376388;
+  --subj-stat-border: #C2D8EC;
 
-  --subj-fin-bg: #E3F1E8;
-  --subj-fin-text: #387350;
-  --subj-fin-border: #B8DEC6;
+  --subj-fin-bg: #EFF6F1;
+  --subj-fin-text: #366E4E;
+  --subj-fin-border: #C2DEC9;
 
-  --subj-eng-bg: #EFE6F7;
-  --subj-eng-text: #68498C;
-  --subj-eng-border: #D4C0E8;
+  --subj-eng-bg: #F3EFF7;
+  --subj-eng-text: #664A86;
+  --subj-eng-border: #D6C8E4;
 
-  --subj-class-bg: #FDF0D5;
-  --subj-class-text: #94681D;
-  --subj-class-border: #F2D69E;
+  --subj-class-bg: #FAF5EB;
+  --subj-class-text: #8E6523;
+  --subj-class-border: #EBDCB8;
 
-  --subj-other-bg: #ECEAE8;
-  --subj-other-text: #5C5552;
-  --subj-other-border: #D5D0CC;
+  --subj-other-bg: #F0ECE8;
+  --subj-other-text: #595350;
+  --subj-other-border: #D8D2CD;
 
   /* Status Colors */
-  --timer-running: #D9536F;
-  --timer-running-bg: #FFF0F3;
-  --timer-paused: #D98A3C;
-  --timer-paused-bg: #FFF7ED;
-  --timer-done: #4E8C6F;
-  --timer-done-bg: #EFF8F3;
+  --timer-running: #D44E6A;
+  --timer-running-bg: #FAF0F2;
+  --timer-paused: #CF823A;
+  --timer-paused-bg: #FAF4EB;
+  --timer-done: #4A8569;
+  --timer-done-bg: #EFF6F1;
 
-  --shadow-sm: 0 2px 8px rgba(58, 51, 53, 0.04);
-  --shadow-md: 0 6px 20px rgba(58, 51, 53, 0.06);
-  --shadow-lg: 0 12px 32px rgba(166, 68, 88, 0.10);
+  --shadow-sm: 0 2px 8px rgba(70, 60, 55, 0.04);
+  --shadow-md: 0 6px 20px rgba(70, 60, 55, 0.05);
+  --shadow-lg: 0 12px 32px rgba(150, 61, 80, 0.08);
 
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -357,7 +357,7 @@ body {
 
 .card-header {
   padding: 13px 18px;
-  background: linear-gradient(180deg, var(--bg-sakura-tint) 0%, #FFFFFF 100%);
+  background: var(--bg-subtle);
   border-bottom: 1px solid var(--border-light);
   display: flex;
   align-items: center;
@@ -787,42 +787,42 @@ body {
 }
 
 .plan-table th {
-  background: #F5EFEA;
+  background: #F4EDE6;
   color: var(--text-primary);
   font-weight: 700;
   padding: 9px 10px;
-  border-bottom: 1.5px solid var(--border-medium);
+  border-bottom: 1px solid var(--border-medium);
   border-right: 1px solid var(--border-light);
   text-align: center;
   white-space: nowrap;
 }
 
 .plan-table tr.sub-header th {
-  background: #FAF6F3;
+  background: #F8F3ED;
   font-size: 11.5px;
   font-weight: 600;
   color: var(--text-secondary);
   padding: 6px 8px;
-  border-bottom: 2px solid var(--sakura-border);
+  border-bottom: 1px solid var(--border-medium);
 }
 
 .plan-table th.slot-header-morning {
-  background: #FDF2F4;
-  color: #9E3B5A;
+  background: #FAF0F2;
+  color: #9A3955;
 }
 
 .plan-table th.slot-header-afternoon {
-  background: #F4F7FC;
-  color: #36648B;
+  background: #EFF3F9;
+  color: #346086;
 }
 
 .plan-table th.slot-header-evening {
-  background: #F5F1FA;
-  color: #5C437A;
+  background: #F4EFF8;
+  color: #573E75;
 }
 
 .plan-table th.summary-header {
-  background: #F9EFEF;
+  background: #F6EFEF;
   color: var(--sakura-deep);
 }
 
@@ -831,24 +831,24 @@ body {
   border-bottom: 1px solid var(--border-light);
   border-right: 1px solid var(--border-light);
   vertical-align: top;
-  background: #FFFFFF;
+  background: var(--bg-card);
   transition: background-color 0.12s;
 }
 
 .plan-table tbody tr:nth-child(even) td {
-  background: #FDFCFB;
+  background: #FAF7F2;
 }
 
 .plan-table tbody tr:hover td {
-  background: #FFF8F9;
+  background: #F6F0EB;
 }
 
 .plan-table tbody tr.row-active-timer td {
-  background: #FFF2F5 !important;
+  background: #FAF0F2 !important;
 }
 
 .plan-table tbody tr.row-complete-all td.summary-cell {
-  background: #F2FAF5;
+  background: #EEF6F1;
 }
 
 /* Sticky Date & Day columns on wide scroll */
@@ -868,7 +868,7 @@ body {
   z-index: 10;
   min-width: 78px;
   max-width: 78px;
-  border-right: 2px solid var(--border-medium);
+  border-right: 1px solid var(--border-medium);
 }
 
 .plan-table thead th.sticky-col-1,
@@ -1047,7 +1047,7 @@ body {
 /* Period Slot Block Inside Table Cell */
 .slot-cell {
   min-width: 315px;
-  border-right: 2px solid var(--border-medium) !important;
+  border-right: 1px solid var(--border-medium) !important;
 }
 
 .slot-card {
@@ -1085,8 +1085,8 @@ body {
   border-radius: 6px;
   font-size: 12px;
   font-weight: 700;
-  border: 1px solid var(--border-medium);
-  background-color: #FFFFFF;
+  border: 1px solid var(--border-light);
+  background-color: #FAF7F2;
   color: var(--text-primary);
   cursor: pointer;
   min-width: 72px;
@@ -1095,6 +1095,7 @@ body {
 .subject-select:focus {
   outline: none;
   border-color: var(--sakura-primary);
+  background-color: var(--bg-card);
 }
 
 /* Dynamic Subject Colors on Select */
@@ -1115,11 +1116,12 @@ body {
   border-radius: 5px;
   font-size: 12px;
   color: var(--text-primary);
-  background: #FFFFFF;
+  background: #FAF7F2;
 }
 
 .task-input:focus {
   border-color: var(--sakura-primary);
+  background: var(--bg-card);
   outline: none;
 }
 
@@ -1259,11 +1261,12 @@ body {
   font-family: "SF Mono", monospace;
   text-align: center;
   color: var(--text-primary);
-  background: #FFFFFF;
+  background: #FAF7F2;
 }
 
 .time-hm-input:focus {
   border-color: var(--sakura-primary);
+  background: var(--bg-card);
   outline: none;
 }
 
@@ -1288,13 +1291,13 @@ body {
   font-weight: 700;
   text-align: center;
   color: var(--sakura-deep);
-  background: #FFF9FA;
+  background: #FAF3F4;
 }
 
 .dur-num-input:focus {
   border-color: var(--sakura-primary);
   outline: none;
-  background: #FFFFFF;
+  background: var(--bg-card);
 }
 
 /* Daily Summary Cells (Rightmost 3 columns) */
@@ -1990,9 +1993,9 @@ body {
 .quick-timer-card {
   text-align: center;
   padding: 36px 20px;
-  background: linear-gradient(180deg, #FFFFFF 0%, #FFFDFE 100%);
-  border: 1.5px solid var(--sakura-border);
-  box-shadow: var(--shadow-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
   border-radius: var(--radius-lg);
 }
 
@@ -2082,19 +2085,20 @@ body {
   justify-content: center;
   padding: 16px 12px;
   border-radius: 14px;
-  border: 1.5px solid var(--border-light);
-  background: #FFFFFF;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-sm);
   text-align: center;
   user-select: none;
 }
 
 .quick-subj-btn:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
   border-color: var(--sakura-primary);
+  background: #FAF3F4;
 }
 
 .quick-subj-btn:active {
@@ -2133,7 +2137,7 @@ body {
 }
 
 .quick-slot-card {
-  background: #FAF7F5;
+  background: #F6F1EB;
   border: 1px solid var(--border-light);
   border-radius: 12px;
   padding: 12px 14px;
@@ -2141,9 +2145,9 @@ body {
 }
 
 .quick-slot-card.is-active {
-  background: #FFF5F7;
+  background: #FAF3F4;
   border-color: var(--sakura-primary);
-  box-shadow: 0 2px 8px rgba(223, 118, 139, 0.15);
+  box-shadow: 0 2px 8px rgba(217, 114, 136, 0.12);
 }
 
 .quick-slot-header {
@@ -2188,8 +2192,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #FFFFFF;
-  border: 1.5px solid var(--sakura-border);
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   padding: 12px 18px;
   box-shadow: var(--shadow-sm);
@@ -2241,17 +2245,19 @@ body {
 .daily-calendar-input {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid var(--border-medium);
+  border: 1px solid var(--border-light);
   border-radius: 8px;
   font-size: 14px;
-  background: #FFFDFC;
-  transition: border-color 0.2s ease;
+  background: #FAF7F2;
+  color: var(--text-primary);
+  transition: all 0.2s ease;
 }
 
 .daily-calendar-input:focus {
   outline: none;
   border-color: var(--sakura-primary);
-  box-shadow: 0 0 0 3px rgba(223, 118, 139, 0.15);
+  background: var(--bg-card);
+  box-shadow: 0 0 0 3px rgba(217, 114, 136, 0.12);
 }
 
 /* 3 Detailed Slots Container */
@@ -2262,8 +2268,8 @@ body {
 }
 
 .daily-slot-card {
-  background: #FFFFFF;
-  border: 1.5px solid var(--border-light);
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
@@ -2272,12 +2278,12 @@ body {
 
 .daily-slot-card.completed {
   border-color: #BDE6CC;
-  background: #FAFCFA;
+  background: #F8FCF9;
 }
 
 .daily-slot-card.running {
   border-color: var(--sakura-primary);
-  box-shadow: 0 3px 12px rgba(223, 118, 139, 0.2);
+  box-shadow: 0 3px 12px rgba(217, 114, 136, 0.16);
 }
 
 .daily-slot-card-header {
@@ -2285,7 +2291,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 12px 18px;
-  background: linear-gradient(135deg, #FFFDFD 0%, #FAF5F6 100%);
+  background: #F7F2EC;
   border-bottom: 1px solid var(--border-light);
 }
 
@@ -2402,65 +2408,65 @@ body {
 html[data-theme="dark"],
 body[data-theme="dark"],
 [data-theme="dark"] {
-  --bg-main: #09090B;
-  --bg-card: #111114;
-  --bg-subtle: #18181C;
-  --bg-sakura-tint: #16161A;
-  --bg-sakura-soft: #1F1F24;
-  --bg-header: rgba(9, 9, 11, 0.95);
+  --bg-main: #121215;
+  --bg-card: #18181D;
+  --bg-subtle: #202026;
+  --bg-sakura-tint: #1C1C22;
+  --bg-sakura-soft: #24242C;
+  --bg-header: rgba(18, 18, 21, 0.95);
 
-  --sakura-primary: #F4F4F6;
+  --sakura-primary: #ECECEE;
   --sakura-hover: #FFFFFF;
-  --sakura-light: #27272A;
-  --sakura-border: #2E2E34;
-  --sakura-deep: #FFFFFF;
+  --sakura-light: #2A2A33;
+  --sakura-border: #32323D;
+  --sakura-deep: #ECECEE;
 
-  --text-primary: #FAFAFA;
-  --text-secondary: #A1A1AA;
-  --text-muted: #71717A;
+  --text-primary: #F3F3F5;
+  --text-secondary: #A0A0AA;
+  --text-muted: #72727D;
 
-  --border-light: #222226;
-  --border-medium: #323238;
+  --border-light: #26262F;
+  --border-medium: #363642;
 
   /* Monochrome & Muted Architectural Subject Tags in Antigravity Dark Theme */
-  --subj-micro-bg: #1C1C21;
+  --subj-micro-bg: #201E22;
   --subj-micro-text: #E4E4E7;
   --subj-micro-border: #3F3F46;
 
-  --subj-macro-bg: #1F1F24;
+  --subj-macro-bg: #222022;
   --subj-macro-text: #D4D4D8;
   --subj-macro-border: #3F3F46;
 
-  --subj-econ-bg: #232329;
+  --subj-econ-bg: #242226;
   --subj-econ-text: #FAFAFA;
   --subj-econ-border: #52525B;
 
-  --subj-stat-bg: #18222D;
+  --subj-stat-bg: #1A222B;
   --subj-stat-text: #CBD5E1;
   --subj-stat-border: #334155;
 
-  --subj-fin-bg: #16241E;
+  --subj-fin-bg: #18241F;
   --subj-fin-text: #D1FAE5;
   --subj-fin-border: #2D4A3E;
 
-  --subj-class-bg: #242118;
+  --subj-class-bg: #24221A;
   --subj-class-text: #E5E0D0;
   --subj-class-border: #444034;
 
-  --subj-other-bg: #18181B;
+  --subj-other-bg: #1C1C20;
   --subj-other-text: #A1A1AA;
-  --subj-other-border: #27272A;
+  --subj-other-border: #2A2A30;
 
-  --timer-running: #FAFAFA;
-  --timer-running-bg: #27272A;
+  --timer-running: #ECECEE;
+  --timer-running-bg: #2A2A33;
   --timer-paused: #D4D4D8;
-  --timer-paused-bg: #1F1F23;
+  --timer-paused-bg: #22222A;
   --timer-done: #A1A1AA;
-  --timer-done-bg: #18181C;
+  --timer-done-bg: #1C1C22;
 
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.6);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.7);
-  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.85);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.65);
 
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -2473,12 +2479,12 @@ body[data-theme="dark"],
 [data-theme="dark"] body {
   font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", sans-serif;
   letter-spacing: -0.01em;
-  background-color: #09090B !important;
+  background-color: #121215 !important;
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.018) 1px, transparent 1px) !important;
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px) !important;
   background-size: 40px 40px !important;
-  color: #FAFAFA !important;
+  color: #F3F3F5 !important;
 }
 
 /* 極簡黑主題隱藏所有櫻花花瓣與花瓣按鈕 */
@@ -2523,18 +2529,76 @@ body[data-theme="dark"],
 }
 
 [data-theme="dark"] .card {
-  background: #111114 !important;
-  border-color: #27272A !important;
+  background: var(--bg-card) !important;
+  border-color: var(--border-light) !important;
 }
 
 [data-theme="dark"] .card-header {
-  background: #16161A !important;
-  border-bottom-color: #27272A !important;
+  background: var(--bg-subtle) !important;
+  border-bottom-color: var(--border-light) !important;
 }
 
 [data-theme="dark"] .quick-timer-card {
-  background: #111114 !important;
-  border-color: #27272A !important;
+  background: var(--bg-card) !important;
+  border-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .quick-subj-btn {
+  background: var(--bg-card) !important;
+  border-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .quick-slot-card {
+  background: var(--bg-subtle) !important;
+  border-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .quick-rest-panel {
+  background: var(--bg-subtle) !important;
+  border-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .notion-cal-weekdays {
+  background: var(--bg-subtle) !important;
+  border-bottom-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .notion-weekday-cell {
+  border-right-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .notion-cal-cell {
+  background: var(--bg-card) !important;
+  border-right-color: var(--border-light) !important;
+  border-bottom-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .notion-cal-cell.outside-month {
+  background: var(--bg-subtle) !important;
+  opacity: 0.8 !important;
+}
+
+[data-theme="dark"] .cal-cell-date-row {
+  border-bottom-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .cal-cell-slot-row {
+  border-bottom-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+[data-theme="dark"] .daily-nav-card {
+  background: var(--bg-card) !important;
+  border-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .daily-slot-card {
+  background: var(--bg-card) !important;
+  border-color: var(--border-light) !important;
+}
+
+[data-theme="dark"] .daily-slot-card-header {
+  background: var(--bg-subtle) !important;
+  border-bottom-color: var(--border-light) !important;
 }
 
 [data-theme="dark"] .modal-content {
@@ -3137,7 +3201,7 @@ body[data-theme="dark"] .theme-switch-pill.active,
 .quick-rest-panel {
   margin-top: 18px;
   padding: 14px 18px;
-  background: var(--bg-subtle);
+  background: #F6F1EB;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   display: grid;
@@ -3309,8 +3373,8 @@ body[data-theme="dark"] .theme-switch-pill.active,
 .notion-cal-weekdays {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  border-bottom: 1px solid var(--border-medium);
-  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-light);
+  background: #F5EFE9;
 }
 
 .notion-weekday-cell {
@@ -3333,8 +3397,8 @@ body[data-theme="dark"] .theme-switch-pill.active,
 
 /* 每一天欄位：上方第一格為日期欄，下方由 3 條橫線隔出 3 個工作輸入格 */
 .notion-cal-cell {
-  border-right: 1px solid var(--border-medium);
-  border-bottom: 1px solid var(--border-medium);
+  border-right: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
   background: var(--bg-card);
   display: flex;
   flex-direction: column;
@@ -3347,8 +3411,8 @@ body[data-theme="dark"] .theme-switch-pill.active,
 }
 
 .notion-cal-cell.outside-month {
-  background: var(--bg-subtle);
-  opacity: 0.72;
+  background: #F6F2EC;
+  opacity: 0.88;
 }
 
 .notion-cal-cell.is-today {
@@ -3362,7 +3426,7 @@ body[data-theme="dark"] .theme-switch-pill.active,
   align-items: center;
   padding: 6px 8px;
   min-height: 36px;
-  border-bottom: 1.5px solid var(--border-medium);
+  border-bottom: 1px solid var(--border-light);
   cursor: pointer;
   background: transparent;
   transition: background 0.15s ease;
@@ -3370,7 +3434,7 @@ body[data-theme="dark"] .theme-switch-pill.active,
 }
 
 .cal-cell-date-row:hover {
-  background: var(--bg-sakura-soft);
+  background: #F8F2EC;
 }
 
 .cal-date-left-meta {
@@ -3386,7 +3450,7 @@ body[data-theme="dark"] .theme-switch-pill.active,
   font-weight: 700;
   padding: 1px 5px;
   border-radius: 4px;
-  background: var(--bg-subtle);
+  background: #F2ECE5;
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -3432,7 +3496,7 @@ body[data-theme="dark"] .theme-switch-pill.active,
   gap: 4px;
   padding: 3px 6px;
   min-height: 36px;
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 1px solid #F1EBE4;
   background: transparent;
 }
 
@@ -3441,7 +3505,7 @@ body[data-theme="dark"] .theme-switch-pill.active,
 }
 
 .cal-cell-slot-row:focus-within {
-  background: var(--bg-sakura-tint);
+  background: #FAF3F0;
 }
 
 .cal-slot-tag {
@@ -3449,7 +3513,7 @@ body[data-theme="dark"] .theme-switch-pill.active,
   font-weight: 700;
   padding: 1px 5px;
   border-radius: 3px;
-  background: var(--bg-subtle);
+  background: #F3EDE7;
   color: var(--text-secondary);
   border: 1px solid var(--border-light);
   white-space: nowrap;
