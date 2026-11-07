@@ -16,6 +16,21 @@
   <link rel="shortcut icon" href="icons/icon-192.png" />
 
   <script>
+    // 立即依據 localStorage 套用主題，防止畫面閃爍並確保離線/秒開時主題正確
+    (function() {
+      try {
+        var raw = localStorage.getItem('sakura_planner_settings_v1');
+        if (raw) {
+          var s = JSON.parse(raw);
+          if (s && s.theme === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            var meta = document.getElementById('themeColorMeta');
+            if (meta) meta.content = '#09090B';
+          }
+        }
+      } catch (e) {}
+    })();
+
     // 🌸 強制反註冊舊版 Service Worker 並清除所有舊快取，確保永遠取得最新版本程式碼
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then(function(regs) {
@@ -32,7 +47,7 @@
       }).catch(function() {});
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=20261108_v2" />
+  <link rel="stylesheet" href="style.css?v=20261108_v3" />
 </head>
 <body>
 
@@ -95,10 +110,10 @@
     <div class="top-actions">
       <!-- Two-Theme Switcher (Sakura vs Antigravity Dark) -->
       <div class="theme-dual-switcher" id="themeDualSwitcher" role="group" aria-label="主題風格選擇">
-        <button type="button" class="theme-switch-pill active" data-theme-choice="sakura" data-theme-val="sakura" id="themeBtnSakura" title="櫻花粉白主題">
+        <button type="button" class="theme-switch-pill active" data-theme-choice="sakura" data-theme-val="sakura" id="themeBtnSakura" title="櫻花粉白主題" onclick="window.switchThemeMode && window.switchThemeMode('sakura')">
           🌸 櫻花
         </button>
-        <button type="button" class="theme-switch-pill" data-theme-choice="dark" data-theme-val="dark" id="themeBtnDark" title="Antigravity 深色極簡風">
+        <button type="button" class="theme-switch-pill" data-theme-choice="dark" data-theme-val="dark" id="themeBtnDark" title="Antigravity 深色極簡風" onclick="window.switchThemeMode && window.switchThemeMode('dark')">
           🖤 極簡黑
         </button>
       </div>
@@ -959,6 +974,6 @@
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261108_v2"></script>
+  <script src="app.js?v=20261108_v3"></script>
 </body>
 </html>

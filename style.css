@@ -2399,13 +2399,15 @@ body {
    🖤 Antigravity 深色極簡風主題 (Monochrome Black / White / Grey, No Sakura)
    ========================================================================== */
 
+html[data-theme="dark"],
+body[data-theme="dark"],
 [data-theme="dark"] {
   --bg-main: #09090B;
   --bg-card: #111114;
   --bg-subtle: #18181C;
   --bg-sakura-tint: #16161A;
   --bg-sakura-soft: #1F1F24;
-  --bg-header: rgba(9, 9, 11, 0.92);
+  --bg-header: rgba(9, 9, 11, 0.95);
 
   --sakura-primary: #F4F4F6;
   --sakura-hover: #FFFFFF;
@@ -2466,14 +2468,17 @@ body {
   --radius-xl: 10px;
 }
 
+html[data-theme="dark"] body,
+body[data-theme="dark"],
 [data-theme="dark"] body {
   font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", sans-serif;
   letter-spacing: -0.01em;
-  background-color: #09090B;
+  background-color: #09090B !important;
   background-image:
     linear-gradient(to right, rgba(255, 255, 255, 0.018) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.018) 1px, transparent 1px) !important;
+  background-size: 40px 40px !important;
+  color: #FAFAFA !important;
 }
 
 /* 極簡黑主題隱藏所有櫻花花瓣與花瓣按鈕 */
@@ -2484,23 +2489,67 @@ body {
 }
 
 [data-theme="dark"] .sakura-logo {
-  background: #18181C;
-  border: 1px solid #323238;
-  color: #FAFAFA;
-  box-shadow: none;
+  background: #18181C !important;
+  border: 1px solid #323238 !important;
+  color: #FAFAFA !important;
+  box-shadow: none !important;
 }
 
 [data-theme="dark"] .brand-badge {
-  background: #18181C;
-  color: #D4D4D8;
-  border: 1px solid #323238;
+  background: #18181C !important;
+  color: #D4D4D8 !important;
+  border: 1px solid #323238 !important;
+}
+
+[data-theme="dark"] .main-tabs-nav {
+  background: #141418 !important;
+  border: 1px solid #27272A !important;
+}
+
+[data-theme="dark"] .tab-nav-btn {
+  color: #A1A1AA !important;
+}
+
+[data-theme="dark"] .tab-nav-btn:hover {
+  color: #FAFAFA !important;
+  background: #1F1F24 !important;
 }
 
 [data-theme="dark"] .tab-nav-btn.active {
-  background: #FAFAFA;
-  color: #09090B;
-  border-color: #FAFAFA;
-  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.12);
+  background: #FAFAFA !important;
+  color: #09090B !important;
+  border-color: #FAFAFA !important;
+  box-shadow: 0 2px 10px rgba(255, 255, 255, 0.12) !important;
+}
+
+[data-theme="dark"] .card {
+  background: #111114 !important;
+  border-color: #27272A !important;
+}
+
+[data-theme="dark"] .card-header {
+  background: #16161A !important;
+  border-bottom-color: #27272A !important;
+}
+
+[data-theme="dark"] .quick-timer-card {
+  background: #111114 !important;
+  border-color: #27272A !important;
+}
+
+[data-theme="dark"] .modal-content {
+  background: #111114 !important;
+  border-color: #2E2E34 !important;
+}
+
+[data-theme="dark"] .modal-header {
+  background: #16161A !important;
+  border-bottom-color: #27272A !important;
+}
+
+[data-theme="dark"] .settings-section {
+  background: #141418 !important;
+  border-color: #27272A !important;
 }
 
 [data-theme="dark"] .btn-primary,
@@ -2515,17 +2564,17 @@ body {
 }
 
 [data-theme="dark"] .btn-cloud {
-  background: #18181C;
-  color: #FAFAFA;
-  border-color: #323238;
+  background: #18181C !important;
+  color: #FAFAFA !important;
+  border-color: #323238 !important;
 }
 
 [data-theme="dark"] input,
 [data-theme="dark"] select,
 [data-theme="dark"] textarea {
-  color: var(--text-primary);
-  background-color: #141418;
-  border-color: var(--border-medium);
+  color: var(--text-primary) !important;
+  background-color: #141418 !important;
+  border-color: var(--border-medium) !important;
 }
 
 [data-theme="dark"] .stat-table th,
@@ -2550,6 +2599,8 @@ body {
   border-radius: 999px;
   padding: 2px;
   gap: 2px;
+  position: relative;
+  z-index: 100;
 }
 
 .theme-switch-pill {
@@ -2560,9 +2611,12 @@ body {
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 999px;
-  cursor: pointer;
+  cursor: pointer !important;
+  pointer-events: auto !important;
   transition: all 0.18s ease;
   white-space: nowrap;
+  position: relative;
+  z-index: 101;
 }
 
 .theme-switch-pill.active {
@@ -2571,9 +2625,11 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+html[data-theme="dark"] .theme-switch-pill.active,
+body[data-theme="dark"] .theme-switch-pill.active,
 [data-theme="dark"] .theme-switch-pill.active {
-  background: #FAFAFA;
-  color: #09090B;
+  background: #FAFAFA !important;
+  color: #09090B !important;
 }
 
 /* ==========================================================================

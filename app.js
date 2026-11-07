@@ -137,6 +137,9 @@ function applyTheme() {
   const root = document.documentElement;
   const effective = appSettings.theme === 'dark' ? 'dark' : 'sakura';
   root.setAttribute('data-theme', effective);
+  if (document.body) {
+    document.body.setAttribute('data-theme', effective);
+  }
 
   const meta = document.getElementById('themeColorMeta');
   if (meta) {
@@ -185,6 +188,26 @@ function updateAtmosphereUi() {
   if (soundSel) soundSel.value = appSettings.sound;
   const petalSel = document.getElementById('settingPetalsSelect');
   if (petalSel) petalSel.value = appSettings.petals;
+}
+
+function switchThemeMode(themeChoice) {
+  try {
+    const isDark = (themeChoice === 'dark');
+    appSettings.theme = isDark ? 'dark' : 'sakura';
+    if (appState && (!appState.homeCover || appState.homeCover === 'cover-sakura' || appState.homeCover === 'cover-antigravity')) {
+      appState.homeCover = isDark ? 'cover-antigravity' : 'cover-sakura';
+      appState.updatedAt = Date.now();
+      saveState(false, false);
+    }
+    saveAppSettings();
+    if (typeof applyHomeCover === 'function') applyHomeCover();
+    showToast(isDark ? '🖤 已切換為 Antigravity 極簡深黑主題' : '🌸 已切換為日系櫻花粉白主題');
+  } catch (err) {
+    console.error('switchThemeMode error:', err);
+  }
+}
+if (typeof window !== 'undefined') {
+  window.switchThemeMode = switchThemeMode;
 }
 
 /* ==========================================================================
@@ -1760,6 +1783,8 @@ function renderAdvancedStatTable(stats) {
 
 let currentActiveTab = 'home';
 let currentActiveDayCountdown = 80;
+let homeActiveDayCountdown = null;
+let calendarEditorDayKey = null;
 let currentCalendarMonth = '2026-11';
 let isCalendarDayEditorOpen = false;
 
@@ -1771,30 +1796,47 @@ function getTodayIsoString() {
   return `${y}-${m}-${d}`;
 }
 
-function initCurrentActiveDay() {
-  const now = new Date();
-  const m = now.getMonth() + 1;
-  const d = now.getDate();
-  const match = appState.days.find(item => item.dateDisplay === `${m}月${d}日`);
-  if (match) {
-    currentActiveDayCountdown = match.dayCountdown;
-  } else {
-    currentActiveDayCountdown = 80;
-  }
-  const ym = `${now.getFullYear()}-${String(m).padStart(2, '0')}`;
-  if (['2026-11', '2026-12', '2027-01'].includes(ym)) {
-    currentCalendarMonth = ym;
-  } else {
-    currentCalendarMonth = '2026-11';
-  }
-}
-
 function getTodayDayCountdown() {
   const now = new Date();
   const m = now.getMonth() + 1;
   const d = now.getDate();
   const match = appState.days.find(item => item.dateDisplay === `${m}月${d}日`);
   return match ? match.dayCountdown : 80;
+}
+
+function getHomeActiveDay() {
+  if (homeActiveDayCountdown) {
+    const d = findDayByKey(homeActiveDayCountdown);
+    if (d) return d;
+  }
+  const todayCd = getTodayDayCountdown();
+  return findDayByKey(todayCd) || appState.days[0];
+}
+
+function getCalendarEditorDay() {
+  if (calendarEditorDayKey) {
+    const d = findDayByKey(calendarEditorDayKey);
+    if (d) return d;
+  }
+  const todayCd = getTodayDayCountdown();
+  return findDayByKey(todayCd) || appState.days[0];
+}
+
+function initCurrentActiveDay() {
+  const now = new Date();
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  const match = appState.days.find(item => item.dateDisplay === `${m}月${d}日`);
+  currentActiveDayCountdown = match ? match.dayCountdown : 80;
+  homeActiveDayCountdown = currentActiveDayCountdown;
+  calendarEditorDayKey = currentActiveDayCountdown;
+
+  const ym = `${now.getFullYear()}-${String(m).padStart(2, '0')}`;
+  if (['2026-11', '2026-12', '2027-01'].includes(ym)) {
+    currentCalendarMonth = ym;
+  } else {
+    currentCalendarMonth = '2026-11';
+  }
 }
 
 function switchMainTab(tabId) {
@@ -1836,23 +1878,21 @@ function changeDailyPlanDay(targetDayKey) {
     let num = Number(targetDayKey);
     if (num > 80) num = 80;
     if (num < 1) num = 1;
-    currentActiveDayCountdown = num;
+    calendarEditorDayKey = num;
   } else {
-    currentActiveDayCountdown = String(targetDayKey);
+    calendarEditorDayKey = String(targetDayKey);
   }
-  renderHomeView();
-  renderDailyPlanView();
-  renderQuickTimerView();
+  renderDailyPlanView(calendarEditorDayKey);
 }
 
 function openCalendarDayEditor(dayKey) {
-  changeDailyPlanDay(dayKey);
+  calendarEditorDayKey = dayKey;
   isCalendarDayEditorOpen = true;
   const gridView = document.getElementById('calendarMonthGridView');
   const detailView = document.getElementById('calendarDayDetailView');
   if (gridView) gridView.classList.add('hidden');
   if (detailView) detailView.classList.remove('hidden');
-  renderDailyPlanView();
+  renderDailyPlanView(dayKey);
 }
 
 function closeCalendarDayEditor() {
@@ -1896,7 +1936,7 @@ function renderHomeView() {
   if (typeof document === 'undefined' || !appState) return;
   applyHomeCover();
 
-  const day = findDayByKey(currentActiveDayCountdown) || appState.days[0];
+  const day = getHomeActiveDay();
   if (!day) return;
 
   // 1. 日期與即時時鐘、考試倒數計算
@@ -2343,8 +2383,11 @@ function handleQuickSubjectClick(subjectName) {
    第 3 頁子視圖 B：當日行事曆與三時段詳細編輯畫面（點擊 Notion 月曆第一格進入）
    ========================================================================== */
 
-function renderDailyPlanView() {
-  const day = findDayByKey(currentActiveDayCountdown) || appState.days[0];
+function renderDailyPlanView(optionalDayKey) {
+  if (optionalDayKey) {
+    calendarEditorDayKey = optionalDayKey;
+  }
+  const day = getCalendarEditorDay();
   if (!day) return;
 
   const badgeEl = document.getElementById('dailyDayBadge');
@@ -4109,33 +4152,36 @@ function setupEventListeners() {
   const homePrevDayBtn = document.getElementById('homePrevDayBtn');
   if (homePrevDayBtn) {
     homePrevDayBtn.addEventListener('click', () => {
-      if (typeof currentActiveDayCountdown === 'number') {
-        changeDailyPlanDay(currentActiveDayCountdown + 1);
+      const cur = getHomeActiveDay();
+      if (typeof cur.dayCountdown === 'number') {
+        homeActiveDayCountdown = Math.min(80, cur.dayCountdown + 1);
       } else {
-        const d = new Date(currentActiveDayCountdown);
+        const d = new Date(cur.isoDate);
         d.setDate(d.getDate() - 1);
-        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        changeDailyPlanDay(iso);
+        homeActiveDayCountdown = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       }
+      renderHomeView();
     });
   }
   const homeNextDayBtn = document.getElementById('homeNextDayBtn');
   if (homeNextDayBtn) {
     homeNextDayBtn.addEventListener('click', () => {
-      if (typeof currentActiveDayCountdown === 'number') {
-        changeDailyPlanDay(currentActiveDayCountdown - 1);
+      const cur = getHomeActiveDay();
+      if (typeof cur.dayCountdown === 'number') {
+        homeActiveDayCountdown = Math.max(1, cur.dayCountdown - 1);
       } else {
-        const d = new Date(currentActiveDayCountdown);
+        const d = new Date(cur.isoDate);
         d.setDate(d.getDate() + 1);
-        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        changeDailyPlanDay(iso);
+        homeActiveDayCountdown = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       }
+      renderHomeView();
     });
   }
   const homeTodayBtn = document.getElementById('homeTodayBtn');
   if (homeTodayBtn) {
     homeTodayBtn.addEventListener('click', () => {
-      changeDailyPlanDay(getTodayDayCountdown());
+      homeActiveDayCountdown = getTodayDayCountdown();
+      renderHomeView();
     });
   }
 
@@ -4354,44 +4400,50 @@ function setupEventListeners() {
 
   if (dailyPrevDayBtn) {
     dailyPrevDayBtn.addEventListener('click', () => {
-      if (typeof currentActiveDayCountdown === 'number') {
-        changeDailyPlanDay(currentActiveDayCountdown + 1);
+      const cur = getCalendarEditorDay();
+      if (typeof cur.dayCountdown === 'number') {
+        calendarEditorDayKey = Math.min(80, cur.dayCountdown + 1);
       } else {
-        const d = new Date(currentActiveDayCountdown);
+        const d = new Date(cur.isoDate);
         d.setDate(d.getDate() - 1);
-        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        changeDailyPlanDay(iso);
+        calendarEditorDayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       }
+      renderDailyPlanView(calendarEditorDayKey);
     });
   }
   if (dailyNextDayBtn) {
     dailyNextDayBtn.addEventListener('click', () => {
-      if (typeof currentActiveDayCountdown === 'number') {
-        changeDailyPlanDay(currentActiveDayCountdown - 1);
+      const cur = getCalendarEditorDay();
+      if (typeof cur.dayCountdown === 'number') {
+        calendarEditorDayKey = Math.max(1, cur.dayCountdown - 1);
       } else {
-        const d = new Date(currentActiveDayCountdown);
+        const d = new Date(cur.isoDate);
         d.setDate(d.getDate() + 1);
-        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        changeDailyPlanDay(iso);
+        calendarEditorDayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       }
+      renderDailyPlanView(calendarEditorDayKey);
     });
   }
   if (dailyTodayBtn) {
     dailyTodayBtn.addEventListener('click', () => {
-      changeDailyPlanDay(getTodayDayCountdown());
+      calendarEditorDayKey = getTodayDayCountdown();
+      renderDailyPlanView(calendarEditorDayKey);
     });
   }
   if (dailyCalendarInput) {
     dailyCalendarInput.addEventListener('input', (e) => {
-      const day = findDayByKey(currentActiveDayCountdown);
+      const day = getCalendarEditorDay();
       if (!day) return;
       const nowTs = Date.now();
       day.calendar = e.target.value;
       day.calendarUpdatedAt = nowTs;
       appState.updatedAt = nowTs;
       saveState();
-      const homeInp = document.getElementById('homeCalendarMemoInput');
-      if (homeInp && document.activeElement !== homeInp) homeInp.value = day.calendar;
+      const homeDay = getHomeActiveDay();
+      if (homeDay && String(homeDay.dayCountdown) === String(day.dayCountdown)) {
+        const homeInp = document.getElementById('homeCalendarMemoInput');
+        if (homeInp && document.activeElement !== homeInp) homeInp.value = day.calendar;
+      }
       broadcastRoomDeltaDebounced({ kind: 'calendar', day: day.dayCountdown, val: day.calendar, updatedAt: nowTs });
     });
   }
@@ -5832,7 +5884,7 @@ function handleAppWakeOrFocus() {
    啟動應用程式
    ========================================================================== */
 
-document.addEventListener('DOMContentLoaded', () => {
+function bootstrapApp() {
   try {
     loadAppSettings();
     loadState();
@@ -5884,11 +5936,20 @@ document.addEventListener('DOMContentLoaded', () => {
   } catch (err) {
     console.error('App bootstrap error:', err);
   }
+}
+
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrapApp);
+  } else {
+    bootstrapApp();
+  }
+}
 
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261108_v2').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261108_v3').then((reg) => {
         console.log('🌸 PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);
@@ -5959,4 +6020,3 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Cross-tab sync failed:', err);
     }
   });
-});
