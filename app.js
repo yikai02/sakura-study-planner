@@ -1,7 +1,12 @@
 /**
  * 小櫻讀書計劃表 🌸 YPT 計時模式 × Numbers 讀書計劃與統計儀表板
- * 計畫期間：11月1日 (Day 85) ~ 1月24日 (Day 1)，共計 85 天
+ * 計畫期間：11月8日 (Day 80) ~ 1月26日 (Day 1)，共計 80 天
+ * 考程目標：1月26日 研究所正式考試！
  */
+
+const TOTAL_SCHEDULE_DAYS = 80;
+const PLAN_START_DATE_STR = '2026-11-08'; // 明天 11月8日 第一天
+const PLAN_END_DATE_STR = '2027-01-26';   // 1月26日 考試日
 
 const STORAGE_KEY = 'sakura_study_planner_v1';
 const ROOM_STORAGE_KEY = 'sakura_shared_room_v2';
@@ -288,11 +293,11 @@ function getSlotKeyFromStartTime(timeInput = new Date()) {
   }
 }
 
-// 預設三階段設定 (Day 85-61, Day 60-31, Day 30-1)
+// 預設三階段設定 (Day 80-56, Day 55-28, Day 27-1，共 80 天)
 const DEFAULT_PHASES = [
-  { id: 'phase1', name: '第一階段', startDay: 85, endDay: 61 },
-  { id: 'phase2', name: '第二階段', startDay: 60, endDay: 31 },
-  { id: 'phase3', name: '第三階段', startDay: 30, endDay: 1 }
+  { id: 'phase1', name: '第一階段', startDay: 80, endDay: 56 },
+  { id: 'phase2', name: '第二階段', startDay: 55, endDay: 28 },
+  { id: 'phase3', name: '第三階段', startDay: 27, endDay: 1 }
 ];
 
 // 預設小櫻分階段目標內容（參考原 Numbers 目標表並支援自由編輯）
@@ -372,43 +377,9 @@ let isDashboardCollapsed = false;
 let timerIntervalId = null;
 
 /**
- * 使用者歷史讀書進度永久防護備份（保證無論任何裝置、重新整理、甚至本機快取被清空時，皆能 100% 完整還原！）
- * 包含 Day 85 晚上 8480分、下午 889分；Day 79 下午 14:01 財管 96分（已校正歸入下午時段）；Day 76~78 範圍任務
+ * 歷史讀書進度儲存槽（依使用者指示：舊紀錄已全數清空，從 11/8 明天第一天全新開始）
  */
-const RESTORED_USER_DATA = {
-  85: {
-    morning: { subject: '統計', task: '700題＋計量', durationMinutes: 0, accumulatedMs: 0, timerStatus: 'ended', updatedAt: 1794056426829 },
-    afternoon: { subject: '財管', task: '複習 實戰書', startTime: '13:23', durationMinutes: 889, accumulatedMs: 53358297, timerStatus: 'paused', updatedAt: 1793543721194 },
-    evening: { subject: '財管', task: 'Ch11影片完', startTime: '22:35', endTime: '21:00', durationMinutes: 8480, accumulatedMs: 508800000, timerStatus: 'ended', updatedAt: 1794056426829 }
-  },
-  84: {
-    calendar: '回南投',
-    morning: { subject: '其他', task: '坐火車', updatedAt: 1794031241724 },
-    afternoon: { subject: '其他', task: '學校報告', updatedAt: 1794031241724 },
-    evening: { subject: '個經', task: 'Ch5影片', updatedAt: 1794031241724 }
-  },
-  79: {
-    morning: { subject: '統計', task: '700題＋計量', updatedAt: 1794056432761 },
-    // 🌸 關鍵校正：14:01 開始之讀書時間，依規範嚴格歸入「下午時段」！
-    afternoon: { subject: '財管', task: 'ch26完＋ch16影片', startTime: '14:01', durationMinutes: 96, accumulatedMs: 5738315, timerStatus: 'paused', updatedAt: 1794056455594 },
-    evening: { subject: '個經', task: 'ch6完', updatedAt: 1794037014747 }
-  },
-  78: {
-    morning: { subject: '統計', task: '700題＋計量', updatedAt: 1794031255484 },
-    afternoon: { subject: '其他', task: 'ch12完', updatedAt: 1794031255484 },
-    evening: { subject: '總經', task: 'Ch12兩部影片', updatedAt: 1794031255484 }
-  },
-  77: {
-    morning: { subject: '統計', task: 'ch13', updatedAt: 1794031246568 },
-    afternoon: { subject: '其他', task: '學校報告', updatedAt: 1794031246568 },
-    evening: { subject: '個經', task: '8.1~8.3', updatedAt: 1794031246568 }
-  },
-  76: {
-    morning: { subject: '統計', task: 'ch13完＋ch11', updatedAt: 1794031241724 },
-    afternoon: { subject: '財管', task: '複習 實戰書', updatedAt: 1794031241724 },
-    evening: { subject: '總經', task: 'Ch13完', updatedAt: 1794031241724 }
-  }
-};
+const RESTORED_USER_DATA = {};
 
 /**
  * 建立空白時段物件（所有時間與紀錄從 0 開始，支援 YPT 專注與休息雙重時間追蹤）
@@ -432,13 +403,12 @@ function createEmptySlot(subject = '', task = '') {
 }
 
 /**
- * 自動生成 11月1日 (Day 85) 至 1月24日 (Day 1) 共 85 天資料
- * 2026/11/01 為週日，至 2027/01/24 週日，共計 85 天
+ * 自動生成 11月8日 (Day 80) 至 1月26日 (Day 1) 共 80 天衝刺資料（以明天 11/8 設為第一天，1/26 考試！）
  */
-function generate85DaysSchedule(withPreplanned = true) {
+function generate80DaysSchedule(withPreplanned = true) {
   const days = [];
-  const startDate = new Date(2026, 10, 1); // Month 10 = November (0-indexed)
-  const totalDays = 85;
+  const startDate = new Date(2026, 10, 8); // Month 10 = November, 8 = 11月8日 (明天第一天！)
+  const totalDays = 80;
 
   for (let i = 0; i < totalDays; i++) {
     const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
@@ -446,10 +416,15 @@ function generate85DaysSchedule(withPreplanned = true) {
     const dateNum = d.getDate();
     const weekday = WEEKDAY_NAMES[d.getDay()];
     const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-    const dayCountdown = totalDays - i; // 85 down to 1
+    const dayCountdown = totalDays - i; // 80 down to 1
 
     const mmddKey = `${String(month).padStart(2, '0')}-${String(dateNum).padStart(2, '0')}`;
     const pre = withPreplanned ? PDF_PREPLANNED_DATA[mmddKey] : null;
+
+    let calNote = pre ? pre.calendar : '';
+    if (mmddKey === '01-26') {
+      calNote = '🎯 研究所正式考試！平常心發揮';
+    }
 
     const dayObj = {
       id: `day-${dayCountdown}`,
@@ -458,21 +433,20 @@ function generate85DaysSchedule(withPreplanned = true) {
       weekdayDisplay: weekday,
       isWeekend,
       dayCountdown,
-      calendar: pre ? pre.calendar : '',
+      calendar: calNote,
       calendarUpdatedAt: 0,
-      morning: createEmptySlot(pre ? pre.morning[0] : '', pre ? pre.morning[1] : ''),
-      afternoon: createEmptySlot(pre ? pre.afternoon[0] : '', pre ? pre.afternoon[1] : ''),
-      evening: createEmptySlot(pre ? pre.evening[0] : '', pre ? pre.evening[1] : '')
+      morning: createEmptySlot(pre && pre.morning ? pre.morning[0] : '', pre && pre.morning ? pre.morning[1] : ''),
+      afternoon: createEmptySlot(pre && pre.afternoon ? pre.afternoon[0] : '', pre && pre.afternoon ? pre.afternoon[1] : ''),
+      evening: createEmptySlot(pre && pre.evening ? pre.evening[0] : '', pre && pre.evening ? pre.evening[1] : '')
     };
 
-    if (withPreplanned && RESTORED_USER_DATA[dayCountdown]) {
-      const r = RESTORED_USER_DATA[dayCountdown];
-      if (r.calendar) dayObj.calendar = r.calendar;
-      SLOT_KEYS.forEach(({ key }) => {
-        if (r[key]) {
-          Object.assign(dayObj[key], r[key]);
-        }
-      });
+    if (mmddKey === '01-26' && !pre) {
+      dayObj.morning.subject = '經濟';
+      dayObj.morning.task = '考前重點總整理';
+      dayObj.afternoon.subject = '統計';
+      dayObj.afternoon.task = '核心公式閉眼默背';
+      dayObj.evening.subject = '財管';
+      dayObj.evening.task = '穩定發揮平常心應考';
     }
 
     days.push(dayObj);
@@ -485,11 +459,14 @@ function generate85DaysSchedule(withPreplanned = true) {
  */
 function createDefaultState(withPreplanned = true) {
   return {
-    version: 1,
+    version: 2,
+    anchorStartDate: '2026-11-08',
+    anchorEndDate: '2027-01-26',
+    totalDays: 80,
     updatedAt: 0,
     phases: JSON.parse(JSON.stringify(DEFAULT_PHASES)),
     goals: JSON.parse(JSON.stringify(DEFAULT_GOALS)),
-    days: generate85DaysSchedule(withPreplanned)
+    days: generate80DaysSchedule(withPreplanned)
   };
 }
 
@@ -554,28 +531,32 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
       appState = createDefaultState(true);
-      applyRestoredDataIfMissing(appState);
       healMisplacedTimeSlots(appState);
       saveState(false);
       return;
     }
     const parsed = JSON.parse(raw);
+    const isOldSchedule = !parsed.days || parsed.days.length !== 80 || !parsed.days[0] || parsed.days[0].isoDate !== '2026-11-08';
+    if (isOldSchedule) {
+      console.log('🌸 依使用者指示全新重置：以明天 (11/8) 為 Day 80 第一天，1/26 考試！所有舊紀錄已清空');
+      appState = createDefaultState(true);
+      healMisplacedTimeSlots(appState);
+      saveState(true);
+      return;
+    }
     const normalized = normalizeState(parsed);
     if (!normalized) {
       appState = createDefaultState(true);
-      applyRestoredDataIfMissing(appState);
       healMisplacedTimeSlots(appState);
       saveState(false);
       return;
     }
     appState = normalized;
-    applyRestoredDataIfMissing(appState);
     healMisplacedTimeSlots(appState);
     saveState(false);
   } catch (err) {
     console.error('Failed to load state from localStorage:', err);
     appState = createDefaultState(true);
-    applyRestoredDataIfMissing(appState);
     healMisplacedTimeSlots(appState);
   }
 }
@@ -585,28 +566,32 @@ function loadState() {
  * 回傳 null 代表格式不符
  */
 function normalizeState(raw) {
-  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.days) || raw.days.length !== 85) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.days) || raw.days.length !== 80) {
     return null;
   }
-  const template = generate85DaysSchedule(false);
+  // 嚴格拒絕舊版以非 11/8 起始之資料，確保明天 11/8 (Day 80) 作為第一天之乾淨狀態
+  if (raw.days[0] && raw.days[0].isoDate && raw.days[0].isoDate !== '2026-11-08') {
+    return null;
+  }
+  const template = generate80DaysSchedule(false);
   const validStatus = ['idle', 'running', 'paused', 'ended'];
 
   const days = template.map((tpl, i) => {
     const src = raw.days.find(d => d && Number(d.dayCountdown) === tpl.dayCountdown) || raw.days[i] || {};
     const day = {
       ...tpl,
-      calendar: typeof src.calendar === 'string' ? src.calendar : '',
+      calendar: typeof src.calendar === 'string' ? src.calendar : tpl.calendar,
       calendarUpdatedAt: Number(src.calendarUpdatedAt) || 0
     };
     SLOT_KEYS.forEach(({ key }) => {
       const s = src[key] && typeof src[key] === 'object' ? src[key] : {};
       const slot = createEmptySlot();
-      slot.subject = SUBJECT_OPTIONS.includes(s.subject) ? s.subject : '';
-      slot.task = typeof s.task === 'string' ? s.task : '';
+      slot.subject = SUBJECT_OPTIONS.includes(s.subject) ? s.subject : (tpl[key] ? tpl[key].subject : '');
+      slot.task = typeof s.task === 'string' ? s.task : (tpl[key] ? tpl[key].task : '');
       slot.startTime = typeof s.startTime === 'string' ? s.startTime : '';
       slot.endTime = typeof s.endTime === 'string' ? s.endTime : '';
-      slot.durationMinutes = Math.max(0, Math.round(Number(s.durationMinutes) || 0));
-      slot.accumulatedMs = Math.max(0, Number(s.accumulatedMs) || 0);
+      slot.durationMinutes = Math.min(720, Math.max(0, Math.round(Number(s.durationMinutes) || 0)));
+      slot.accumulatedMs = Math.min(720 * 60000, Math.max(0, Number(s.accumulatedMs) || 0));
       slot.timerStatus = validStatus.includes(s.timerStatus) ? s.timerStatus : 'idle';
       slot.lastResumeTimestamp = Number(s.lastResumeTimestamp) || null;
       slot.restMinutes = Math.max(0, Math.round(Number(s.restMinutes) || 0));
@@ -663,20 +648,20 @@ function normalizeState(raw) {
     }
   }));
 
-  return { version: 1, updatedAt: Number(raw.updatedAt) || 0, phases, goals, days };
+  return { version: 2, anchorStartDate: '2026-11-08', anchorEndDate: '2027-01-26', totalDays: 80, updatedAt: Number(raw.updatedAt) || 0, phases, goals, days };
 }
 
 function clampDay(v, fallback) {
   const n = parseInt(v, 10);
   if (Number.isNaN(n)) return fallback;
-  return Math.max(1, Math.min(85, n));
+  return Math.max(1, Math.min(80, n));
 }
 
 /**
- * 檢查三階段是否完整涵蓋 Day 1~85 且彼此不重疊
+ * 檢查三階段是否完整涵蓋 Day 1~80 且彼此不重疊
  */
 function validatePhases() {
-  const coverage = new Array(86).fill(0);
+  const coverage = new Array(81).fill(0);
   appState.phases.forEach(p => {
     const high = Math.max(p.startDay, p.endDay);
     const low = Math.min(p.startDay, p.endDay);
@@ -684,7 +669,7 @@ function validatePhases() {
   });
   const gaps = [];
   const overlaps = [];
-  for (let d = 1; d <= 85; d++) {
+  for (let d = 1; d <= 80; d++) {
     if (coverage[d] === 0) gaps.push(d);
     if (coverage[d] > 1) overlaps.push(d);
   }
@@ -816,13 +801,15 @@ function mapSubjectToStatCategory(subject) {
  */
 function getSlotLiveMs(slot) {
   if (slot.timerStatus === 'running' && slot.lastResumeTimestamp) {
-    const delta = Math.max(0, Date.now() - slot.lastResumeTimestamp);
-    return (slot.accumulatedMs || 0) + delta;
+    const rawDelta = Math.max(0, Date.now() - slot.lastResumeTimestamp);
+    // 永久防護：單次計時最高上限 14 小時 (840 分鐘)，防止忘記關閉導致累計數百小時
+    const delta = Math.min(rawDelta, 14 * 3600 * 1000);
+    return Math.min((slot.accumulatedMs || 0) + delta, 14 * 3600 * 1000);
   }
   if (slot.timerStatus === 'paused') {
-    return slot.accumulatedMs || 0;
+    return Math.min(slot.accumulatedMs || 0, 14 * 3600 * 1000);
   }
-  return (slot.durationMinutes || 0) * 60000;
+  return Math.min((slot.durationMinutes || 0) * 60000, 14 * 3600 * 1000);
 }
 
 /**
@@ -979,23 +966,23 @@ function renderPhasesConfig() {
           <input
             type="number"
             min="1"
-            max="85"
+            max="80"
             class="phase-day-input"
             data-phase-idx="${idx}"
             data-bound="startDay"
             value="${phase.startDay}"
-            title="起始倒數天數 (1~85)"
+            title="起始倒數天數 (1~80)"
           />
           <span>～ Day</span>
           <input
             type="number"
             min="1"
-            max="85"
+            max="80"
             class="phase-day-input"
             data-phase-idx="${idx}"
             data-bound="endDay"
             value="${phase.endDay}"
-            title="結束倒數天數 (1~85)"
+            title="結束倒數天數 (1~80)"
           />
           <span class="phase-date-hint">${startDateStr}~${endDateStr} (${dayCount}天)</span>
         </div>
@@ -1034,7 +1021,7 @@ function renderAllStatistics() {
 }
 
 /**
- * 🌸 85 天衝刺智能讀書診斷報告卡片渲染
+ * 🌸 80 天衝刺智能讀書診斷報告卡片渲染
  */
 function renderStudyDiagnostics(stats) {
   if (typeof document === 'undefined') return;
@@ -1105,14 +1092,14 @@ function renderStudyDiagnostics(stats) {
   }
 
   if (sumPeriod === 0) {
-    diagText.textContent = `🌸 歡迎使用 85 天衝刺讀書計劃！今天是 Day ${todayCd}，處於「${currentPhase.name}」。建議每天保持 5~7 小時高效專注，立即在「快捷計時」點選科目開始你的第一堂自習吧！`;
+    diagText.textContent = `🌸 歡迎使用 80 天衝刺讀書計劃！今天是 Day ${todayCd}，處於「${currentPhase.name}」。建議每天保持 5~7 小時高效專注，立即在「快捷計時」點選科目開始你的第一堂自習吧！`;
   } else {
     const totalHours = (sumPeriod / 60).toFixed(1);
     let bestPeriodName = '早晨時段';
     if (nTotal >= mTotal && nTotal >= eTotal) bestPeriodName = '下午時段';
     if (eTotal >= mTotal && eTotal >= nTotal) bestPeriodName = '晚間時段';
 
-    let advice = `🌸 目前 85 天累計專注達 <strong>${totalHours} 小時</strong>！你在 <strong>${bestPeriodName}</strong> 的專注力最高。`;
+    let advice = `🌸 目前 80 天累計專注達 <strong>${totalHours} 小時</strong>！你在 <strong>${bestPeriodName}</strong> 的專注力最高。`;
     if (maxM > 0 && minM === 0) {
       advice += ` 目前 ${maxSubj} 投入時數最多，建議今日適度排入 <strong>${minSubj}</strong> 進行基礎章節鞏固，避免考科落差。`;
     } else if (maxM > minM * 2.5 && minM > 0) {
@@ -1266,7 +1253,7 @@ function computeDashboardStatistics() {
     };
   });
 
-  // 全期 85 天總計
+  // 全期 80 天總計
   const overallSubjectCounts = {};
   const overallSubjectMinutes = {};
   const overallSubjectSessionDurations = {};
@@ -1318,11 +1305,11 @@ function computeDashboardStatistics() {
   return {
     phaseStats,
     overall: {
-      totalDays: 85,
-      totalSlots: 255,
+      totalDays: 80,
+      totalSlots: 240,
       overallCompletedSlots,
-      overallCompletionRate: (overallCompletedSlots / 255) * 100,
-      overallAvgCompletedPerDay: overallCompletedSlots / 85,
+      overallCompletionRate: (overallCompletedSlots / 240) * 100,
+      overallAvgCompletedPerDay: overallCompletedSlots / 80,
       overallStudyMinutesAll,
       overallActiveStudyDays,
       overallSubjectCounts,
@@ -1349,20 +1336,20 @@ function renderTopKpis(stats) {
   const elDailyMedian = document.getElementById('kpiDailyMedianTime');
 
   if (elTotalTime) elTotalTime.textContent = formatMinutesToHM(overall.overallStudyMinutesAll);
-  if (elActiveDays) elActiveDays.textContent = `有效讀書天數：${overall.overallActiveStudyDays} / 85 天`;
+  if (elActiveDays) elActiveDays.textContent = `有效讀書天數：${overall.overallActiveStudyDays} / 80 天`;
   if (elTotalComp) {
-    elTotalComp.textContent = `${overall.overallCompletedSlots} / 255 (${Math.round(overall.overallCompletionRate)}%)`;
+    elTotalComp.textContent = `${overall.overallCompletedSlots} / 240 (${Math.round(overall.overallCompletionRate)}%)`;
   }
   if (elAvgSlot) {
     elAvgSlot.textContent = `每日平均完成：${overall.overallAvgCompletedPerDay.toFixed(2)} 時段`;
   }
 
   const activeDayMean = calculateMean(overall.overallDailyTotalMinutesList);
-  const all85DayMean = overall.overallStudyMinutesAll / 85;
+  const all80DayMean = overall.overallStudyMinutesAll / 80;
   const activeDayMedian = calculateMedian(overall.overallDailyTotalMinutesList);
 
   if (elDailyMean) elDailyMean.textContent = formatMinutesToHM(activeDayMean);
-  if (elDailyMeanAll) elDailyMeanAll.textContent = `全85天日均：${formatMinutesToHM(all85DayMean)}`;
+  if (elDailyMeanAll) elDailyMeanAll.textContent = `全80天日均：${formatMinutesToHM(all80DayMean)}`;
   if (elDailyMedian) elDailyMedian.textContent = formatMinutesToHM(activeDayMedian);
 }
 
@@ -1398,8 +1385,8 @@ function renderCompletionTable(stats) {
   const tfootHtml = `
     <tfoot>
       <tr class="total-row">
-        <td>全期總計<span class="stat-sub-val">Day 85–1 (85天 / 255時段)</span></td>
-        <td><strong>${ov.overallCompletedSlots}</strong><span class="stat-sub-val">共 255 時段</span></td>
+        <td>全期總計<span class="stat-sub-val">Day 80–1 (80天 / 240時段)</span></td>
+        <td><strong>${ov.overallCompletedSlots}</strong><span class="stat-sub-val">共 240 時段</span></td>
         <td><span class="stat-pct-badge">${ov.overallCompletionRate.toFixed(1)}%</span></td>
         <td><strong>${ov.overallAvgCompletedPerDay.toFixed(2)}</strong> 時段/日</td>
       </tr>
@@ -1569,7 +1556,7 @@ function renderAdvancedStatTable(stats) {
   }).join('');
 
   const overallDailyActiveMean = calculateMean(ov.overallDailyTotalMinutesList);
-  const overallDailyAllMean = ov.overallStudyMinutesAll / 85;
+  const overallDailyAllMean = ov.overallStudyMinutesAll / 80;
 
   // 全期各科單次中位數時長
   const overallMedianCells = STAT_SUBJECTS.map(s => {
@@ -1635,7 +1622,7 @@ function renderAdvancedStatTable(stats) {
         ${overallMeanCells}
         <td>
           <strong>${formatMinutesToHM(overallDailyActiveMean)}</strong> <span style="font-size:11px;font-weight:500;">(有效日均, n=${ov.overallActiveStudyDays}天)</span>
-          <span class="stat-sub-val">全期 85 天日均：${formatMinutesToHM(overallDailyAllMean)}</span>
+          <span class="stat-sub-val">全期 80 天日均：${formatMinutesToHM(overallDailyAllMean)}</span>
         </td>
       </tr>
       <tr class="total-row">
@@ -1659,7 +1646,7 @@ function renderAdvancedStatTable(stats) {
    ========================================================================== */
 
 let currentActiveTab = 'quick-timer';
-let currentActiveDayCountdown = 85;
+let currentActiveDayCountdown = 80;
 
 function initCurrentActiveDay() {
   const now = new Date();
@@ -1669,7 +1656,7 @@ function initCurrentActiveDay() {
   if (match) {
     currentActiveDayCountdown = match.dayCountdown;
   } else {
-    currentActiveDayCountdown = 85;
+    currentActiveDayCountdown = 80;
   }
 }
 
@@ -1678,7 +1665,7 @@ function getTodayDayCountdown() {
   const m = now.getMonth() + 1;
   const d = now.getDate();
   const match = appState.days.find(item => item.dateDisplay === `${m}月${d}日`);
-  return match ? match.dayCountdown : 85;
+  return match ? match.dayCountdown : 80;
 }
 
 function switchMainTab(tabId) {
@@ -1713,7 +1700,7 @@ function switchMainTab(tabId) {
 }
 
 function changeDailyPlanDay(targetDayCountdown) {
-  if (targetDayCountdown > 85) targetDayCountdown = 85;
+  if (targetDayCountdown > 80) targetDayCountdown = 80;
   if (targetDayCountdown < 1) targetDayCountdown = 1;
   currentActiveDayCountdown = targetDayCountdown;
   renderDailyPlanView();
@@ -2197,7 +2184,7 @@ function updateDailyPlanLiveClocks(active) {
 }
 
 /* ==========================================================================
-   UI 渲染：純粹行事曆（85天日期、倒數與行程備忘大表）
+   UI 渲染：純粹行事曆（80天日期、倒數與行程備忘大表）
    ========================================================================== */
 
 function renderPureCalendarTable() {
@@ -2296,7 +2283,7 @@ function buildPureCalendarRowHtml(day) {
 }
 
 /* ==========================================================================
-   UI 渲染：每日專注總表（85天早中晚專注時間與各時段詳細紀錄）
+   UI 渲染：每日專注總表（80天早中晚專注時間與各時段詳細紀錄）
    ========================================================================== */
 
 function renderDailyFocusScheduleTable() {
@@ -3026,7 +3013,7 @@ function setupEventListeners() {
         const bound = target.dataset.bound;
         let val = parseInt(target.value, 10);
         if (Number.isNaN(val)) return;
-        val = Math.max(1, Math.min(85, val));
+        val = Math.max(1, Math.min(80, val));
         appState.phases[idx][bound] = val;
         saveState();
 
@@ -3053,7 +3040,7 @@ function setupEventListeners() {
       }
     });
 
-    // 失焦時把被夾限的數值寫回輸入框（例如輸入 99 → 85）
+    // 失焦時把被夾限的數值寫回輸入框（例如輸入 99 → 80）
     phasesContainer.addEventListener('change', (e) => {
       const target = e.target;
       if (!target.classList.contains('phase-day-input')) return;
@@ -3072,7 +3059,7 @@ function setupEventListeners() {
       renderPhasesConfig();
       updateAllRowPhaseTags();
       renderFullDashboard();
-      showToast('🌸 已還原預設三階段區間（Day 85-61、60-31、30-1）');
+      showToast('🌸 已還原預設三階段區間（Day 80-56、55-28、27-1）');
     });
   }
 
@@ -3127,7 +3114,7 @@ function setupEventListeners() {
     });
   }
 
-  // 3B. 每日專注總表（85天早中晚專注時間表）委派
+  // 3B. 每日專注總表（80天早中晚專注時間表）委派
   const dailyFocusTableBody = document.getElementById('dailyFocusTableBody');
   if (dailyFocusTableBody) {
     dailyFocusTableBody.addEventListener('click', (e) => {
@@ -3389,7 +3376,7 @@ function setupEventListeners() {
       const mm = String(now.getMonth() + 1).padStart(2, '0');
       const dd = String(now.getDate()).padStart(2, '0');
       const todayMatch = appState.days.find(d => d.isoDate.endsWith(`-${mm}-${dd}`));
-      const targetCountdown = todayMatch ? todayMatch.dayCountdown : 85;
+      const targetCountdown = todayMatch ? todayMatch.dayCountdown : 80;
       scrollToDayRow(targetCountdown);
     });
   }
@@ -3520,7 +3507,7 @@ function setupEventListeners() {
   if (resetAllBtn) {
     resetAllBtn.addEventListener('click', () => {
       const confirmed = window.confirm(
-        '確定要將所有讀書時間、計時器與打勾紀錄「從零開始重新計算」嗎？\n\n（將重置 11/1~1/24 共 85 天的開始/結束時間、真實讀書時長與打勾；已填寫的科目、範圍、行事曆與小櫻目標會保留。建議先「匯出 JSON」備份）'
+        '確定要將所有讀書時間、計時器與打勾紀錄「從零開始重新計算」嗎？\n\n（將重置 11/8~1/26 共 80 天的開始/結束時間、真實讀書時長與打勾；已填寫的科目、範圍、行事曆與小櫻目標會保留。建議先「匯出 JSON」備份）'
       );
       if (!confirmed) return;
       const nowTs = Date.now();
@@ -3538,7 +3525,7 @@ function setupEventListeners() {
       renderQuickTimerView();
       renderDailyPlanView();
       updateActiveTimerBanner();
-      showToast('✨ 已將 85 天所有時間、計時器與打勾紀錄全新重置為 0（科目、範圍、行事曆與目標保留）');
+      showToast('✨ 已將 80 天所有時間、計時器與打勾紀錄全新重置為 0（科目、範圍、行事曆與目標保留）');
     });
   }
 
@@ -3966,7 +3953,7 @@ function importJsonBackup(e) {
     try {
       const imported = normalizeState(JSON.parse(evt.target.result));
       if (!imported) {
-        showToast('⚠️ 匯入格式不符：請選擇有效的 85 天小櫻讀書計劃表 JSON 備份檔');
+        showToast('⚠️ 匯入格式不符：請選擇有效的 80 天小櫻讀書計劃表 JSON 備份檔');
         return;
       }
       if (!window.confirm('匯入將覆蓋目前瀏覽器中的所有資料，確定要繼續嗎？')) return;
@@ -4072,10 +4059,10 @@ function compactState(st) {
 }
 
 /**
- * 解壓縮還原完整 85 天狀態（保留 lastResumeTimestamp、restMinutes、lastPauseTimestamp 與 updatedAt）
+ * 解壓縮還原完整 80 天狀態（保留 lastResumeTimestamp、restMinutes、lastPauseTimestamp 與 updatedAt）
  */
 function unpackCompactState(compact) {
-  const base = generate85DaysSchedule(false);
+  const base = generate80DaysSchedule(false);
   const phases = (compact.p && Array.isArray(compact.p) && compact.p.length === 3) ? compact.p : DEFAULT_PHASES;
   const goals = compact.g || DEFAULT_GOALS;
   const compactDays = compact.d || {};
@@ -4124,7 +4111,7 @@ function unpackCompactState(compact) {
  * 智慧合併遠端完整狀態與本機狀態（依每個時段的 updatedAt 判斷誰比較新，防止舊裝置覆蓋新計時器）
  */
 function mergeRemoteState(remote) {
-  if (!remote || !Array.isArray(remote.days)) return false;
+  if (!remote || !Array.isArray(remote.days) || remote.days.length !== 80 || !remote.days[0] || remote.days[0].isoDate !== '2026-11-08') return false;
 
   if (remote.updatedAt >= (appState.updatedAt || 0)) {
     if (Array.isArray(remote.phases) && remote.phases.length === 3) {

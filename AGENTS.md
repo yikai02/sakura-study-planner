@@ -9,7 +9,7 @@
 * **GitHub Repository**：`https://github.com/yikai02/sakura-study-planner`
 * **GitHub Pages 部署網址**：`https://yikai02.github.io/sakura-study-planner/?room=sakura-study-2026`
 * **核心檔案**：
-  * `index.html`：四大主要分頁（快捷計時、每日專注、85天行事曆、統計列表）與設定彈窗。
+  * `index.html`：四大主要分頁（快捷計時、每日專注、80天行事曆、統計列表）與設定彈窗。
   * `style.css`：日系柔和櫻花粉與深色夜間護眼配色系統（CSS Variables）。
   * `app.js`：狀態管理、YPT 毫秒碼錶、跨裝置狀態合併、房號自動連線。
   * `manifest.json` & `sw.js`：PWA 離線快取、全螢幕原生 App 顯示。

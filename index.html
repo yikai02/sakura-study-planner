@@ -32,7 +32,7 @@
       }).catch(function() {});
     }
   </script>
-  <link rel="stylesheet" href="style.css?v=20261107_v4" />
+  <link rel="stylesheet" href="style.css?v=20261108_v1" />
 </head>
 <body>
 
@@ -46,9 +46,9 @@
       <div class="brand-title">
         <h1>
           小櫻讀書計劃表
-          <span class="brand-badge">11/1 (Day 85) – 1/24 (Day 1)</span>
+          <span class="brand-badge">11/8 (Day 80) – 1/26 (Day 1)</span>
         </h1>
-        <p class="brand-subtitle">85 天衝刺讀書計劃與統計儀表板</p>
+        <p class="brand-subtitle">80 天衝刺讀書計劃與統計儀表板</p>
       </div>
     </div>
 
@@ -62,7 +62,7 @@
         <span class="tab-icon">📖</span>
         <span class="tab-text">每日專注</span>
       </button>
-      <button class="tab-nav-btn" data-tab="calendar-schedule" type="button" title="85天純粹行事曆">
+      <button class="tab-nav-btn" data-tab="calendar-schedule" type="button" title="80天純粹行事曆">
         <span class="tab-icon">🗓️</span>
         <span class="tab-text">行事曆</span>
       </button>
@@ -128,8 +128,8 @@
         <!-- Date & Today Summary Header -->
         <div class="quick-header-card">
           <div class="quick-date-info">
-            <span class="quick-day-badge" id="quickDayBadge">Day 85</span>
-            <span class="quick-date-title" id="quickDateTitle">11月1日（週日）</span>
+            <span class="quick-day-badge" id="quickDayBadge">Day 80</span>
+            <span class="quick-date-title" id="quickDateTitle">11月8日（週日）</span>
             <span class="quick-phase-tag" id="quickPhaseTag">第一階段</span>
             <button id="quickSwitchDayBtn" class="btn btn-xs btn-subtle" type="button" title="切換選取的日期">切換日期 ▾</button>
           </div>
@@ -211,7 +211,7 @@
 
 
     <!-- =========================================================================
-         分頁 2：📖 每日專注（單日專注時段 + 85天早中晚專注時間總表）
+         分頁 2：📖 每日專注（單日專注時段 + 80天早中晚專注時間總表）
          ========================================================================= -->
     <section id="tabDailyPlan" class="tab-view">
       <div class="daily-plan-wrapper">
@@ -219,8 +219,8 @@
         <div class="daily-nav-card">
           <button id="dailyPrevDayBtn" class="btn btn-subtle" type="button">◀ 前一天</button>
           <div class="daily-current-day-box">
-            <span class="daily-day-badge" id="dailyDayBadge">Day 85</span>
-            <span class="daily-date-heading" id="dailyDateHeading">11月1日（週日）</span>
+            <span class="daily-day-badge" id="dailyDayBadge">Day 80</span>
+            <span class="daily-date-heading" id="dailyDateHeading">11月8日（週日）</span>
             <span class="daily-phase-badge" id="dailyPhaseBadge">第一階段</span>
             <select id="dailyDaySelect" class="search-input" style="min-width: 140px;"></select>
           </div>
@@ -267,18 +267,18 @@
           </div>
         </div>
 
-        <!-- 85天早中晚專注時間總表 (拉出的早上下午晚上統計時間表) -->
+        <!-- 80天早中晚專注時間總表 (拉出的早上下午晚上統計時間表) -->
         <div class="card daily-focus-schedule-card" style="margin-top: 20px;">
           <div class="card-header">
             <div>
-              <div class="card-title"><span class="icon">⏱️</span> 85天早中晚專注時間表</div>
+              <div class="card-title"><span class="icon">⏱️</span> 80天早中晚專注時間表</div>
             </div>
           </div>
 
           <!-- Filter & Search Controls for Daily Focus Table -->
           <div class="schedule-controls">
             <div class="filter-tabs" id="dailyPhaseFilterTabs">
-              <button class="filter-tab active" data-filter="all" type="button">全部顯示 (85天)</button>
+              <button class="filter-tab active" data-filter="all" type="button">全部顯示 (80天)</button>
               <button class="filter-tab" data-filter="phase-0" type="button" id="dailyFilterTabPhase0">第一階段</button>
               <button class="filter-tab" data-filter="phase-1" type="button" id="dailyFilterTabPhase1">第二階段</button>
               <button class="filter-tab" data-filter="phase-2" type="button" id="dailyFilterTabPhase2">第三階段</button>
@@ -302,7 +302,7 @@
             </div>
           </div>
 
-          <!-- 85-Day Focus Table with Morning, Afternoon, Evening -->
+          <!-- 80-Day Focus Table with Morning, Afternoon, Evening -->
           <div class="main-table-wrapper">
             <table class="plan-table" id="dailyFocusTable">
               <thead>
@@ -313,7 +313,7 @@
                   <th class="slot-header-afternoon">🌤️ 下午（12:00 ~ 19:00）</th>
                   <th class="slot-header-evening">🌙 晚上（19:00 ~ 05:00）</th>
                   <th colspan="3" class="summary-header">🌸 每日彙總</th>
-                  <th rowspan="2" style="min-width: 85px;">單日切換</th>
+                  <th rowspan="2" style="min-width: 80px;">單日切換</th>
                 </tr>
                 <tr class="sub-header">
                   <th>科目 / 範圍任務 / 計時器 / 時長 / 完成</th>
@@ -325,7 +325,7 @@
                 </tr>
               </thead>
               <tbody id="dailyFocusTableBody">
-                <!-- 85 Days Rows Rendered by app.js -->
+                <!-- 80 Days Rows Rendered by app.js -->
               </tbody>
             </table>
           </div>
@@ -335,20 +335,20 @@
 
 
     <!-- =========================================================================
-         分頁 3：🗓️ 純粹的行事曆（85天日期、倒數與行程備忘）
+         分頁 3：🗓️ 純粹的行事曆（80天日期、倒數與行程備忘）
          ========================================================================= -->
     <section id="tabCalendarSchedule" class="tab-view">
       <div class="card schedule-main-card">
         <div class="card-header">
           <div>
-            <div class="card-title"><span class="icon">🗓️</span> 85天行事曆</div>
+            <div class="card-title"><span class="icon">🗓️</span> 80天行事曆</div>
           </div>
         </div>
 
         <!-- Filter Tabs & Search Tools -->
         <div class="schedule-controls">
           <div class="filter-tabs" id="phaseFilterTabs">
-            <button class="filter-tab active" data-filter="all" type="button">全部顯示 (85天)</button>
+            <button class="filter-tab active" data-filter="all" type="button">全部顯示 (80天)</button>
             <button class="filter-tab" data-filter="phase-0" type="button" id="filterTabPhase0">第一階段</button>
             <button class="filter-tab" data-filter="phase-1" type="button" id="filterTabPhase1">第二階段</button>
             <button class="filter-tab" data-filter="phase-2" type="button" id="filterTabPhase2">第三階段</button>
@@ -387,7 +387,7 @@
          分頁 4：📊 統計列表（5 大統計量表與衝刺指標）
          ========================================================================= -->
     <section id="tabStatisticsDashboard" class="tab-view">
-      <!-- 🌸 85天衝刺智能讀書診斷報告 (AI Study Diagnostics) -->
+      <!-- 🌸 80天衝刺智能讀書診斷報告 (AI Study Diagnostics) -->
       <div class="card diagnostic-card" style="margin-bottom: 20px;">
         <div class="card-header">
           <div>
@@ -420,12 +420,12 @@
         </div>
       </div>
 
-      <!-- Overall 85-Day KPI Card -->
+      <!-- Overall 80-Day KPI Card -->
       <div class="card" style="margin-bottom: 20px;">
         <div class="card-header">
           <div>
-            <div class="card-title"><span class="icon">✦</span> 85天衝刺總覽</div>
-            <div class="card-subtitle">11月1日 ～ 1月24日</div>
+            <div class="card-title"><span class="icon">✦</span> 80天衝刺總覽</div>
+            <div class="card-subtitle">11月8日 ～ 1月26日</div>
           </div>
         </div>
         <div class="card-body">
@@ -433,17 +433,17 @@
             <div class="kpi-box">
               <span class="kpi-label">累計真實讀書總時長</span>
               <span class="kpi-value" id="kpiTotalStudyTime">0小時 0分</span>
-              <span class="kpi-sub" id="kpiActiveDaysSub">有效讀書天數：0 / 85 天</span>
+              <span class="kpi-sub" id="kpiActiveDaysSub">有效讀書天數：0 / 80 天</span>
             </div>
             <div class="kpi-box">
               <span class="kpi-label">總完成時段 / 完成率</span>
-              <span class="kpi-value" id="kpiTotalCompletion">0 / 255 (0%)</span>
+              <span class="kpi-value" id="kpiTotalCompletion">0 / 240 (0%)</span>
               <span class="kpi-sub" id="kpiAvgSlotPerDay">每日平均完成：0.00 時段</span>
             </div>
             <div class="kpi-box">
               <span class="kpi-label">每日平均讀書總時長</span>
               <span class="kpi-value" id="kpiDailyMeanTime">0小時 0分</span>
-              <span class="kpi-sub" id="kpiDailyMeanAllSub">全85天日均：0小時 0分</span>
+              <span class="kpi-sub" id="kpiDailyMeanAllSub">全80天日均：0小時 0分</span>
             </div>
             <div class="kpi-box">
               <span class="kpi-label">每日總讀書時間中位數</span>
@@ -561,7 +561,7 @@
         <!-- 3-Phase Settings Section -->
         <div class="settings-section">
           <div class="settings-sec-title">🌸 三階段衝刺區間設定</div>
-          <p class="settings-sec-desc">點擊可直接修改階段名稱與 Day 起訖天數（預設：Day 85-61、Day 60-31、Day 30-1）</p>
+          <p class="settings-sec-desc">點擊可直接修改階段名稱與 Day 起訖天數（預設：Day 80-56、Day 55-28、Day 27-1）</p>
           <div class="phases-config-grid" id="phasesConfigContainer" style="margin-top: 10px;">
             <!-- Dynamically rendered by app.js -->
           </div>
@@ -744,6 +744,6 @@
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261107_v4"></script>
+  <script src="app.js?v=20261108_v1"></script>
 </body>
 </html>
