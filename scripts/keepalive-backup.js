@@ -29,14 +29,28 @@ async function run() {
     const lines = text.trim().split('\n');
     let latestFull = null;
 
-    for (let i = 0; i < lines.length; i++) {
+    for (let i = lines.length - 1; i >= 0; i--) {
       if (!lines[i]) continue;
       try {
         const item = JSON.parse(lines[i]);
-        if (item.event === 'message' && item.message) {
-          const payload = JSON.parse(item.message);
+        if (item.event === 'message') {
+          let payload = null;
+          if (item.attachment && item.attachment.url) {
+            try {
+              const attRes = await fetch(item.attachment.url);
+              if (attRes.ok) {
+                payload = await attRes.json();
+              }
+            } catch (attErr) {}
+          } else if (item.message) {
+            try {
+              payload = JSON.parse(item.message);
+            } catch (jsonErr) {}
+          }
+
           if (payload && payload.type === 'FULL' && payload.compact) {
             latestFull = payload;
+            break;
           }
         }
       } catch (e) {}

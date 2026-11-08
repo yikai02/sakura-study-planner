@@ -1233,7 +1233,7 @@ function renderStudyDiagnostics(stats) {
     if (sumPeriod === 0) {
       balanceEl.textContent = '尚無讀書紀錄，點選快捷計時即可獲得診斷！';
     } else {
-      balanceEl.innerHTML = `最高時數：<strong style="color:var(--sakura-deep)">${maxSubj} (${formatMinutesToHM(maxM)})</strong> ｜ 最需加強：<strong>${minSubj} (${formatMinutesToHM(minM)})</strong>`;
+      balanceEl.innerHTML = `最高時數：<strong style="color:var(--sakura-deep)">${escapeHtml(maxSubj)} (${formatMinutesToHM(maxM)})</strong> ｜ 最需加強：<strong>${escapeHtml(minSubj)} (${formatMinutesToHM(minM)})</strong>`;
     }
   }
 
@@ -1261,7 +1261,7 @@ function renderStudyDiagnostics(stats) {
     } else if (maxM > minM * 2.5 && minM > 0) {
       advice += ` 各科分配中 ${maxSubj} 遙遙領先，可適度分流 30% 時間給 <strong>${minSubj}</strong> 刷考古題，維持多科並進手感！`;
     } else {
-      advice += ` 各主要考科時間分佈良好且均衡！繼續保持「${currentPhase.name}」的穩定節奏，金榜題名必在眼前！🌸`;
+      advice += ` 各主要考科時間分佈良好且均衡！繼續保持「${escapeHtml(currentPhase.name)}」的穩定節奏，金榜題名必在眼前！🌸`;
     }
     diagText.innerHTML = advice;
   }
@@ -5303,11 +5303,13 @@ function connectToSharedRoom(roomId, nickname = '我', isInitial = false) {
 
     roomWs.onopen = async () => {
       isRoomConnected = true;
-      localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify({
-        enabled: true,
-        roomId: currentRoomId,
-        nickname: myNickname
-      }));
+      try {
+        localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify({
+          enabled: true,
+          roomId: currentRoomId,
+          nickname: myNickname
+        }));
+      } catch (e) {}
 
       setRoomNavbarStatus('connected');
       renderRoomModalState();
@@ -5782,11 +5784,13 @@ function leaveSharedRoom() {
   }
   isRoomConnected = false;
   currentRoomId = '';
-  localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify({
-    enabled: false,
-    roomId: '',
-    nickname: myNickname
-  }));
+  try {
+    localStorage.setItem(ROOM_STORAGE_KEY, JSON.stringify({
+      enabled: false,
+      roomId: '',
+      nickname: myNickname
+    }));
+  } catch (e) {}
   setRoomNavbarStatus('disconnected');
   renderRoomModalState();
   updateSaveStatusDisplay();
