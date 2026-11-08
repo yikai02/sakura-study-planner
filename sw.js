@@ -2,7 +2,7 @@
    小櫻讀書計劃表 🌸 Service Worker (PWA 離線快取與加速服務)
    ========================================================================== */
 
-const CACHE_NAME = 'sakura-study-v2.2.6';
+const CACHE_NAME = 'sakura-study-v2.2.7';
 const STATIC_ASSETS = [
   './',
   'index.html',
@@ -49,8 +49,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // ntfy.sh 實時頻道直接走網路
-  if (url.hostname.includes('ntfy.sh')) {
+  // ntfy.sh 實時頻道與動態雲端快照備份直接走網路，不寫入靜態快取
+  if (url.hostname.includes('ntfy.sh') || url.pathname.includes('/data/') || url.pathname.includes('backup-latest.json')) {
     return;
   }
 

@@ -32,24 +32,8 @@
         if (meta) meta.content = (theme === 'dark' ? '#141418' : '#FAF8F5');
       } catch (e) {}
     })();
-
-    // 🌸 強制反註冊舊版 Service Worker 並清除所有舊快取，確保永遠取得最新版本程式碼
-    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(regs) {
-        for (var i = 0; i < regs.length; i++) {
-          regs[i].unregister();
-        }
-      }).catch(function() {});
-    }
-    if (typeof window !== 'undefined' && 'caches' in window) {
-      caches.keys().then(function(names) {
-        for (var i = 0; i < names.length; i++) {
-          caches.delete(names[i]);
-        }
-      }).catch(function() {});
-    }
   </script>
-  <link rel="stylesheet" href="style.css?v=20261108_v6" />
+  <link rel="stylesheet" href="style.css?v=20261108_v7" />
 </head>
 <body>
 
@@ -976,6 +960,6 @@
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261108_v6"></script>
+  <script src="app.js?v=20261108_v7"></script>
 </body>
 </html>

@@ -54,6 +54,22 @@ def main():
         os.makedirs(BACKUP_DIR, exist_ok=True)
 
         if latest_full:
+            # 🌸 關鍵自訂封面保護：若既有備份含有使用者上傳之封面，絕不被預設主題刷掉
+            if os.path.exists(BACKUP_FILE):
+                try:
+                    with open(BACKUP_FILE, "r", encoding="utf-8") as exist_f:
+                        exist_data = json.load(exist_f)
+                    exist_compact = exist_data.get("compact", {})
+                    new_compact = latest_full.get("compact", {})
+                    exist_hc = exist_compact.get("hc", "")
+                    new_hc = new_compact.get("hc", "")
+                    if exist_hc and (exist_hc.startswith("data:") or exist_hc.startswith("url:")):
+                        if not (new_hc and (new_hc.startswith("data:") or new_hc.startswith("url:"))):
+                            new_compact["hc"] = exist_hc
+                            new_compact["hcu"] = exist_compact.get("hcu", exist_compact.get("u", int(time.time() * 1000)))
+                except Exception as e:
+                    print(f"[Keepalive] Cover preserve notice: {e}", file=sys.stderr)
+
             print(f"[Keepalive] Found latest FULL snapshot from: {latest_full.get('senderName', 'user')} at {latest_full.get('ts')}")
             with open(BACKUP_FILE, "w", encoding="utf-8") as f:
                 json.dump(latest_full, f, ensure_ascii=False, indent=2)

@@ -61,6 +61,25 @@ async function run() {
     }
 
     if (latestFull) {
+      // 🌸 關鍵自訂封面保護：若既有備份含有使用者上傳之封面，絕不被預設主題刷掉
+      if (fs.existsSync(BACKUP_FILE)) {
+        try {
+          const existData = JSON.parse(fs.readFileSync(BACKUP_FILE, 'utf-8'));
+          const existCompact = existData.compact || {};
+          const newCompact = latestFull.compact || {};
+          const existHc = existCompact.hc || '';
+          const newHc = newCompact.hc || '';
+          if (existHc && (existHc.startsWith('data:') || existHc.startsWith('url:'))) {
+            if (!(newHc && (newHc.startsWith('data:') || newHc.startsWith('url:')))) {
+              newCompact.hc = existHc;
+              newCompact.hcu = existCompact.hcu || existCompact.u || Date.now();
+            }
+          }
+        } catch (e) {
+          console.warn('[Keepalive] Cover preserve notice:', e);
+        }
+      }
+
       console.log(`[Keepalive] Found latest FULL snapshot from sender: ${latestFull.senderName || 'user'} at ${new Date(latestFull.ts).toISOString()}`);
       fs.writeFileSync(BACKUP_FILE, JSON.stringify(latestFull, null, 2), 'utf-8');
       console.log(`[Keepalive] Successfully saved backup to ${BACKUP_FILE}`);

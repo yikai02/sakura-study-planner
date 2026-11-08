@@ -766,7 +766,7 @@ function normalizeState(raw) {
   if (!homeCover) {
     homeCover = (appSettings.theme === 'dark' ? 'cover-antigravity' : 'cover-sakura');
   }
-  const homeCoverUpdatedAt = Number(raw.homeCoverUpdatedAt) || (homeCover.startsWith('data:') || homeCover.startsWith('url:') ? Date.now() : 0);
+  const homeCoverUpdatedAt = Number(raw.homeCoverUpdatedAt) || (homeCover.startsWith('data:') || homeCover.startsWith('url:') ? (Number(raw.updatedAt) || 1) : 0);
 
   const extraDays = generateInitialExtraDays(true);
   if (raw.extraDays && typeof raw.extraDays === 'object') {
@@ -884,7 +884,7 @@ function saveState(showIndicator = true, broadcastToRoom = true) {
   }
 
   // 自動同步至共同房間（多人即時連線）
-  if (broadcastToRoom && isRoomConnected && !isReceivingRemoteUpdate) {
+  if (broadcastToRoom && currentRoomId && !isReceivingRemoteUpdate) {
     queueRoomFullBroadcast();
   }
 }
@@ -1933,6 +1933,15 @@ function applyHomeCover() {
   const banner = document.getElementById('homeCoverBanner');
   if (!banner) return;
   let cover = appState.homeCover;
+  if (!cover || cover === 'cover-sakura' || cover === 'cover-antigravity') {
+    try {
+      const cached = localStorage.getItem('sakura_custom_cover_v1');
+      if (cached && (cached.startsWith('data:') || cached.startsWith('url:'))) {
+        cover = cached;
+        appState.homeCover = cached;
+      }
+    } catch (e) {}
+  }
   if (!cover || cover === 'cover-sakura' || cover === 'cover-antigravity') {
     cover = appSettings.theme === 'dark' ? 'cover-antigravity' : 'cover-sakura';
   }
@@ -3254,7 +3263,7 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
   renderHomeView();
   renderPureCalendarTable();
 
-  if (isRoomConnected && !isReceivingRemoteUpdate) {
+  if (currentRoomId && !isReceivingRemoteUpdate) {
     broadcastRoomDelta({
       kind: 'timer',
       day: day.dayCountdown,
@@ -3516,7 +3525,7 @@ function setupEventListeners() {
 
         updateAllRowPhaseTags();
         renderFullDashboard();
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (currentRoomId && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({ kind: 'phases', phases: appState.phases });
         }
       }
@@ -3557,7 +3566,7 @@ function setupEventListeners() {
       if (!appState.goals[subj]) appState.goals[subj] = {};
       appState.goals[subj][phaseKey] = target.value;
       saveState();
-      if (isRoomConnected && !isReceivingRemoteUpdate) {
+      if (currentRoomId && !isReceivingRemoteUpdate) {
         broadcastRoomDelta({ kind: 'goal', subj, phaseKey, val: target.value });
       }
     });
@@ -3595,7 +3604,7 @@ function setupEventListeners() {
           renderDailyPlanView();
           renderAllStatistics();
           showToast(`已切換科目：${nextSubj || '未指定'}`);
-          if (isRoomConnected && !isReceivingRemoteUpdate) {
+          if (currentRoomId && !isReceivingRemoteUpdate) {
             broadcastRoomDelta({ kind: 'subject', day: dayKey, slot: slotKey, val: nextSubj, updatedAt: nowTs });
           }
         }
@@ -3616,7 +3625,7 @@ function setupEventListeners() {
         day[slotKey].updatedAt = nowTs;
         appState.updatedAt = nowTs;
         saveState();
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (currentRoomId && !isReceivingRemoteUpdate) {
           broadcastRoomDeltaDebounced({ kind: 'task', day: dayKey, slot: slotKey, val: inp.value, updatedAt: nowTs });
         }
       }
@@ -3666,7 +3675,7 @@ function setupEventListeners() {
           renderDailySlotsDetailed(day);
           renderQuickTimerView();
         }
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (currentRoomId && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({ kind: 'subject', day: dayCountdown, slot: slotKey, val: slot.subject, updatedAt: nowTs });
         }
       } else if (field === 'completed' && slot) {
@@ -3682,7 +3691,7 @@ function setupEventListeners() {
           renderDailySlotsDetailed(day);
           renderQuickTimerView();
         }
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (currentRoomId && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({
             kind: 'completed',
             day: dayCountdown,
@@ -3724,7 +3733,7 @@ function setupEventListeners() {
           renderDailySlotsDetailed(day);
           renderQuickTimerView();
         }
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (currentRoomId && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({
             kind: 'time',
             day: dayCountdown,
@@ -3763,7 +3772,7 @@ function setupEventListeners() {
           renderDailySlotsDetailed(day);
           renderQuickTimerView();
         }
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (currentRoomId && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({
             kind: 'time',
             day: dayCountdown,
@@ -3800,7 +3809,7 @@ function setupEventListeners() {
             if (inp && document.activeElement !== inp) inp.value = target.value;
           }
         }
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (currentRoomId && !isReceivingRemoteUpdate) {
           broadcastRoomDeltaDebounced({ kind: 'task', day: dayCountdown, slot: slotKey, val: day[slotKey].task, updatedAt: nowTs });
         }
       } else if ((field === 'durationHours' || field === 'durationMins') && slotKey && day[slotKey]) {
@@ -4110,7 +4119,7 @@ function setupEventListeners() {
         saveState();
         applyHomeCover();
         showToast(`已更換背景看板：${item.title || ''}`);
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (!isReceivingRemoteUpdate) {
           broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: nowTs });
           broadcastFullStateToRoom();
         }
@@ -4135,7 +4144,7 @@ function setupEventListeners() {
       saveState();
       applyHomeCover();
       showToast('🎨 已成功套用自訂圖片背板！');
-      if (isRoomConnected && !isReceivingRemoteUpdate) {
+      if (currentRoomId && !isReceivingRemoteUpdate) {
         broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: nowTs });
         broadcastFullStateToRoom();
       }
@@ -4198,7 +4207,7 @@ function setupEventListeners() {
         saveState();
         applyHomeCover();
         showToast('📁 已成功上傳並同步自訂封面至所有裝置！');
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (!isReceivingRemoteUpdate) {
           broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: nowTs });
           broadcastFullStateToRoom();
         }
@@ -4277,7 +4286,7 @@ function setupEventListeners() {
         renderQuickTimerView();
         renderDailyPlanView();
         renderAllStatistics();
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (currentRoomId && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({ kind: 'completed', day: dayKey, slot: slotKey, val: slot.completed, updatedAt: nowTs, label: `${day.dateDisplay} ${getSlotLabel(slotKey)}` });
         }
       } else if (target.classList.contains('home-slot-subj')) {
@@ -4290,7 +4299,7 @@ function setupEventListeners() {
         renderQuickTimerView();
         renderDailyPlanView();
         renderAllStatistics();
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (currentRoomId && !isReceivingRemoteUpdate) {
           broadcastRoomDelta({ kind: 'subject', day: dayKey, slot: slotKey, val: slot.subject, updatedAt: nowTs });
         }
       }
@@ -4308,7 +4317,7 @@ function setupEventListeners() {
         day[slotKey].updatedAt = nowTs;
         appState.updatedAt = nowTs;
         saveState();
-        if (isRoomConnected && !isReceivingRemoteUpdate) {
+        if (currentRoomId && !isReceivingRemoteUpdate) {
           broadcastRoomDeltaDebounced({ kind: 'task', day: dayKey, slot: slotKey, val: target.value, updatedAt: nowTs });
         }
       }
@@ -4327,7 +4336,7 @@ function setupEventListeners() {
       saveState();
       const dailyInp = document.getElementById('dailyCalendarInput');
       if (dailyInp && document.activeElement !== dailyInp) dailyInp.value = day.calendar;
-      if (isRoomConnected && !isReceivingRemoteUpdate) {
+      if (currentRoomId && !isReceivingRemoteUpdate) {
         broadcastRoomDeltaDebounced({ kind: 'calendar', day: day.dayCountdown, val: day.calendar, updatedAt: nowTs });
       }
     });
@@ -5024,7 +5033,7 @@ function unpackCompactState(compact) {
     version: 2,
     updatedAt: Number(compact.u) || 0,
     homeCover: compact.hc || '',
-    homeCoverUpdatedAt: Number(compact.hcu) || 0,
+    homeCoverUpdatedAt: Number(compact.hcu) || (compact.hc && (compact.hc.startsWith('data:') || compact.hc.startsWith('url:')) ? (Number(compact.u) || 1) : 0),
     phases,
     goals,
     days
@@ -5178,8 +5187,9 @@ function mergeRemoteState(remote) {
  * 向共同房間廣播即時訊息（透過 HTTPS POST，啟用 keepalive 確保手機按開始後立刻鎖屏也能送達）
  */
 async function broadcastToRoom(messageObj) {
-  if (!isRoomConnected || !currentRoomId) return;
-  const topic = `sakura_room_${encodeURIComponent(currentRoomId)}`;
+  const roomId = (currentRoomId || 'sakura-study-2026').trim();
+  if (!roomId) return;
+  const topic = `sakura_room_${encodeURIComponent(roomId)}`;
   const bodyStr = JSON.stringify(messageObj);
   try {
     await fetch(`https://ntfy.sh/${topic}`, {
@@ -5197,11 +5207,13 @@ async function broadcastToRoom(messageObj) {
  * 廣播個別細項異動（打勾、修改時間、寫筆記等毫秒級同步）
  */
 function broadcastRoomDelta(payload) {
-  if (!isRoomConnected || !currentRoomId || isReceivingRemoteUpdate) return;
+  if (isReceivingRemoteUpdate) return;
+  const roomId = (currentRoomId || 'sakura-study-2026').trim();
+  if (!roomId) return;
   const nowTs = Date.now();
   broadcastToRoom({
     type: 'DELTA',
-    roomId: currentRoomId,
+    roomId: roomId,
     senderId: myClientId,
     senderName: myNickname,
     ts: nowTs,
@@ -5222,11 +5234,13 @@ function broadcastRoomDeltaDebounced(payload) {
  */
 let lastFullBroadcastTs = 0;
 function broadcastFullStateToRoom() {
-  if (!isRoomConnected || !currentRoomId || isReceivingRemoteUpdate) return;
+  if (isReceivingRemoteUpdate) return;
+  const roomId = (currentRoomId || 'sakura-study-2026').trim();
+  if (!roomId) return;
   lastFullBroadcastTs = Date.now();
   broadcastToRoom({
     type: 'FULL',
-    roomId: currentRoomId,
+    roomId: roomId,
     senderId: myClientId,
     senderName: myNickname,
     ts: Date.now(),
@@ -6117,6 +6131,8 @@ function bootstrapApp() {
     initRoomSyncFromStorageOrUrl();
     switchMainTab('home');
     syncScreenWakeLock();
+    // 🌸 關鍵：打開網頁時立即非同步載入 GitHub 最新雲端備份，確保若本地無自訂封面或為新開瀏覽器時，立刻秒級同步！
+    fallbackToGitHubBackup();
   } catch (err) {
     console.error('App bootstrap error:', err);
   }
@@ -6133,7 +6149,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261108_v3').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261108_v7').then((reg) => {
         console.log('🌸 PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);
