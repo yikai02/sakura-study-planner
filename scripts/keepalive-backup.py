@@ -25,15 +25,29 @@ def main():
         lines = text.strip().split("\n")
         latest_full = None
 
-        for line in lines:
+        for line in reversed(lines):
             if not line:
                 continue
             try:
                 item = json.loads(line)
-                if item.get("event") == "message" and item.get("message"):
-                    payload = json.loads(item["message"])
-                    if payload.get("type") == "FULL" and payload.get("compact"):
+                if item.get("event") == "message":
+                    payload = None
+                    if item.get("attachment") and item["attachment"].get("url"):
+                        try:
+                            att_req = urllib.request.Request(item["attachment"]["url"], headers={"User-Agent": "Sakura-Keepalive/1.0"})
+                            with urllib.request.urlopen(att_req, timeout=8) as att_resp:
+                                payload = json.loads(att_resp.read().decode("utf-8"))
+                        except Exception as e:
+                            print(f"[Keepalive] Attachment fetch notice: {e}", file=sys.stderr)
+                    elif item.get("message"):
+                        try:
+                            payload = json.loads(item["message"])
+                        except Exception:
+                            pass
+
+                    if payload and payload.get("type") == "FULL" and payload.get("compact"):
                         latest_full = payload
+                        break
             except Exception:
                 pass
 

@@ -754,7 +754,20 @@ function normalizeState(raw) {
     }
   }));
 
-  const homeCover = (typeof raw.homeCover === 'string' && raw.homeCover.trim()) ? raw.homeCover.trim() : 'cover-sakura';
+  let homeCover = (typeof raw.homeCover === 'string' && raw.homeCover.trim()) ? raw.homeCover.trim() : '';
+  if (!homeCover || homeCover === 'cover-sakura' || homeCover === 'cover-antigravity') {
+    try {
+      const cachedCover = localStorage.getItem('sakura_custom_cover_v1');
+      if (cachedCover && (cachedCover.startsWith('data:') || cachedCover.startsWith('url:'))) {
+        homeCover = cachedCover;
+      }
+    } catch (e) {}
+  }
+  if (!homeCover) {
+    homeCover = (appSettings.theme === 'dark' ? 'cover-antigravity' : 'cover-sakura');
+  }
+  const homeCoverUpdatedAt = Number(raw.homeCoverUpdatedAt) || (homeCover.startsWith('data:') || homeCover.startsWith('url:') ? Date.now() : 0);
+
   const extraDays = generateInitialExtraDays(true);
   if (raw.extraDays && typeof raw.extraDays === 'object') {
     Object.keys(raw.extraDays).forEach(iso => {
@@ -775,7 +788,7 @@ function normalizeState(raw) {
     });
   }
 
-  return { version: 2, anchorStartDate: '2026-11-08', anchorEndDate: '2027-01-26', totalDays: 80, updatedAt: Number(raw.updatedAt) || 0, homeCover, phases, goals, days, extraDays };
+  return { version: 2, anchorStartDate: '2026-11-08', anchorEndDate: '2027-01-26', totalDays: 80, updatedAt: Number(raw.updatedAt) || 0, homeCover, homeCoverUpdatedAt, phases, goals, days, extraDays };
 }
 
 function clampDay(v, fallback) {
@@ -4090,13 +4103,15 @@ function setupEventListeners() {
     coverPresetsGrid.addEventListener('click', (e) => {
       const item = e.target.closest('.cover-preset-item');
       if (item && item.dataset.coverId) {
+        const nowTs = Date.now();
         appState.homeCover = item.dataset.coverId;
-        appState.updatedAt = Date.now();
+        appState.homeCoverUpdatedAt = nowTs;
+        appState.updatedAt = nowTs;
         saveState();
         applyHomeCover();
         showToast(`已更換背景看板：${item.title || ''}`);
         if (isRoomConnected && !isReceivingRemoteUpdate) {
-          broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: appState.updatedAt });
+          broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: nowTs });
           broadcastFullStateToRoom();
         }
       }
@@ -4112,22 +4127,25 @@ function setupEventListeners() {
         showToast('⚠️ 請先輸入圖片網址');
         return;
       }
+      const nowTs = Date.now();
       appState.homeCover = 'url:' + url;
-      appState.updatedAt = Date.now();
+      appState.homeCoverUpdatedAt = nowTs;
+      appState.updatedAt = nowTs;
+      try { localStorage.setItem('sakura_custom_cover_v1', appState.homeCover); } catch (e) {}
       saveState();
       applyHomeCover();
       showToast('🎨 已成功套用自訂圖片背板！');
       if (isRoomConnected && !isReceivingRemoteUpdate) {
-        broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: appState.updatedAt });
+        broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: nowTs });
         broadcastFullStateToRoom();
       }
     });
   }
 
   /**
-   * 壓縮上傳之首頁看板圖片為輕量 JPEG 格式（約 20KB~35KB），確保跨裝置推播與即時雲端同步不超量
+   * 壓縮上傳之首頁看板圖片為輕量 JPEG 格式，確保跨裝置推播與即時雲端同步迅速穩定
    */
-  function compressCoverImageFile(file, maxWidth = 1000, maxHeight = 360, quality = 0.74) {
+  function compressCoverImageFile(file, maxWidth = 960, maxHeight = 320, quality = 0.70) {
     return new Promise((resolve, reject) => {
       if (!file) return reject(new Error('未選擇圖片檔案'));
       const reader = new FileReader();
@@ -4136,8 +4154,8 @@ function setupEventListeners() {
         const img = new Image();
         img.onerror = () => reject(new Error('解析圖片檔案失敗'));
         img.onload = () => {
-          let w = img.width || 1000;
-          let h = img.height || 360;
+          let w = img.width || 960;
+          let h = img.height || 320;
           const scale = Math.min(maxWidth / w, maxHeight / h, 1);
           const targetW = Math.max(1, Math.round(w * scale));
           const targetH = Math.max(1, Math.round(h * scale));
@@ -4171,14 +4189,17 @@ function setupEventListeners() {
       }
       showToast('⏳ 正在壓縮並同步背景看板至所有裝置...');
       try {
-        const compressed = await compressCoverImageFile(file, 1000, 360, 0.74);
+        const compressed = await compressCoverImageFile(file, 960, 320, 0.70);
+        const nowTs = Date.now();
         appState.homeCover = compressed;
-        appState.updatedAt = Date.now();
+        appState.homeCoverUpdatedAt = nowTs;
+        appState.updatedAt = nowTs;
+        try { localStorage.setItem('sakura_custom_cover_v1', compressed); } catch (e) {}
         saveState();
         applyHomeCover();
         showToast('📁 已成功上傳並同步自訂封面至所有裝置！');
         if (isRoomConnected && !isReceivingRemoteUpdate) {
-          broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: appState.updatedAt });
+          broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: nowTs });
           broadcastFullStateToRoom();
         }
       } catch (err) {
@@ -4944,7 +4965,15 @@ function compactState(st) {
     });
   }
 
-  return { p: st.phases, g: st.goals, d: compactDays, ex: compactExtra, hc: st.homeCover || '', u: st.updatedAt || Date.now() };
+  return {
+    p: st.phases,
+    g: st.goals,
+    d: compactDays,
+    ex: compactExtra,
+    hc: st.homeCover || '',
+    hcu: st.homeCoverUpdatedAt || (st.homeCover && (st.homeCover.startsWith('data:') || st.homeCover.startsWith('url:')) ? Date.now() : 0),
+    u: st.updatedAt || Date.now()
+  };
 }
 
 /**
@@ -4991,7 +5020,15 @@ function unpackCompactState(compact) {
     return day;
   });
 
-  const res = normalizeState({ version: 2, updatedAt: Number(compact.u) || 0, homeCover: compact.hc || '', phases, goals, days });
+  const res = normalizeState({
+    version: 2,
+    updatedAt: Number(compact.u) || 0,
+    homeCover: compact.hc || '',
+    homeCoverUpdatedAt: Number(compact.hcu) || 0,
+    phases,
+    goals,
+    days
+  });
   if (compact.ex && res && res.extraDays) {
     Object.keys(compact.ex).forEach(iso => {
       const saved = compact.ex[iso];
@@ -5040,9 +5077,23 @@ function mergeRemoteState(remote) {
     }
   }
 
-  if (remote.homeCover) {
-    appState.homeCover = remote.homeCover;
-    applyHomeCover();
+  // 🌸 關鍵封面同步防覆蓋保護：若遠端為自訂圖片，優先更新並永久快取；若本地已是自訂圖，絕不被預設主題刷掉
+  const remoteIsCustom = remote.homeCover && (remote.homeCover.startsWith('data:') || remote.homeCover.startsWith('url:'));
+  const localIsCustom = appState.homeCover && (appState.homeCover.startsWith('data:') || appState.homeCover.startsWith('url:'));
+
+  if (remoteIsCustom) {
+    if (!localIsCustom || (remote.homeCoverUpdatedAt || 0) >= (appState.homeCoverUpdatedAt || 0)) {
+      appState.homeCover = remote.homeCover;
+      appState.homeCoverUpdatedAt = remote.homeCoverUpdatedAt || Date.now();
+      try { localStorage.setItem('sakura_custom_cover_v1', remote.homeCover); } catch (e) {}
+      applyHomeCover();
+    }
+  } else if (remote.homeCover) {
+    if (!localIsCustom && (remote.homeCoverUpdatedAt || 0) >= (appState.homeCoverUpdatedAt || 0)) {
+      appState.homeCover = remote.homeCover;
+      appState.homeCoverUpdatedAt = remote.homeCoverUpdatedAt || Date.now();
+      applyHomeCover();
+    }
   }
 
   if (remote.extraDays && typeof remote.extraDays === 'object') {
@@ -5193,14 +5244,14 @@ async function extractRoomMessagePayload(msgEvent) {
   if (msgEvent.attachment && msgEvent.attachment.url) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
       const res = await fetch(msgEvent.attachment.url, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (res.ok) {
         return await res.json();
       }
     } catch (e) {
-      console.warn('Failed to fetch room attachment:', e);
+      // 附件逾期或網路阻斷時忽略
     }
   }
 
@@ -5587,11 +5638,20 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
       }
     } else if (p.kind === 'homeCover') {
       if (p.val) {
-        appState.homeCover = p.val;
-        applyHomeCover();
-        saveState(false, false);
-        if (!isHistoryReplay) {
-          showToast(`🎨 ${escapeHtml(msg.senderName || '跨裝置')} 更新了首頁看板背景！`);
+        const nowTs = Number(p.updatedAt) || Date.now();
+        const remoteIsCustom = p.val.startsWith('data:') || p.val.startsWith('url:');
+        const localIsCustom = appState.homeCover && (appState.homeCover.startsWith('data:') || appState.homeCover.startsWith('url:'));
+        if (remoteIsCustom || !localIsCustom || nowTs >= (appState.homeCoverUpdatedAt || 0)) {
+          appState.homeCover = p.val;
+          appState.homeCoverUpdatedAt = nowTs;
+          if (remoteIsCustom) {
+            try { localStorage.setItem('sakura_custom_cover_v1', p.val); } catch (e) {}
+          }
+          applyHomeCover();
+          saveState(false, false);
+          if (!isHistoryReplay) {
+            showToast(`🎨 ${escapeHtml(msg.senderName || '跨裝置')} 更新了首頁看板背景！`);
+          }
         }
       }
     } else if (p.kind === 'goal') {
@@ -5623,6 +5683,24 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
 }
 
 /**
+ * 從 GitHub 靜態雲端備份還原最新進度（永久備份，解決 ntfy 附件 3 小時過期問題）
+ */
+async function fallbackToGitHubBackup() {
+  try {
+    const backupRes = await fetch(`./data/backup-latest.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (backupRes.ok) {
+      const backupData = await backupRes.json();
+      if (backupData && backupData.type === 'FULL' && backupData.compact) {
+        handleRoomIncomingMessage(backupData, true);
+        console.log('🌸 已自動自 GitHub 雲端備份還原最新進度與背景封面！');
+      }
+    }
+  } catch (e) {
+    console.warn('Fallback to GitHub backup error:', e);
+  }
+}
+
+/**
  * 查詢房間最近快取進度並依序回放最新異動（支援跨裝置與手機重開瀏覽器無縫接續）
  */
 let isPollingRoomSnapshot = false;
@@ -5631,58 +5709,60 @@ async function pollLatestRoomSnapshot(topic) {
   isPollingRoomSnapshot = true;
   try {
     const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1`, { cache: 'no-store' });
-    if (!res.ok) return;
+    if (!res.ok) {
+      await fallbackToGitHubBackup();
+      return;
+    }
     const text = await res.text();
-    if (!text || !text.trim()) return;
+    if (!text || !text.trim()) {
+      await fallbackToGitHubBackup();
+      return;
+    }
     const lines = text.trim().split('\n');
-    let fullSnapshotIndex = -1;
     let fullSnapshotData = null;
-    const items = [];
+    let fullSnapshotLineIndex = -1;
 
-    for (let i = 0; i < lines.length; i++) {
+    // 🌸 關鍵倒序掃描（Reverse Scan）：從最新的一筆往回搜尋最新 FULL 快照
+    // 避免前面數十筆過期的 404 附件阻塞連線達數十秒，0.2 秒極速抓取最新快照與自訂背景封面！
+    for (let i = lines.length - 1; i >= 0; i--) {
       try {
         const item = JSON.parse(lines[i]);
         if (item.event === 'message') {
-          const data = await extractRoomMessagePayload(item);
-          if (data) {
-            items.push(data);
-            if (data.type === 'FULL' && data.compact) {
-              fullSnapshotIndex = items.length - 1;
+          if ((item.message && item.message.includes('"FULL"')) || (item.attachment && item.attachment.url)) {
+            const data = await extractRoomMessagePayload(item);
+            if (data && data.type === 'FULL' && data.compact) {
               fullSnapshotData = data;
+              fullSnapshotLineIndex = i;
+              break;
             }
           }
         }
       } catch (e) {}
     }
 
-    // 優先合併最新一筆完整快照
     if (fullSnapshotData) {
       handleRoomIncomingMessage(fullSnapshotData, true);
+    } else {
+      // 若 ntfy 上的所有 FULL 附件皆已過期，立即從 GitHub 雲端備份還原
+      await fallbackToGitHubBackup();
     }
 
-    // 依序回放快照之後的所有最新細項異動（例如手機開始計時、平板結束計時）
-    const startIdx = fullSnapshotIndex >= 0 ? fullSnapshotIndex + 1 : 0;
-    for (let i = startIdx; i < items.length; i++) {
-      if (items[i] && items[i].type === 'DELTA') {
-        handleRoomIncomingMessage(items[i], true);
-      }
-    }
-
-    // 若 ntfy 快取內沒有任何訊息（例如所有裝置皆關機超過 12 小時），自動自 GitHub 雲端備份還原最新進度
-    if (items.length === 0) {
+    // 依序回放最新快照之後發生的所有 DELTA 異動
+    const deltaStartLine = fullSnapshotLineIndex >= 0 ? fullSnapshotLineIndex + 1 : 0;
+    for (let i = deltaStartLine; i < lines.length; i++) {
       try {
-        const backupRes = await fetch(`./data/backup-latest.json?t=${Date.now()}`);
-        if (backupRes.ok) {
-          const backupData = await backupRes.json();
-          if (backupData && backupData.type === 'FULL' && backupData.compact) {
-            handleRoomIncomingMessage(backupData, true);
-            console.log('🌸 已自動自 GitHub 雲端備份還原最新進度！');
+        const item = JSON.parse(lines[i]);
+        if (item.event === 'message') {
+          const data = await extractRoomMessagePayload(item);
+          if (data && data.type === 'DELTA') {
+            handleRoomIncomingMessage(data, true);
           }
         }
       } catch (e) {}
     }
   } catch (err) {
     console.warn('Poll room snapshot warning:', err);
+    await fallbackToGitHubBackup();
   } finally {
     isPollingRoomSnapshot = false;
   }
