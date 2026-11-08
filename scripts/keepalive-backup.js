@@ -73,6 +73,8 @@ async function run() {
             if (!(newHc && (newHc.startsWith('data:') || newHc.startsWith('url:')))) {
               newCompact.hc = existHc;
               newCompact.hcu = existCompact.hcu || existCompact.u || Date.now();
+              newCompact.hcf = existCompact.hcf || 'contain';
+              newCompact.hcp = existCompact.hcp || 'center';
             }
           }
         } catch (e) {

@@ -67,6 +67,8 @@ def main():
                         if not (new_hc and (new_hc.startswith("data:") or new_hc.startswith("url:"))):
                             new_compact["hc"] = exist_hc
                             new_compact["hcu"] = exist_compact.get("hcu", exist_compact.get("u", int(time.time() * 1000)))
+                            new_compact["hcf"] = exist_compact.get("hcf", "contain")
+                            new_compact["hcp"] = exist_compact.get("hcp", "center")
                 except Exception as e:
                     print(f"[Keepalive] Cover preserve notice: {e}", file=sys.stderr)
 

@@ -2798,7 +2798,7 @@ body[data-theme="dark"] .theme-switch-pill.active,
 
 .notion-cover-banner {
   position: relative;
-  height: 200px;
+  height: 220px;
   width: 100%;
   border-radius: var(--radius-xl);
   overflow: hidden;
@@ -2806,7 +2806,53 @@ body[data-theme="dark"] .theme-switch-pill.active,
   box-shadow: var(--shadow-md);
   background-size: cover;
   background-position: center;
-  transition: background 0.35s ease;
+  background-color: var(--bg-card);
+  transition: all 0.35s ease;
+}
+
+@media (max-width: 768px) {
+  .notion-cover-banner {
+    height: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .notion-cover-banner {
+    height: 165px;
+  }
+}
+
+.notion-cover-backdrop {
+  position: absolute;
+  inset: -24px;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+  filter: blur(28px) brightness(0.55) saturate(1.3);
+  transform: scale(1.15);
+  z-index: 1;
+  pointer-events: none;
+  display: none;
+}
+
+.notion-cover-foreground {
+  position: absolute;
+  inset: 0;
+  background-size: contain;
+  background-position: center center;
+  background-repeat: no-repeat;
+  z-index: 2;
+  pointer-events: none;
+  display: none;
+  transition: background-position 0.25s ease;
+}
+
+.notion-cover-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent 65%, rgba(12, 13, 16, 0.45) 100%);
 }
 
 /* 8 Built-in Notion Cover Presets */
@@ -2980,6 +3026,71 @@ body[data-theme="dark"] .theme-switch-pill.active,
   flex-wrap: wrap;
   padding-top: 8px;
   border-top: 1px solid var(--border-light);
+}
+
+.cover-settings-card {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-medium);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cover-settings-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+}
+
+.cover-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cover-settings-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.cover-segmented-pills {
+  display: inline-flex;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.cover-pill-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  white-space: nowrap;
+}
+
+.cover-pill-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cover-pill-btn.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  font-weight: 700;
+  border: 1px solid var(--border-light);
 }
 
 /* Home Hero Bar */

@@ -33,7 +33,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=20261108_v7" />
+  <link rel="stylesheet" href="style.css?v=20261108_v8" />
 </head>
 <body>
 
@@ -140,6 +140,8 @@
         <!-- Notion Style Customizable Cover Banner -->
         <div class="notion-cover-container">
           <div class="notion-cover-banner" id="homeCoverBanner" data-cover="cover-sakura">
+            <div class="notion-cover-backdrop" id="homeCoverBackdrop"></div>
+            <div class="notion-cover-foreground" id="homeCoverForeground"></div>
             <div class="notion-cover-overlay"></div>
             <div class="notion-cover-actions">
               <button id="toggleCoverPickerBtn" class="cover-action-btn" type="button">
@@ -193,6 +195,31 @@
               <button id="applyCustomCoverUrlBtn" class="btn btn-xs btn-primary" type="button">套用網址</button>
               <label for="customCoverFileInput" class="btn btn-xs btn-subtle" style="cursor:pointer; margin:0;">📁 上傳照片</label>
               <input id="customCoverFileInput" type="file" accept="image/*" style="display:none;" />
+            </div>
+
+            <!-- 跨裝置背板顯示微調控制項（統一手機與電腦截圖畫面） -->
+            <div class="cover-settings-card" id="coverSettingsCard" style="display:none;">
+              <div class="cover-settings-title">背板跨裝置顯示微調（手機與電腦統一）</div>
+              <div class="cover-settings-row">
+                <span class="cover-settings-label">顯示模式：</span>
+                <div class="cover-segmented-pills" id="coverFitPills">
+                  <button type="button" class="cover-pill-btn active" data-fit-choice="contain" title="手機與電腦顯示完全相同整張圖片，絕不裁切任何角落">
+                    🖼️ 完整全圖（推薦）
+                  </button>
+                  <button type="button" class="cover-pill-btn" data-fit-choice="cover" title="滿版填滿整個橫幅">
+                    ✂️ 滿版裁切
+                  </button>
+                </div>
+              </div>
+
+              <div class="cover-settings-row" id="coverPositionRow" style="display:none;">
+                <span class="cover-settings-label">裁切視角：</span>
+                <div class="cover-segmented-pills" id="coverPositionPills">
+                  <button type="button" class="cover-pill-btn" data-pos-choice="top" title="以頂部為焦點">⬆️ 偏上</button>
+                  <button type="button" class="cover-pill-btn active" data-pos-choice="center" title="置中對齊">⏺️ 置中</button>
+                  <button type="button" class="cover-pill-btn" data-pos-choice="bottom" title="以底部為焦點">⬇️ 偏下</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -960,6 +987,6 @@
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261108_v7"></script>
+  <script src="app.js?v=20261108_v8"></script>
 </body>
 </html>

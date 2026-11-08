@@ -788,7 +788,24 @@ function normalizeState(raw) {
     });
   }
 
-  return { version: 2, anchorStartDate: '2026-11-08', anchorEndDate: '2027-01-26', totalDays: 80, updatedAt: Number(raw.updatedAt) || 0, homeCover, homeCoverUpdatedAt, phases, goals, days, extraDays };
+  const homeCoverFit = raw.homeCoverFit === 'cover' ? 'cover' : 'contain';
+  const homeCoverPosition = (raw.homeCoverPosition === 'top' || raw.homeCoverPosition === 'bottom') ? raw.homeCoverPosition : 'center';
+
+  return {
+    version: 2,
+    anchorStartDate: '2026-11-08',
+    anchorEndDate: '2027-01-26',
+    totalDays: 80,
+    updatedAt: Number(raw.updatedAt) || 0,
+    homeCover,
+    homeCoverUpdatedAt,
+    homeCoverFit,
+    homeCoverPosition,
+    phases,
+    goals,
+    days,
+    extraDays
+  };
 }
 
 function clampDay(v, fallback) {
@@ -1928,10 +1945,35 @@ function closeCalendarDayEditor() {
    第 1 頁：🏠 極簡首頁（Notion 背板、日期、考試倒數、當日待辦、行事曆）
    ========================================================================== */
 
+function updateCoverControlsUi(isCustom, fitMode, posMode) {
+  if (typeof document === 'undefined') return;
+  const card = document.getElementById('coverSettingsCard');
+  if (card) {
+    card.style.display = isCustom ? 'flex' : 'none';
+  }
+  const fitPills = document.querySelectorAll('#coverFitPills .cover-pill-btn');
+  fitPills.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.fitChoice === fitMode);
+  });
+
+  const posRow = document.getElementById('coverPositionRow');
+  if (posRow) {
+    posRow.style.display = (fitMode === 'cover') ? 'flex' : 'none';
+  }
+
+  const posPills = document.querySelectorAll('#coverPositionPills .cover-pill-btn');
+  posPills.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.posChoice === posMode);
+  });
+}
+
 function applyHomeCover() {
   if (typeof document === 'undefined' || !appState) return;
   const banner = document.getElementById('homeCoverBanner');
   if (!banner) return;
+  const backdrop = document.getElementById('homeCoverBackdrop');
+  const foreground = document.getElementById('homeCoverForeground');
+
   let cover = appState.homeCover;
   if (!cover || cover === 'cover-sakura' || cover === 'cover-antigravity') {
     try {
@@ -1946,11 +1988,48 @@ function applyHomeCover() {
     cover = appSettings.theme === 'dark' ? 'cover-antigravity' : 'cover-sakura';
   }
 
-  if (cover.startsWith('url:') || cover.startsWith('data:')) {
+  const isCustom = cover.startsWith('url:') || cover.startsWith('data:');
+  const fitMode = appState.homeCoverFit || (isCustom ? 'contain' : 'cover');
+  const posMode = appState.homeCoverPosition || 'center';
+
+  updateCoverControlsUi(isCustom, fitMode, posMode);
+
+  if (isCustom) {
     const rawUrl = cover.startsWith('url:') ? cover.slice(4) : cover;
+    const cssUrl = `url("${rawUrl.replace(/"/g, '\\"')}")`;
+
     banner.removeAttribute('data-cover');
-    banner.style.backgroundImage = `url("${rawUrl.replace(/"/g, '\\"')}")`;
+    banner.style.backgroundImage = '';
+
+    if (backdrop) {
+      if (fitMode === 'contain') {
+        backdrop.style.display = 'block';
+        backdrop.style.backgroundImage = cssUrl;
+      } else {
+        backdrop.style.display = 'none';
+        backdrop.style.backgroundImage = '';
+      }
+    }
+
+    if (foreground) {
+      foreground.style.display = 'block';
+      foreground.style.backgroundImage = cssUrl;
+      foreground.style.backgroundSize = (fitMode === 'contain') ? 'contain' : 'cover';
+
+      let bgPos = 'center center';
+      if (posMode === 'top') bgPos = 'center 15%';
+      else if (posMode === 'bottom') bgPos = 'center 85%';
+      foreground.style.backgroundPosition = bgPos;
+    }
   } else {
+    if (backdrop) {
+      backdrop.style.display = 'none';
+      backdrop.style.backgroundImage = '';
+    }
+    if (foreground) {
+      foreground.style.display = 'none';
+      foreground.style.backgroundImage = '';
+    }
     banner.style.backgroundImage = '';
     banner.setAttribute('data-cover', cover);
   }
@@ -4152,9 +4231,9 @@ function setupEventListeners() {
   }
 
   /**
-   * 壓縮上傳之首頁看板圖片為輕量 JPEG 格式，確保跨裝置推播與即時雲端同步迅速穩定
+   * 壓縮上傳之首頁看板圖片為高畫質羽量 JPEG 格式（支援寬達 1440px 視網膜螢幕與行動裝置零差異）
    */
-  function compressCoverImageFile(file, maxWidth = 960, maxHeight = 320, quality = 0.70) {
+  function compressCoverImageFile(file, maxWidth = 1440, maxHeight = 720, quality = 0.76) {
     return new Promise((resolve, reject) => {
       if (!file) return reject(new Error('未選擇圖片檔案'));
       const reader = new FileReader();
@@ -4163,8 +4242,8 @@ function setupEventListeners() {
         const img = new Image();
         img.onerror = () => reject(new Error('解析圖片檔案失敗'));
         img.onload = () => {
-          let w = img.width || 960;
-          let h = img.height || 320;
+          let w = img.width || 1440;
+          let h = img.height || 720;
           const scale = Math.min(maxWidth / w, maxHeight / h, 1);
           const targetW = Math.max(1, Math.round(w * scale));
           const targetH = Math.max(1, Math.round(h * scale));
@@ -4198,22 +4277,62 @@ function setupEventListeners() {
       }
       showToast('⏳ 正在壓縮並同步背景看板至所有裝置...');
       try {
-        const compressed = await compressCoverImageFile(file, 960, 320, 0.70);
+        const compressed = await compressCoverImageFile(file, 1440, 720, 0.76);
         const nowTs = Date.now();
         appState.homeCover = compressed;
         appState.homeCoverUpdatedAt = nowTs;
+        appState.homeCoverFit = 'contain'; // 預設完整全圖，保證手機與電腦截圖顯示完全相同
+        appState.homeCoverPosition = 'center';
         appState.updatedAt = nowTs;
         try { localStorage.setItem('sakura_custom_cover_v1', compressed); } catch (e) {}
         saveState();
         applyHomeCover();
         showToast('📁 已成功上傳並同步自訂封面至所有裝置！');
         if (!isReceivingRemoteUpdate) {
-          broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, updatedAt: nowTs });
+          broadcastRoomDelta({ kind: 'homeCover', val: appState.homeCover, fit: 'contain', position: 'center', updatedAt: nowTs });
           broadcastFullStateToRoom();
         }
       } catch (err) {
         console.error('Cover upload compression error:', err);
         showToast('⚠️ 圖片處理失敗，請重試');
+      }
+    });
+  }
+
+  // 跨裝置背板顯示比例微調（完整全圖 vs 滿版裁切）
+  const coverFitPills = document.getElementById('coverFitPills');
+  if (coverFitPills) {
+    coverFitPills.addEventListener('click', (e) => {
+      const btn = e.target.closest('.cover-pill-btn');
+      if (btn && btn.dataset.fitChoice) {
+        appState.homeCoverFit = btn.dataset.fitChoice;
+        appState.updatedAt = Date.now();
+        saveState();
+        applyHomeCover();
+        showToast(appState.homeCoverFit === 'contain' ? '🖼️ 已切換為「完整全圖」模式（手機與電腦畫面統一不裁切）' : '✂️ 已切換為「滿版裁切」模式');
+        if (currentRoomId && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({ kind: 'homeCoverSettings', fit: appState.homeCoverFit, position: appState.homeCoverPosition, updatedAt: Date.now() });
+          broadcastFullStateToRoom();
+        }
+      }
+    });
+  }
+
+  // 滿版裁切視角對齊焦點微調（偏上 / 置中 / 偏下）
+  const coverPositionPills = document.getElementById('coverPositionPills');
+  if (coverPositionPills) {
+    coverPositionPills.addEventListener('click', (e) => {
+      const btn = e.target.closest('.cover-pill-btn');
+      if (btn && btn.dataset.posChoice) {
+        appState.homeCoverPosition = btn.dataset.posChoice;
+        appState.updatedAt = Date.now();
+        saveState();
+        applyHomeCover();
+        showToast(`🎯 已調整視角焦點為：${btn.textContent.trim()}`);
+        if (currentRoomId && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({ kind: 'homeCoverSettings', fit: appState.homeCoverFit, position: appState.homeCoverPosition, updatedAt: Date.now() });
+          broadcastFullStateToRoom();
+        }
       }
     });
   }
@@ -4981,6 +5100,8 @@ function compactState(st) {
     ex: compactExtra,
     hc: st.homeCover || '',
     hcu: st.homeCoverUpdatedAt || (st.homeCover && (st.homeCover.startsWith('data:') || st.homeCover.startsWith('url:')) ? Date.now() : 0),
+    hcf: st.homeCoverFit || 'contain',
+    hcp: st.homeCoverPosition || 'center',
     u: st.updatedAt || Date.now()
   };
 }
@@ -5034,6 +5155,8 @@ function unpackCompactState(compact) {
     updatedAt: Number(compact.u) || 0,
     homeCover: compact.hc || '',
     homeCoverUpdatedAt: Number(compact.hcu) || (compact.hc && (compact.hc.startsWith('data:') || compact.hc.startsWith('url:')) ? (Number(compact.u) || 1) : 0),
+    homeCoverFit: compact.hcf || 'contain',
+    homeCoverPosition: compact.hcp || 'center',
     phases,
     goals,
     days
@@ -5103,6 +5226,13 @@ function mergeRemoteState(remote) {
       appState.homeCoverUpdatedAt = remote.homeCoverUpdatedAt || Date.now();
       applyHomeCover();
     }
+  }
+
+  if (remote.homeCoverFit) {
+    appState.homeCoverFit = remote.homeCoverFit;
+  }
+  if (remote.homeCoverPosition) {
+    appState.homeCoverPosition = remote.homeCoverPosition;
   }
 
   if (remote.extraDays && typeof remote.extraDays === 'object') {
@@ -5660,6 +5790,8 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
         if (remoteIsCustom || !localIsCustom || nowTs >= (appState.homeCoverUpdatedAt || 0)) {
           appState.homeCover = p.val;
           appState.homeCoverUpdatedAt = nowTs;
+          if (p.fit) appState.homeCoverFit = p.fit;
+          if (p.position) appState.homeCoverPosition = p.position;
           if (remoteIsCustom) {
             try { localStorage.setItem('sakura_custom_cover_v1', p.val); } catch (e) {}
           }
@@ -5670,6 +5802,11 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
           }
         }
       }
+    } else if (p.kind === 'homeCoverSettings') {
+      if (p.fit) appState.homeCoverFit = p.fit;
+      if (p.position) appState.homeCoverPosition = p.position;
+      saveState(false, false);
+      applyHomeCover();
     } else if (p.kind === 'goal') {
       if (!appState.goals[p.subj]) appState.goals[p.subj] = {};
       appState.goals[p.subj][p.phaseKey] = p.val || '';
@@ -6149,7 +6286,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261108_v7').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261108_v8').then((reg) => {
         console.log('🌸 PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);
