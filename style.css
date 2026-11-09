@@ -1817,6 +1817,100 @@ body {
 }
 
 /* ==========================================================================
+   Notion 風格：當日快捷編輯頁面彈窗 (Notion Quick Page Modal)
+   ========================================================================== */
+.notion-page-modal {
+  max-width: 680px;
+  width: 95%;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border-light);
+}
+
+.notion-modal-header {
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+[data-theme="dark"] .notion-modal-header {
+  background: var(--bg-card);
+}
+
+.notion-modal-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.notion-modal-date-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.notion-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.daily-nav-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.notion-modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: calc(85vh - 65px);
+  overflow-y: auto;
+}
+
+.notion-prop-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notion-prop-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notion-slots-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notion-modal-body .daily-slot-card {
+  box-shadow: none;
+  border: 1px solid var(--border-light);
+}
+
+.notion-modal-body .daily-slot-card-header {
+  padding: 10px 14px;
+}
+
+.notion-modal-body .daily-slot-card-body {
+  padding: 12px 14px;
+  gap: 12px;
+}
+
+/* ==========================================================================
    4 Main Navigation Tabs & Tab Views
    ========================================================================== */
 .main-tabs-nav {

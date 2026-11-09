@@ -1967,17 +1967,20 @@ function openCalendarDayEditor(dayKey) {
   calendarEditorDayKey = dayKey;
   renderPureCalendarTable();
   renderDailyPlanView(dayKey);
-  const detailView = document.getElementById('calendarDayDetailView');
-  if (detailView) {
-    detailView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const modal = document.getElementById('notionDayModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    const memo = document.getElementById('dailyCalendarInput');
+    if (memo) setTimeout(() => memo.focus(), 80);
   }
 }
 
 function closeCalendarDayEditor() {
-  const gridView = document.getElementById('calendarMonthGridView');
-  if (gridView) {
-    gridView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const modal = document.getElementById('notionDayModal');
+  if (modal) {
+    modal.classList.add('hidden');
   }
+  renderPureCalendarTable();
 }
 
 /* ==========================================================================
@@ -2739,8 +2742,8 @@ function renderPureCalendarTable() {
         style="${!matchesSearch ? 'opacity: 0.25;' : ''}"
         data-cal-cell-day="${dayKey}"
       >
-        <!-- 第一格：點擊直接跳轉到下方當日行事曆備忘與讀書科目 -->
-        <div class="cal-cell-date-row" data-open-day-editor="${dayKey}" title="點選跳轉至下方檢視 ${cM}月${cD}日 備忘與讀書科目">
+        <!-- 第一格：點擊開啟 Notion 風格當日快捷頁面彈窗 -->
+        <div class="cal-cell-date-row" data-open-day-editor="${dayKey}" title="點擊開啟 ${cM}月${cD}日 快捷編輯頁面">
           <div class="cal-date-left-meta">
             ${isNumericCountdown ? `<span class="cal-countdown-mini">D-${dayObj.dayCountdown}</span>` : ''}
             ${dayObj && dayObj.calendar ? `<span class="cal-memo-pill" title="${escapeHtml(dayObj.calendar)}">${escapeHtml(dayObj.calendar)}</span>` : ''}
@@ -4718,6 +4721,34 @@ function setupEventListeners() {
     });
   }
 
+  // 12C. Notion 當日快捷頁面彈窗（關閉按鈕、點擊遮罩關閉、Escape 鍵關閉）
+  const closeNotionDayModalBtn = document.getElementById('closeNotionDayModalBtn');
+  const notionDayModal = document.getElementById('notionDayModal');
+  if (closeNotionDayModalBtn) {
+    closeNotionDayModalBtn.addEventListener('click', closeCalendarDayEditor);
+  }
+  if (notionDayModal) {
+    notionDayModal.addEventListener('click', (e) => {
+      if (e.target === notionDayModal) {
+        closeCalendarDayEditor();
+      }
+    });
+  }
+
+  // 全域 Escape 鍵監聽：快捷關閉彈窗
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const dayModal = document.getElementById('notionDayModal');
+      if (dayModal && !dayModal.classList.contains('hidden')) {
+        closeCalendarDayEditor();
+      }
+      const setModal = document.getElementById('settingsModal');
+      if (setModal && !setModal.classList.contains('hidden')) {
+        setModal.classList.add('hidden');
+      }
+    }
+  });
+
   // 13. 設定彈窗（⚙️ 開啟 / 關閉）
   const openSettingsModalBtn = document.getElementById('openSettingsModalBtn');
   const closeSettingsModalBtn = document.getElementById('closeSettingsModalBtn');
@@ -6322,7 +6353,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261109_v13').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261109_v14').then((reg) => {
         console.log('🌸 PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);

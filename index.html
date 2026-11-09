@@ -33,7 +33,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=20261109_v13" />
+  <link rel="stylesheet" href="style.css?v=20261109_v14" />
 </head>
 <body>
 
@@ -49,7 +49,6 @@
           小櫻讀書計劃表
           <span class="brand-badge">11/8 (Day 80) – 1/26 (Day 1)</span>
         </h1>
-        <p class="brand-subtitle">80 天衝刺讀書計劃與統計儀表板</p>
       </div>
     </div>
 
@@ -259,8 +258,7 @@
           <div class="card home-block-card">
             <div class="card-header">
               <div>
-                <div class="card-title"><span class="icon">✦</span> 當日要做的事情（早・午・晚）</div>
-                <div class="card-subtitle">可直接勾選、切換科目、輸入今日工作或一鍵啟動計時</div>
+                <div class="card-title"><span class="icon">✦</span> 當日要做的事情</div>
               </div>
               <div style="display:flex; align-items:center; gap:8px;">
                 <span class="home-done-counter" id="homeDoneCounter">0 / 3 完成</span>
@@ -453,10 +451,6 @@
             </div>
           </div>
 
-          <div class="notion-cal-guide-strip">
-            <span>💡 <strong>點選當日日期</strong>直接跳轉至下方檢視與編輯當日重要備忘錄及早中晚讀書科目；<strong>點擊日期下方三格橫線</strong>可直接在月曆中填寫工作。</span>
-          </div>
-
           <!-- Notion 7-Column Calendar Grid (週一 ~ 週日) -->
           <div class="notion-calendar-scroll">
             <div class="notion-calendar-board">
@@ -476,42 +470,6 @@
           </div>
         </div>
       </div>
-
-      <!-- 下半部：當日重要備忘錄與三時段讀書科目（點擊上方日曆日期直接跳轉至此） -->
-      <div id="calendarDayDetailView" class="daily-plan-wrapper" style="margin-top: 24px;">
-        <!-- Day Navigation Bar with Back to Calendar Button -->
-        <div class="daily-nav-card">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button id="backToCalendarGridBtn" class="btn btn-subtle" type="button" title="回到上方月曆">⬆️ 回到月曆</button>
-            <button id="dailyPrevDayBtn" class="btn btn-subtle" type="button">◀ 前一天</button>
-          </div>
-          <div class="daily-current-day-box">
-            <span class="daily-day-badge" id="dailyDayBadge">Day 80</span>
-            <span class="daily-date-heading" id="dailyDateHeading">11月8日（週日）</span>
-            <span class="daily-phase-badge" id="dailyPhaseBadge">第一階段</span>
-            <select id="dailyDaySelect" class="search-input" style="min-width: 140px;"></select>
-          </div>
-          <div class="daily-nav-right">
-            <button id="dailyTodayBtn" class="btn btn-subtle" type="button">跳至今日</button>
-            <button id="dailyNextDayBtn" class="btn btn-subtle" type="button">後一天 ▶</button>
-          </div>
-        </div>
-
-        <!-- Day Calendar & Notes Card -->
-        <div class="card daily-calendar-card">
-          <div class="card-header">
-            <div class="card-title"><span class="icon">🗓️</span> 當日重要備忘錄</div>
-          </div>
-          <div class="card-body">
-            <input type="text" id="dailyCalendarInput" class="daily-calendar-input" placeholder="輸入當日重要行程、考試或死線備忘..." />
-          </div>
-        </div>
-
-        <!-- 3 Time Slots Detailed Cards (Morning, Afternoon, Evening: 讀書科目 + 範圍任務) -->
-        <div class="daily-slots-container" id="dailySlotsContainer">
-          <!-- Rendered by app.js: 3 clean cards for morning, afternoon, evening -->
-        </div>
-      </div>
     </section>
 
 
@@ -524,7 +482,6 @@
           <div class="card-header">
             <div>
               <div class="card-title"><span class="icon">⏱️</span> 80天早中晚專注時間表</div>
-              <div class="card-subtitle">無需跳轉頁面，可直接在此總表修改每日早、中、晚科目、工作範圍、起迄時間與計時</div>
             </div>
           </div>
 
@@ -596,7 +553,6 @@
         <div class="card-header">
           <div>
             <div class="card-title"><span class="icon">🌸</span> 智能讀書診斷與衝刺建議</div>
-            <div class="card-subtitle">依據目前真實專注時長、時段分佈與衝刺階段自動生成</div>
           </div>
           <span class="diagnostic-badge" id="diagPaceBadge">衝刺狀態計算中...</span>
         </div>
@@ -747,6 +703,60 @@
     </section>
 
   </main>
+
+  <!-- =========================================================================
+       Notion 快捷頁面彈窗：當日備忘與早中晚讀書科目（點擊月曆任一日期時彈出）
+       ========================================================================= -->
+  <div id="notionDayModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="dailyDateHeading">
+    <div class="modal-card notion-page-modal">
+      <div class="modal-header notion-modal-header">
+        <div class="notion-modal-title-group">
+          <span class="modal-icon">📅</span>
+          <div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <h3 id="dailyDateHeading" class="notion-modal-date-title">11月8日（週日）</h3>
+              <span class="daily-day-badge" id="dailyDayBadge">Day 80</span>
+              <span class="daily-phase-badge" id="dailyPhaseBadge">第一階段</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="notion-modal-header-actions">
+          <div class="daily-nav-btn-group">
+            <button id="dailyPrevDayBtn" class="btn btn-xs btn-subtle" type="button" title="前一天">◀ 前一天</button>
+            <button id="dailyTodayBtn" class="btn btn-xs btn-subtle" type="button" title="跳至今日">今日</button>
+            <button id="dailyNextDayBtn" class="btn btn-xs btn-subtle" type="button" title="後一天">後一天 ▶</button>
+          </div>
+          <button id="closeNotionDayModalBtn" class="modal-close-btn" type="button" aria-label="關閉快捷頁面">✕</button>
+        </div>
+      </div>
+
+      <div class="modal-body notion-modal-body">
+        <!-- 當日重要備忘錄 -->
+        <div class="notion-prop-section">
+          <label class="notion-prop-title" for="dailyCalendarInput">
+            <span class="icon">🗓️</span> 當日重要備忘錄
+          </label>
+          <input
+            type="text"
+            id="dailyCalendarInput"
+            class="daily-calendar-input"
+            placeholder="輸入當日重要行程、考試或死線備忘..."
+          />
+        </div>
+
+        <!-- 上中下午讀書科目（早、午、晚） -->
+        <div class="notion-slots-section">
+          <div class="notion-prop-title" style="margin-bottom: 6px;">
+            <span class="icon">📚</span> 今日讀書科目與工作任務
+          </div>
+          <div class="daily-slots-container" id="dailySlotsContainer">
+            <!-- Rendered by app.js: 3 clean cards for morning, afternoon, evening -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- =========================================================================
        彈窗：⚙️ 設定、衝刺階段與備份管理工具（保持主畫面乾淨不凌亂）
@@ -947,6 +957,6 @@
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261109_v13"></script>
+  <script src="app.js?v=20261109_v14"></script>
 </body>
 </html>
