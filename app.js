@@ -2188,16 +2188,10 @@ function renderHomeView() {
               <span style="font-size:11.5px; color:var(--text-muted); font-weight:500;">(${timeRange})</span>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">
+              ${isRunning ? '<span class="status-pill status-active" style="font-size:11px; padding:2px 8px;">⚡ 計時中</span>' : (isPaused ? '<span class="status-pill status-paused" style="font-size:11px; padding:2px 8px;">⏸ 休息中</span>' : '')}
+              <span style="font-size:12.5px; color:var(--text-secondary); font-weight:600;">
                 ${effMins > 0 ? `已讀 ${formatMinutesToHM(effMins)}` : '0分'}
               </span>
-              <button
-                type="button"
-                class="ypt-btn ${isRunning ? 'btn-pause' : 'btn-start'}"
-                data-action="${isRunning ? 'ypt-pause' : (isPaused ? 'ypt-resume' : 'ypt-start')}"
-                data-day="${day.dayCountdown}"
-                data-slot="${key}"
-              >${isRunning ? '暫停 ⏸' : (isPaused ? '繼續 ▶' : '計時 ▶')}</button>
             </div>
           </div>
           <div class="home-slot-controls-row">
@@ -2246,7 +2240,6 @@ function renderHomeView() {
   // 4. 當日專注與休息統計速覽
   const focusEl = document.getElementById('homeStatFocusTime');
   const shortRestEl = document.getElementById('homeStatShortRest');
-  const totalRestEl = document.getElementById('homeStatTotalRest');
   const active = findActiveTimerSlot();
 
   if (focusEl) focusEl.textContent = formatMinutesToHM(getDayTotalEffectiveMinutes(day));
@@ -2254,13 +2247,10 @@ function renderHomeView() {
     const shortMs = (active && active.slot.timerStatus === 'paused') ? getSlotShortRestLiveMs(active.slot) : 0;
     shortRestEl.textContent = formatMsToClock(shortMs);
   }
-  if (totalRestEl) {
-    totalRestEl.textContent = formatMinutesToHM(getDayTotalRestMinutes(day));
-  }
 }
 
 /* ==========================================================================
-   第 2 頁：⏱️ 計時器（YPT 模式：移除英文科目，下方顯示短期休息與累積休息）
+   第 2 頁：⏱️ 計時器（YPT 模式：依開始時間自動判定時段，下方顯示休息時間）
    ========================================================================== */
 
 function getDayTotalEffectiveMinutes(day) {
@@ -2276,7 +2266,6 @@ function renderQuickTimerView() {
   const quickDateTitle = document.getElementById('quickDateTitle');
   const quickPhaseTag = document.getElementById('quickPhaseTag');
   const quickTodayTotalTime = document.getElementById('quickTodayTotalTime');
-  const quickTodayRestTime = document.getElementById('quickTodayRestTime');
 
   const isNumeric = typeof day.dayCountdown === 'number';
   if (quickDayBadge) quickDayBadge.textContent = isNumeric ? `Day ${day.dayCountdown}` : day.dateDisplay;
@@ -2293,9 +2282,6 @@ function renderQuickTimerView() {
   if (quickTodayTotalTime) {
     quickTodayTotalTime.textContent = formatMinutesToHM(getDayTotalEffectiveMinutes(day));
   }
-  if (quickTodayRestTime) {
-    quickTodayRestTime.textContent = formatMinutesToHM(getDayTotalRestMinutes(day));
-  }
 
   updateQuickTimerDom();
   renderQuickSubjectsGrid(day);
@@ -2309,27 +2295,20 @@ function updateQuickTimerDom() {
   const actionsRow = document.getElementById('quickActionsRow');
   const pauseResumeBtn = document.getElementById('quickPauseResumeBtn');
 
-  // 短期休息與累積休息面板元素
+  // 休息時間面板元素（已取消累積休息，短期休息統一更名為休息時間）
   const restPanel = document.getElementById('quickRestTimerPanel');
   const shortRestClockEl = document.getElementById('quickShortRestClock');
   const shortRestHintEl = document.getElementById('quickShortRestHint');
-  const cumRestClockEl = document.getElementById('quickCumulativeRestClock');
-  const cumRestHintEl = document.getElementById('quickCumulativeRestHint');
-  const quickTodayRestTime = document.getElementById('quickTodayRestTime');
 
   if (!clockEl || !textEl) return;
 
-  const currentDay = getTimerTargetDay();
   const active = findActiveTimerSlot();
-  const targetDayForRest = active ? active.day : currentDay;
 
   if (active) {
     const isRunning = active.slot.timerStatus === 'running';
     const isPaused = active.slot.timerStatus === 'paused';
     const liveFocusMs = getSlotLiveMs(active.slot);
     const shortRestMs = getSlotShortRestLiveMs(active.slot);
-    const slotTotalRestMs = getSlotRestLiveMs(active.slot);
-    const dayTotalRestMs = getDayTotalRestLiveMs(targetDayForRest);
 
     // 主時鐘始終顯示「讀書專注時間」（暫停時保持定格於已讀時間，不與下方休息時鐘混淆）
     if (currentTimerMode === 'pomodoro-25') {
@@ -2366,7 +2345,7 @@ function updateQuickTimerDom() {
       pauseResumeBtn.className = 'btn btn-lg ' + (isRunning ? 'btn-pause' : 'btn-resume');
     }
 
-    // 更新下方「短期休息」與「累積休息」面板
+    // 更新下方「休息時間」面板
     if (restPanel) {
       restPanel.classList.toggle('is-resting', isPaused);
     }
@@ -2375,17 +2354,8 @@ function updateQuickTimerDom() {
     }
     if (shortRestHintEl) {
       shortRestHintEl.textContent = isPaused
-        ? '☕ 正在計時本次短期休息（按繼續專注後結算）'
+        ? '☕ 正在計時本次休息（按繼續專注後結算）'
         : '按下暫停鍵後，將從 00:00:00 開始計時本次休息';
-    }
-    if (cumRestClockEl) {
-      cumRestClockEl.textContent = formatMsToClock(dayTotalRestMs);
-    }
-    if (cumRestHintEl) {
-      cumRestHintEl.textContent = `今日累計休息 ${formatMinutesToHM(getDayTotalRestMinutes(targetDayForRest))}（本時段 ${formatMinutesToHM(Math.round(slotTotalRestMs / 60000))}）`;
-    }
-    if (quickTodayRestTime) {
-      quickTodayRestTime.textContent = formatMinutesToHM(getDayTotalRestMinutes(targetDayForRest));
     }
   } else {
     clockEl.style.color = 'var(--sakura-deep)';
@@ -2402,14 +2372,9 @@ function updateQuickTimerDom() {
     if (dotEl) dotEl.className = 'quick-status-dot';
     if (actionsRow) actionsRow.style.display = 'none';
 
-    const dayTotalRestMs = getDayTotalRestLiveMs(currentDay);
     if (restPanel) restPanel.classList.remove('is-resting');
     if (shortRestClockEl) shortRestClockEl.textContent = '00:00:00';
     if (shortRestHintEl) shortRestHintEl.textContent = '按下暫停鍵後自動開始計時';
-    if (cumRestClockEl) cumRestClockEl.textContent = formatMsToClock(dayTotalRestMs);
-    if (cumRestHintEl) {
-      cumRestHintEl.textContent = `今日累計休息 ${formatMinutesToHM(getDayTotalRestMinutes(currentDay))}`;
-    }
   }
 }
 
@@ -2486,7 +2451,6 @@ function renderQuickSlotsOverview(day) {
     }
 
     const timeDetails = s.startTime || s.endTime ? `${s.startTime || '--:--'} ~ ${s.endTime || '--:--'}` : timeRange;
-    const restDetails = effRestMins > 0 ? ` ｜ ☕ 累積休息 ${formatMinutesToHM(effRestMins)}` : '';
 
     return `
       <div class="quick-slot-card ${isThisActive ? 'is-active' : ''}">
@@ -2497,7 +2461,7 @@ function renderQuickSlotsOverview(day) {
         <div class="quick-slot-details">
           <div><strong>科目：</strong>${escapeHtml(s.subject || '（未選）')}</div>
           ${s.task ? `<div><strong>任務：</strong>${escapeHtml(s.task)}</div>` : ''}
-          <div><strong>時間：</strong>${timeDetails}（專注 ${formatMinutesToHM(effMins)}${restDetails}）</div>
+          <div><strong>時間：</strong>${timeDetails}（專注 ${formatMinutesToHM(effMins)}）</div>
         </div>
       </div>
     `;
@@ -2715,7 +2679,6 @@ function renderDailySlotsDetailed(day) {
               <span class="daily-live-clock ${isThisPaused ? 'rest-mode' : ''}" id="daily-clock-${day.dayCountdown}-${key}">
                 ${isThisPaused ? `⏸ 專注 ${formatMsToClock(liveMs)}（☕ 休息 ${formatMsToClock(getSlotShortRestLiveMs(s))}）` : formatMsToClock(liveMs)}
               </span>
-              ${(s.restMinutes > 0 || isThisPaused) ? `<span class="rest-badge">☕ 累積休息 ${formatMinutesToHM(getSlotRestEffectiveMinutes(s))}</span>` : ''}
             </div>
           </div>
 
@@ -3351,12 +3314,12 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     slot.updatedAt = now;
     appState.updatedAt = now;
 
-    showToast(`☕ 已暫停專注，開始計算短期休息時間（目前累計專注 ${formatMinutesToHM(slot.durationMinutes)}）`);
+    showToast(`☕ 已暫停專注，開始計算休息時間（目前累計專注 ${formatMinutesToHM(slot.durationMinutes)}）`);
     playChime('pause');
   } else if (action === 'ypt-resume') {
     pauseOtherActiveSlots(day.dayCountdown, slotKey, now - 1);
 
-    // 結束本次短期休息，併入今日累積休息時間
+    // 結束本次休息
     if (slot.lastPauseTimestamp) {
       slot.restAccumulatedMs = (slot.restAccumulatedMs || 0) + Math.max(0, now - slot.lastPauseTimestamp);
       slot.restMinutes = Math.round(slot.restAccumulatedMs / 60000);
@@ -3390,8 +3353,7 @@ function handleYptTimerAction(action, dayCountdown, slotKey) {
     slot.updatedAt = now;
     appState.updatedAt = now;
 
-    const restInfo = slot.restMinutes > 0 ? ` ｜ ☕ 累積休息：${formatMinutesToHM(slot.restMinutes)}` : '';
-    showToast(`⏹ 結束計時！已記錄專注：${formatMinutesToHM(netMinutes)}${restInfo}`);
+    showToast(`⏹ 結束計時！已記錄專注：${formatMinutesToHM(netMinutes)}`);
     playChime('complete');
   }
 
@@ -3686,7 +3648,7 @@ function updateActiveTimerBanner(activeObj = findActiveTimerSlot()) {
     if (isPaused) {
       const focusStr = formatMsToClock(getSlotLiveMs(slot));
       const restStr = formatMsToClock(getSlotShortRestLiveMs(slot));
-      clockEl.textContent = `⏸ 專注 ${focusStr} ｜ ☕ 短期 ${restStr}`;
+      clockEl.textContent = `⏸ 專注 ${focusStr} ｜ ☕ 休息 ${restStr}`;
     } else {
       clockEl.textContent = formatMsToClock(getSlotLiveMs(slot));
     }
@@ -4543,16 +4505,6 @@ function setupEventListeners() {
 
   const homeSlotsList = document.getElementById('homeSlotsList');
   if (homeSlotsList) {
-    homeSlotsList.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-action]');
-      if (btn) {
-        const action = btn.dataset.action;
-        const day = btn.dataset.day;
-        const slot = btn.dataset.slot;
-        handleYptTimerAction(action, day, slot);
-      }
-    });
-
     homeSlotsList.addEventListener('change', (e) => {
       const target = e.target;
       const dayKey = target.dataset.day;
@@ -6507,7 +6459,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261109_v11').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261109_v12').then((reg) => {
         console.log('🌸 PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);

@@ -33,7 +33,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=20261109_v11" />
+  <link rel="stylesheet" href="style.css?v=20261109_v12" />
 </head>
 <body>
 
@@ -316,12 +316,8 @@
                     <span class="hms-val" id="homeStatFocusTime">0小時 0分</span>
                   </div>
                   <div class="home-mini-stat">
-                    <span class="hms-label">短期休息（本次）</span>
+                    <span class="hms-label">休息時間</span>
                     <span class="hms-val" id="homeStatShortRest">00:00:00</span>
-                  </div>
-                  <div class="home-mini-stat">
-                    <span class="hms-label">當日累積休息</span>
-                    <span class="hms-val" id="homeStatTotalRest">0小時 0分</span>
                   </div>
                 </div>
               </div>
@@ -333,7 +329,7 @@
 
 
     <!-- =========================================================================
-         第 2 頁：⏱️ 計時器（YPT 模式：移除英文科目，計時器下方顯示短期休息與累積休息）
+         第 2 頁：⏱️ 計時器（YPT 模式：依開始時間自動判定早中晚時段，下方顯示休息時間）
          ========================================================================= -->
     <section id="tabQuickTimer" class="tab-view">
       <div class="quick-timer-wrapper">
@@ -350,14 +346,10 @@
               <span class="quick-stat-label">今日專注：</span>
               <span class="quick-stat-val" id="quickTodayTotalTime">0小時 0分</span>
             </div>
-            <div class="quick-stat-line rest-stat-line">
-              <span class="quick-stat-label">☕ 累積休息：</span>
-              <span class="quick-stat-val" id="quickTodayRestTime">0小時 0分</span>
-            </div>
           </div>
         </div>
 
-        <!-- Big Focus Clock Card + Short-Term & Cumulative Rest Panel Directly Below -->
+        <!-- Big Focus Clock Card + Rest Panel Directly Below -->
         <div class="card quick-timer-card">
           <div class="quick-timer-body">
             <div class="quick-active-badge-bar">
@@ -390,25 +382,15 @@
               <button id="quickStopBtn" class="btn btn-lg btn-stop" type="button">結束專注並記錄 ⏹</button>
             </div>
 
-            <!-- ☕ 短期休息與累積休息計時面板（位於讀書計時器正下方，按下暫停後短期休息立即跳錶） -->
+            <!-- ☕ 休息時間計時面板（位於讀書計時器正下方，按下暫停後休息時間立即跳錶） -->
             <div class="quick-rest-panel" id="quickRestTimerPanel">
               <div class="quick-rest-box short-rest-box" id="quickShortRestBox">
                 <div class="rest-box-header">
                   <span class="rest-dot" id="quickShortRestDot"></span>
-                  <span class="rest-box-title">短期休息時間（本次暫停）</span>
+                  <span class="rest-box-title">☕ 休息時間</span>
                 </div>
                 <div class="rest-box-clock" id="quickShortRestClock">00:00:00</div>
                 <div class="rest-box-sub" id="quickShortRestHint">按下暫停鍵後自動開始計時</div>
-              </div>
-
-              <div class="quick-rest-divider"></div>
-
-              <div class="quick-rest-box cumulative-rest-box">
-                <div class="rest-box-header">
-                  <span class="rest-box-title">累積休息時間（今日總計）</span>
-                </div>
-                <div class="rest-box-clock" id="quickCumulativeRestClock">00:00:00</div>
-                <div class="rest-box-sub" id="quickCumulativeRestHint">今日累計休息 0小時 0分</div>
               </div>
             </div>
           </div>
@@ -544,10 +526,6 @@
             <div class="daily-sum-box">
               <span class="sum-label">當日專注總時長</span>
               <span class="sum-val" id="dailyTotalTime">0小時 0分</span>
-            </div>
-            <div class="daily-sum-box">
-              <span class="sum-label">☕ 當日累計休息</span>
-              <span class="sum-val" id="dailyTotalRestTime" style="color:var(--text-secondary);">0分</span>
             </div>
           </div>
         </div>
@@ -987,6 +965,6 @@
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261109_v9"></script>
+  <script src="app.js?v=20261109_v12"></script>
 </body>
 </html>

@@ -3367,7 +3367,7 @@ body[data-theme="dark"] .theme-switch-pill.active,
 
 .home-mini-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 
@@ -3394,7 +3394,7 @@ body[data-theme="dark"] .theme-switch-pill.active,
 }
 
 /* ==========================================================================
-   ⏱️ 第 2 頁：讀書計時器正下方「短期休息 & 累積休息」雙重面板
+   ⏱️ 第 2 頁：讀書計時器正下方「休息時間」面板
    ========================================================================== */
 .quick-rest-panel {
   margin-top: 18px;
@@ -3402,25 +3402,14 @@ body[data-theme="dark"] .theme-switch-pill.active,
   background: #F6F1EB;
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
-  display: grid;
-  grid-template-columns: 1fr 1px 1fr;
-  gap: 16px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 640px;
+  max-width: 420px;
   margin-left: auto;
   margin-right: auto;
   transition: all 0.25s ease;
-}
-
-@media (max-width: 560px) {
-  .quick-rest-panel {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  .quick-rest-divider {
-    display: none;
-  }
 }
 
 .quick-rest-panel.is-resting {
@@ -3434,17 +3423,12 @@ body[data-theme="dark"] .theme-switch-pill.active,
   border-color: #52B788;
 }
 
-.quick-rest-divider {
-  width: 1px;
-  height: 48px;
-  background: var(--border-medium);
-}
-
 .quick-rest-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  width: 100%;
 }
 
 .rest-box-header {
