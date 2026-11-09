@@ -897,7 +897,24 @@ function saveState(showIndicator = true, broadcastToRoom = true) {
     }
   } catch (err) {
     console.error('Failed to save state:', err);
-    showToast('⚠️ 儲存失敗：瀏覽器儲存空間可能已滿');
+    if (err && (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED' || (err.message && err.message.toLowerCase().includes('quota')))) {
+      try {
+        // 若因自訂圖片過大導致瀏覽器配額超限，優先移除暫存圖片以保全讀書與考試的核心進度！
+        const safeState = Object.assign({}, appState);
+        if (safeState.homeCover && safeState.homeCover.startsWith('data:')) {
+          safeState.homeCover = appSettings.theme === 'dark' ? 'cover-antigravity' : 'cover-sakura';
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(safeState));
+        if (showIndicator) {
+          updateSaveStatusDisplay();
+        }
+        showToast('⚠️ 儲存空間接近上限，已優先保護讀書時段與考試進度！');
+      } catch (innerErr) {
+        showToast('⚠️ 儲存失敗：瀏覽器儲存空間已滿');
+      }
+    } else {
+      showToast('⚠️ 儲存失敗：瀏覽器儲存空間可能已滿');
+    }
   }
 
   // 自動同步至共同房間（多人即時連線）
@@ -1991,6 +2008,17 @@ function updateCoverControlsUi(isCustom, fitMode, posMode) {
   });
 }
 
+/**
+ * 驗證是否為安全之圖片 URL 或 Base64 Data URI，防止 XSS 或協定偽造
+ */
+function isValidImageUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (/^https?:\/\/[^\s"']+/i.test(trimmed)) return true;
+  if (/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/i.test(trimmed)) return true;
+  return false;
+}
+
 function applyHomeCover() {
   if (typeof document === 'undefined' || !appState) return;
   const banner = document.getElementById('homeCoverBanner');
@@ -2019,7 +2047,13 @@ function applyHomeCover() {
   updateCoverControlsUi(isCustom, fitMode, posMode);
 
   if (isCustom) {
-    const rawUrl = cover.startsWith('url:') ? cover.slice(4) : cover;
+    const rawUrl = cover.startsWith('url:') ? cover.slice(4).trim() : cover.trim();
+    if (!isValidImageUrl(rawUrl)) {
+      console.warn('[Security] Ignored unsafe or invalid cover URL:', rawUrl);
+      cover = appSettings.theme === 'dark' ? 'cover-antigravity' : 'cover-sakura';
+      appState.homeCover = cover;
+      return applyHomeCover();
+    }
     const cssUrl = `url("${rawUrl.replace(/"/g, '\\"')}")`;
 
     banner.removeAttribute('data-cover');
@@ -3024,7 +3058,7 @@ function buildSlotCellHtml(dayCountdown, slotKey, slot) {
             data-day="${dayCountdown}"
             data-slot="${slotKey}"
             data-field="subject"
-            data-subj="${slot.subject}"
+            data-subj="${escapeHtml(slot.subject)}"
           >
             ${subjectOptionsHtml}
           </select>
@@ -4345,6 +4379,10 @@ function setupEventListeners() {
         showToast('⚠️ 請先輸入圖片網址');
         return;
       }
+      if (!isValidImageUrl(url)) {
+        showToast('⚠️ 請輸入有效的 https:// 或 http:// 圖片網址');
+        return;
+      }
       const nowTs = Date.now();
       appState.homeCover = 'url:' + url;
       appState.homeCoverUpdatedAt = nowTs;
@@ -5341,19 +5379,26 @@ function mergeRemoteState(remote) {
   }
 
   // 🌸 關鍵封面同步防覆蓋保護：若遠端為自訂圖片，優先更新並永久快取；若本地已是自訂圖，絕不被預設主題刷掉
-  const remoteIsCustom = remote.homeCover && (remote.homeCover.startsWith('data:') || remote.homeCover.startsWith('url:'));
+  let remoteCover = typeof remote.homeCover === 'string' ? remote.homeCover.trim() : '';
+  const remoteIsCustom = remoteCover && (remoteCover.startsWith('data:') || remoteCover.startsWith('url:'));
+  if (remoteIsCustom) {
+    const rawCoverUrl = remoteCover.startsWith('url:') ? remoteCover.slice(4).trim() : remoteCover.trim();
+    if (!isValidImageUrl(rawCoverUrl)) {
+      remoteCover = '';
+    }
+  }
   const localIsCustom = appState.homeCover && (appState.homeCover.startsWith('data:') || appState.homeCover.startsWith('url:'));
 
-  if (remoteIsCustom) {
+  if (remoteCover && (remoteCover.startsWith('data:') || remoteCover.startsWith('url:'))) {
     if (!localIsCustom || (remote.homeCoverUpdatedAt || 0) >= (appState.homeCoverUpdatedAt || 0)) {
-      appState.homeCover = remote.homeCover;
+      appState.homeCover = remoteCover;
       appState.homeCoverUpdatedAt = remote.homeCoverUpdatedAt || Date.now();
-      try { localStorage.setItem('sakura_custom_cover_v1', remote.homeCover); } catch (e) {}
+      try { localStorage.setItem('sakura_custom_cover_v1', remoteCover); } catch (e) {}
       applyHomeCover();
     }
-  } else if (remote.homeCover) {
+  } else if (remoteCover) {
     if (!localIsCustom && (remote.homeCoverUpdatedAt || 0) >= (appState.homeCoverUpdatedAt || 0)) {
-      appState.homeCover = remote.homeCover;
+      appState.homeCover = remoteCover;
       appState.homeCoverUpdatedAt = remote.homeCoverUpdatedAt || Date.now();
       applyHomeCover();
     }
@@ -5931,17 +5976,25 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
         }
       }
     } else if (p.kind === 'homeCover') {
-      if (p.val) {
+      if (p.val && typeof p.val === 'string') {
+        const val = p.val.trim();
         const nowTs = Number(p.updatedAt) || Date.now();
-        const remoteIsCustom = p.val.startsWith('data:') || p.val.startsWith('url:');
+        const remoteIsCustom = val.startsWith('data:') || val.startsWith('url:');
+        if (remoteIsCustom) {
+          const rawUrl = val.startsWith('url:') ? val.slice(4).trim() : val.trim();
+          if (!isValidImageUrl(rawUrl)) {
+            console.warn('[Security] Ignored unsafe remote cover payload:', rawUrl);
+            return;
+          }
+        }
         const localIsCustom = appState.homeCover && (appState.homeCover.startsWith('data:') || appState.homeCover.startsWith('url:'));
         if (remoteIsCustom || !localIsCustom || nowTs >= (appState.homeCoverUpdatedAt || 0)) {
-          appState.homeCover = p.val;
+          appState.homeCover = val;
           appState.homeCoverUpdatedAt = nowTs;
           if (p.fit) appState.homeCoverFit = p.fit;
           if (p.position) appState.homeCoverPosition = p.position;
           if (remoteIsCustom) {
-            try { localStorage.setItem('sakura_custom_cover_v1', p.val); } catch (e) {}
+            try { localStorage.setItem('sakura_custom_cover_v1', val); } catch (e) {}
           }
           applyHomeCover();
           saveState(false, false);
@@ -5988,7 +6041,13 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
  */
 async function fallbackToGitHubBackup() {
   try {
-    const backupRes = await fetch(`./data/backup-latest.json?t=${Date.now()}`, { cache: 'no-store' });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const backupRes = await fetch(`./data/backup-latest.json?t=${Date.now()}`, {
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
     if (backupRes.ok) {
       const backupData = await backupRes.json();
       if (backupData && backupData.type === 'FULL' && backupData.compact) {
@@ -6009,7 +6068,13 @@ async function pollLatestRoomSnapshot(topic) {
   if (!topic || isPollingRoomSnapshot) return;
   isPollingRoomSnapshot = true;
   try {
-    const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1`, { cache: 'no-store' });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`https://ntfy.sh/${topic}/json?poll=1`, {
+      cache: 'no-store',
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
     if (!res.ok) {
       await fallbackToGitHubBackup();
       return;
@@ -6442,7 +6507,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261109_v9').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261109_v10').then((reg) => {
         console.log('🌸 PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);
