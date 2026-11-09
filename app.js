@@ -1965,21 +1965,19 @@ function changeDailyPlanDay(targetDayKey) {
 
 function openCalendarDayEditor(dayKey) {
   calendarEditorDayKey = dayKey;
-  isCalendarDayEditorOpen = true;
-  const gridView = document.getElementById('calendarMonthGridView');
-  const detailView = document.getElementById('calendarDayDetailView');
-  if (gridView) gridView.classList.add('hidden');
-  if (detailView) detailView.classList.remove('hidden');
+  renderPureCalendarTable();
   renderDailyPlanView(dayKey);
+  const detailView = document.getElementById('calendarDayDetailView');
+  if (detailView) {
+    detailView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 function closeCalendarDayEditor() {
-  isCalendarDayEditorOpen = false;
   const gridView = document.getElementById('calendarMonthGridView');
-  const detailView = document.getElementById('calendarDayDetailView');
-  if (gridView) gridView.classList.remove('hidden');
-  if (detailView) detailView.classList.add('hidden');
-  renderPureCalendarTable();
+  if (gridView) {
+    gridView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 /* ==========================================================================
@@ -2579,22 +2577,13 @@ function renderDailySlotsDetailed(day) {
 
   container.innerHTML = SLOT_KEYS.map(({ key, label, timeRange, icon }) => {
     const s = day[key];
-    const isThisRunning = s.timerStatus === 'running';
-    const isThisPaused = s.timerStatus === 'paused';
-    const effMins = getSlotEffectiveMinutes(s);
-    const liveMs = getSlotLiveMs(s);
-
-    const durHr = Math.floor(effMins / 60);
-    const durMin = effMins % 60;
-
-    const [defStart, defEnd] = timeRange.split('~');
 
     const subjectOptionsHtml = SUBJECT_OPTIONS.map(opt => `
       <option value="${escapeHtml(opt)}" ${s.subject === opt ? 'selected' : ''}>${escapeHtml(opt || '— 選擇科目 —')}</option>
     `).join('');
 
     return `
-      <div class="daily-slot-card ${s.completed ? 'completed' : ''} ${isThisRunning ? 'running' : ''}" id="daily-card-${day.dayCountdown}-${key}">
+      <div class="daily-slot-card ${s.completed ? 'completed' : ''}" id="daily-card-${day.dayCountdown}-${key}">
         <div class="daily-slot-card-header">
           <div class="daily-slot-card-title">
             <span>${icon} ${label}時段</span>
@@ -2633,107 +2622,6 @@ function renderDailySlotsDetailed(day) {
               placeholder="例如：Ch14完、700題＋計量、複習實戰書..."
             />
           </div>
-
-          <!-- YPT 計時控制列 -->
-          <div class="daily-timer-strip">
-            <div class="ypt-btn-group">
-              <button
-                type="button"
-                class="ypt-btn btn-start"
-                data-action="ypt-start"
-                data-day="${day.dayCountdown}"
-                data-slot="${key}"
-                ${isThisRunning ? 'disabled' : ''}
-              >${s.timerStatus === 'ended' ? '重新計時 ▶' : '開始 ▶'}</button>
-
-              <button
-                type="button"
-                class="ypt-btn btn-pause"
-                data-action="ypt-pause"
-                data-day="${day.dayCountdown}"
-                data-slot="${key}"
-                ${!isThisRunning ? 'disabled' : ''}
-              >暫停 ⏸</button>
-
-              <button
-                type="button"
-                class="ypt-btn btn-resume"
-                data-action="ypt-resume"
-                data-day="${day.dayCountdown}"
-                data-slot="${key}"
-                ${!isThisPaused ? 'disabled' : ''}
-              >繼續 ▶</button>
-
-              <button
-                type="button"
-                class="ypt-btn btn-stop"
-                data-action="ypt-stop"
-                data-day="${day.dayCountdown}"
-                data-slot="${key}"
-                ${!isThisRunning && !isThisPaused ? 'disabled' : ''}
-              >結束 ⏹</button>
-            </div>
-
-            <div class="daily-timer-clock-box">
-              <span style="font-size:12px;color:var(--text-secondary);">${isThisPaused ? '⏸ 專注已暫停：' : '專注計時：'}</span>
-              <span class="daily-live-clock ${isThisPaused ? 'rest-mode' : ''}" id="daily-clock-${day.dayCountdown}-${key}">
-                ${isThisPaused ? `⏸ 專注 ${formatMsToClock(liveMs)}（☕ 休息 ${formatMsToClock(getSlotShortRestLiveMs(s))}）` : formatMsToClock(liveMs)}
-              </span>
-            </div>
-          </div>
-
-          <!-- 時間手動微調 -->
-          <div class="slot-time-inputs" style="grid-column: 1 / -1; display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-top:2px;">
-            <div class="time-range-group">
-              <span>起</span>
-              <input
-                type="text"
-                class="time-hm-input daily-time-input"
-                data-day="${day.dayCountdown}"
-                data-slot="${key}"
-                data-field="startTime"
-                value="${escapeHtml(s.startTime)}"
-                placeholder="${defStart}"
-                maxlength="5"
-              />
-              <span>迄</span>
-              <input
-                type="text"
-                class="time-hm-input daily-time-input"
-                data-day="${day.dayCountdown}"
-                data-slot="${key}"
-                data-field="endTime"
-                value="${escapeHtml(s.endTime)}"
-                placeholder="${defEnd}"
-                maxlength="5"
-              />
-            </div>
-
-            <div class="duration-manual-group">
-              <span class="duration-label">真實時長:</span>
-              <input
-                type="number"
-                min="0"
-                max="24"
-                class="dur-num-input daily-dur-hr"
-                data-day="${day.dayCountdown}"
-                data-slot="${key}"
-                value="${durHr}"
-              />
-              <span class="duration-unit">時</span>
-              <input
-                type="number"
-                min="0"
-                max="59"
-                class="dur-num-input daily-dur-min"
-                data-day="${day.dayCountdown}"
-                data-slot="${key}"
-                value="${durMin}"
-              />
-              <span class="duration-unit">分</span>
-            </div>
-          </div>
-
         </div>
       </div>
     `;
@@ -2843,14 +2731,16 @@ function renderPureCalendarTable() {
       `;
     }).join('');
 
+    const isSelected = String(dayKey) === String(calendarEditorDayKey);
+
     cellsHtml.push(`
       <div
-        class="notion-cal-cell ${isOutsideMonth ? 'outside-month' : ''} ${isToday ? 'is-today' : ''}"
+        class="notion-cal-cell ${isOutsideMonth ? 'outside-month' : ''} ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected-day' : ''}"
         style="${!matchesSearch ? 'opacity: 0.25;' : ''}"
         data-cal-cell-day="${dayKey}"
       >
-        <!-- 第一格：點擊日期欄進入當日行事曆與時間編輯畫面 -->
-        <div class="cal-cell-date-row" data-open-day-editor="${dayKey}" title="點擊進入 ${cM}月${cD}日 詳細行事曆與時間編輯">
+        <!-- 第一格：點擊直接跳轉到下方當日行事曆備忘與讀書科目 -->
+        <div class="cal-cell-date-row" data-open-day-editor="${dayKey}" title="點選跳轉至下方檢視 ${cM}月${cD}日 備忘與讀書科目">
           <div class="cal-date-left-meta">
             ${isNumericCountdown ? `<span class="cal-countdown-mini">D-${dayObj.dayCountdown}</span>` : ''}
             ${dayObj && dayObj.calendar ? `<span class="cal-memo-pill" title="${escapeHtml(dayObj.calendar)}">${escapeHtml(dayObj.calendar)}</span>` : ''}
@@ -2986,7 +2876,11 @@ function buildDailyFocusRowHtml(day) {
 }
 
 function renderMainScheduleTable() {
+  if (!calendarEditorDayKey) {
+    calendarEditorDayKey = getTodayDayCountdown();
+  }
   renderPureCalendarTable();
+  renderDailyPlanView(calendarEditorDayKey);
   renderDailyFocusScheduleTable();
 }
 
@@ -4700,10 +4594,11 @@ function setupEventListeners() {
     });
   }
 
-  // 12B. 子視圖 B（單日詳細行事曆與三時段編輯）
+  // 12B. 子視圖 B（單日詳細行事曆備忘與三時段讀書科目）
   const dailyPrevDayBtn = document.getElementById('dailyPrevDayBtn');
   const dailyNextDayBtn = document.getElementById('dailyNextDayBtn');
   const dailyTodayBtn = document.getElementById('dailyTodayBtn');
+  const dailyDaySelect = document.getElementById('dailyDaySelect');
   const dailyCalendarInput = document.getElementById('dailyCalendarInput');
   const dailySlotsContainer = document.getElementById('dailySlotsContainer');
 
@@ -4717,6 +4612,7 @@ function setupEventListeners() {
         d.setDate(d.getDate() - 1);
         calendarEditorDayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       }
+      renderPureCalendarTable();
       renderDailyPlanView(calendarEditorDayKey);
     });
   }
@@ -4730,13 +4626,21 @@ function setupEventListeners() {
         d.setDate(d.getDate() + 1);
         calendarEditorDayKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
       }
+      renderPureCalendarTable();
       renderDailyPlanView(calendarEditorDayKey);
     });
   }
   if (dailyTodayBtn) {
     dailyTodayBtn.addEventListener('click', () => {
       calendarEditorDayKey = getTodayDayCountdown();
+      renderPureCalendarTable();
       renderDailyPlanView(calendarEditorDayKey);
+    });
+  }
+  if (dailyDaySelect) {
+    dailyDaySelect.addEventListener('change', (e) => {
+      changeDailyPlanDay(e.target.value);
+      renderPureCalendarTable();
     });
   }
   if (dailyCalendarInput) {
@@ -4748,6 +4652,7 @@ function setupEventListeners() {
       day.calendarUpdatedAt = nowTs;
       appState.updatedAt = nowTs;
       saveState();
+      renderPureCalendarTable();
       const homeDay = getHomeActiveDay();
       if (homeDay && String(homeDay.dayCountdown) === String(day.dayCountdown)) {
         const homeInp = document.getElementById('homeCalendarMemoInput');
@@ -4773,6 +4678,7 @@ function setupEventListeners() {
         appState.updatedAt = nowTs;
         saveState();
         refreshSlotDom(day, slotKey);
+        renderPureCalendarTable();
         renderDailyPlanView();
         renderQuickTimerView();
         renderHomeView();
@@ -4784,41 +4690,12 @@ function setupEventListeners() {
         appState.updatedAt = nowTs;
         saveState();
         refreshSlotDom(day, slotKey);
+        renderPureCalendarTable();
         renderDailyPlanView();
         renderQuickTimerView();
         renderHomeView();
         renderAllStatistics();
         broadcastRoomDelta({ kind: 'completed', day: dayKey, slot: slotKey, val: slot.completed, updatedAt: nowTs, label: `${day.dateDisplay} ${getSlotLabel(slotKey)}` });
-      } else if (target.classList.contains('daily-time-input')) {
-        const field = target.dataset.field;
-        slot[field] = target.value.trim();
-        slot.updatedAt = nowTs;
-        appState.updatedAt = nowTs;
-        saveState();
-        refreshSlotDom(day, slotKey);
-        renderDailyPlanView();
-        renderQuickTimerView();
-        renderHomeView();
-        renderAllStatistics();
-        broadcastRoomDeltaDebounced({ kind: 'time', day: dayKey, slot: slotKey, startTime: slot.startTime, endTime: slot.endTime, durationMinutes: slot.durationMinutes, updatedAt: nowTs });
-      } else if (target.classList.contains('daily-dur-hr') || target.classList.contains('daily-dur-min')) {
-        const card = document.getElementById(`daily-card-${dayKey}-${slotKey}`);
-        const hr = Number(card.querySelector('.daily-dur-hr').value) || 0;
-        const min = Number(card.querySelector('.daily-dur-min').value) || 0;
-        slot.durationMinutes = Math.max(0, hr * 60 + min);
-        slot.accumulatedMs = slot.durationMinutes * 60000;
-        slot.updatedAt = nowTs;
-        appState.updatedAt = nowTs;
-        if (slot.timerStatus === 'running') {
-          slot.lastResumeTimestamp = nowTs;
-        }
-        saveState();
-        refreshSlotDom(day, slotKey);
-        renderDailyPlanView();
-        renderQuickTimerView();
-        renderHomeView();
-        renderAllStatistics();
-        broadcastRoomDeltaDebounced({ kind: 'time', day: dayKey, slot: slotKey, durationMinutes: slot.durationMinutes, updatedAt: nowTs });
       }
     });
 
@@ -4834,23 +4711,9 @@ function setupEventListeners() {
         day[slotKey].updatedAt = nowTs;
         appState.updatedAt = nowTs;
         saveState();
-        const mainCard = document.getElementById(`slot-card-${dayKey}-${slotKey}`);
-        if (mainCard) {
-          const inp = mainCard.querySelector('.task-input');
-          if (inp && document.activeElement !== inp) inp.value = target.value;
-        }
+        renderPureCalendarTable();
+        renderHomeView();
         broadcastRoomDeltaDebounced({ kind: 'task', day: dayKey, slot: slotKey, val: target.value, updatedAt: nowTs });
-      }
-    });
-
-    dailySlotsContainer.addEventListener('click', (e) => {
-      const btn = e.target.closest('.ypt-btn');
-      if (!btn) return;
-      const action = btn.dataset.action;
-      const day = btn.dataset.day;
-      const slotKey = btn.dataset.slot;
-      if (action && day && slotKey) {
-        handleYptTimerAction(action, day, slotKey);
       }
     });
   }
@@ -6459,7 +6322,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261109_v12').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261109_v13').then((reg) => {
         console.log('🌸 PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);

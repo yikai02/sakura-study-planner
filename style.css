@@ -3630,6 +3630,16 @@ body[data-theme="dark"] .theme-switch-pill.active,
   box-shadow: inset 0 0 0 1.5px var(--sakura-primary);
 }
 
+.notion-cal-cell.is-selected-day {
+  box-shadow: inset 0 0 0 2px var(--sakura-deep) !important;
+  background: var(--bg-sakura-tint) !important;
+}
+
+[data-theme="dark"] .notion-cal-cell.is-selected-day {
+  box-shadow: inset 0 0 0 2px #52B788 !important;
+  background: rgba(82, 183, 136, 0.12) !important;
+}
+
 /* 第一格：日期與行事曆備忘欄（高度固定 36px，水平橫線嚴格齊平） */
 .cal-cell-date-row {
   display: flex;

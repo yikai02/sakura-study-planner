@@ -33,7 +33,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=20261109_v12" />
+  <link rel="stylesheet" href="style.css?v=20261109_v13" />
 </head>
 <body>
 
@@ -454,7 +454,7 @@
           </div>
 
           <div class="notion-cal-guide-strip">
-            <span>💡 <strong>點擊每格最上方「日期欄（第一格）」</strong>可進入當日行事曆與時間編輯畫面；<strong>點擊日期下方「三格橫線欄」</strong>可直接輸入當日早、午、晚要做的工作。</span>
+            <span>💡 <strong>點選當日日期</strong>直接跳轉至下方檢視與編輯當日重要備忘錄及早中晚讀書科目；<strong>點擊日期下方三格橫線</strong>可直接在月曆中填寫工作。</span>
           </div>
 
           <!-- Notion 7-Column Calendar Grid (週一 ~ 週日) -->
@@ -477,12 +477,12 @@
         </div>
       </div>
 
-      <!-- Sub-View B: 當日行事曆與三時段詳細編輯畫面 (原每日專注上半部，點擊日曆第一格「日期欄」進入) -->
-      <div id="calendarDayDetailView" class="daily-plan-wrapper hidden">
+      <!-- 下半部：當日重要備忘錄與三時段讀書科目（點擊上方日曆日期直接跳轉至此） -->
+      <div id="calendarDayDetailView" class="daily-plan-wrapper" style="margin-top: 24px;">
         <!-- Day Navigation Bar with Back to Calendar Button -->
         <div class="daily-nav-card">
           <div style="display:flex; align-items:center; gap:8px;">
-            <button id="backToCalendarGridBtn" class="btn btn-primary" type="button">◀ 返回月曆</button>
+            <button id="backToCalendarGridBtn" class="btn btn-subtle" type="button" title="回到上方月曆">⬆️ 回到月曆</button>
             <button id="dailyPrevDayBtn" class="btn btn-subtle" type="button">◀ 前一天</button>
           </div>
           <div class="daily-current-day-box">
@@ -500,34 +500,16 @@
         <!-- Day Calendar & Notes Card -->
         <div class="card daily-calendar-card">
           <div class="card-header">
-            <div class="card-title"><span class="icon">🗓️</span> 當日行事曆備忘</div>
+            <div class="card-title"><span class="icon">🗓️</span> 當日重要備忘錄</div>
           </div>
           <div class="card-body">
             <input type="text" id="dailyCalendarInput" class="daily-calendar-input" placeholder="輸入當日重要行程、考試或死線備忘..." />
           </div>
         </div>
 
-        <!-- 3 Time Slots Detailed Cards (Morning, Afternoon, Evening) -->
+        <!-- 3 Time Slots Detailed Cards (Morning, Afternoon, Evening: 讀書科目 + 範圍任務) -->
         <div class="daily-slots-container" id="dailySlotsContainer">
-          <!-- Rendered by app.js: 3 full cards for morning, afternoon, evening -->
-        </div>
-
-        <!-- Daily Summary Footer Card -->
-        <div class="card daily-summary-card">
-          <div class="daily-summary-grid">
-            <div class="daily-sum-box">
-              <span class="sum-label">當日完成時段</span>
-              <span class="sum-val" id="dailyDoneCount">0 / 3</span>
-            </div>
-            <div class="daily-sum-box">
-              <span class="sum-label">當日時段完成率</span>
-              <span class="sum-val" id="dailyDoneRate">0%</span>
-            </div>
-            <div class="daily-sum-box">
-              <span class="sum-label">當日專注總時長</span>
-              <span class="sum-val" id="dailyTotalTime">0小時 0分</span>
-            </div>
-          </div>
+          <!-- Rendered by app.js: 3 clean cards for morning, afternoon, evening -->
         </div>
       </div>
     </section>
@@ -965,6 +947,6 @@
 
   <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261109_v12"></script>
+  <script src="app.js?v=20261109_v13"></script>
 </body>
 </html>
