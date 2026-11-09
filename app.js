@@ -1825,20 +1825,44 @@ let calendarEditorDayKey = null;
 let currentCalendarMonth = '2026-11';
 let isCalendarDayEditorOpen = false;
 
-function getTodayIsoString() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
+/**
+ * 取得當前學習日基準日期（嚴格以凌晨 05:00 作為一日之分界）
+ * 規則：00:00:00 ~ 04:59:59.999 跨午夜時段，一律歸入前一日之學習日（晚上時段 19:00~05:00）！
+ */
+function getEffectiveStudyDate(baseDate = new Date()) {
+  const d = new Date(baseDate.getTime());
+  if (d.getHours() < 5) {
+    d.setDate(d.getDate() - 1);
+  }
+  return d;
+}
+
+function getTodayIsoString(baseDate = new Date()) {
+  const eff = getEffectiveStudyDate(baseDate);
+  const y = eff.getFullYear();
+  const m = String(eff.getMonth() + 1).padStart(2, '0');
+  const d = String(eff.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
 }
 
-function getTodayDayCountdown() {
-  const now = new Date();
-  const m = now.getMonth() + 1;
-  const d = now.getDate();
-  const match = appState.days.find(item => item.dateDisplay === `${m}月${d}日`);
+function getTodayDayCountdown(baseDate = new Date()) {
+  const eff = getEffectiveStudyDate(baseDate);
+  const m = eff.getMonth() + 1;
+  const d = eff.getDate();
+  const match = (appState && appState.days) ? appState.days.find(item => item.dateDisplay === `${m}月${d}日`) : null;
   return match ? match.dayCountdown : 80;
+}
+
+/**
+ * 取得計時器專屬之目標學習日：
+ * 鎖定當下即時時刻！若有正在計時或暫停之時段，以該時段之學習日為準；
+ * 若無，則始終以當下即時學習日 (getTodayDayCountdown) 為準，絕不受行事曆或每日專注其他天點選影響！
+ */
+function getTimerTargetDay() {
+  const active = findActiveTimerSlot();
+  if (active) return active.day;
+  const todayCd = getTodayDayCountdown();
+  return findDayByKey(todayCd) || (appState && appState.days ? appState.days[0] : null);
 }
 
 function getHomeActiveDay() {
@@ -1860,15 +1884,15 @@ function getCalendarEditorDay() {
 }
 
 function initCurrentActiveDay() {
-  const now = new Date();
-  const m = now.getMonth() + 1;
-  const d = now.getDate();
+  const eff = getEffectiveStudyDate();
+  const m = eff.getMonth() + 1;
+  const d = eff.getDate();
   const match = appState.days.find(item => item.dateDisplay === `${m}月${d}日`);
   currentActiveDayCountdown = match ? match.dayCountdown : 80;
   homeActiveDayCountdown = currentActiveDayCountdown;
   calendarEditorDayKey = currentActiveDayCountdown;
 
-  const ym = `${now.getFullYear()}-${String(m).padStart(2, '0')}`;
+  const ym = `${eff.getFullYear()}-${String(m).padStart(2, '0')}`;
   if (['2026-11', '2026-12', '2027-01'].includes(ym)) {
     currentCalendarMonth = ym;
   } else {
@@ -2079,9 +2103,10 @@ function renderHomeView() {
     todayTagEl.textContent = day.isoDate === todayIso ? 'TODAY' : (isNumericCountdown ? `DAY ${day.dayCountdown}` : 'CALENDAR');
   }
 
-  // 距離 2027-01-26 考試倒數天數
+  // 距離 2027-01-26 考試倒數天數（以凌晨 05:00 分界之學習日計算）
   const examDate = new Date(2027, 0, 26);
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const effDate = getEffectiveStudyDate(now);
+  const todayMidnight = new Date(effDate.getFullYear(), effDate.getMonth(), effDate.getDate());
   const diffDaysReal = Math.max(1, Math.min(80, Math.round((examDate - todayMidnight) / 86400000) + 1));
   const displayCountdown = isNumericCountdown ? day.dayCountdown : diffDaysReal;
 
@@ -2210,7 +2235,7 @@ function getDayTotalEffectiveMinutes(day) {
 }
 
 function renderQuickTimerView() {
-  const day = findDayByKey(currentActiveDayCountdown) || appState.days[0];
+  const day = getTimerTargetDay();
   if (!day) return;
 
   const quickDayBadge = document.getElementById('quickDayBadge');
@@ -2260,7 +2285,7 @@ function updateQuickTimerDom() {
 
   if (!clockEl || !textEl) return;
 
-  const currentDay = findDayByKey(currentActiveDayCountdown) || appState.days[0];
+  const currentDay = getTimerTargetDay();
   const active = findActiveTimerSlot();
   const targetDayForRest = active ? active.day : currentDay;
 
@@ -2446,15 +2471,14 @@ function renderQuickSlotsOverview(day) {
 }
 
 function handleQuickSubjectClick(subjectName) {
-  const day = findDayByKey(currentActiveDayCountdown) || appState.days[0];
-  if (!day) return;
-
   const active = findActiveTimerSlot();
   const now = new Date();
   const currentSlotKey = getSlotKeyFromStartTime(now);
+  const realTodayDay = findDayByKey(getTodayDayCountdown()) || appState.days[0];
+  if (!realTodayDay) return;
 
   if (active && active.slot.timerStatus === 'running') {
-    if (active.slot.subject === subjectName && String(active.day.dayCountdown) === String(day.dayCountdown)) {
+    if (active.slot.subject === subjectName) {
       handleYptTimerAction('ypt-pause', active.day.dayCountdown, active.slotKey);
       renderQuickTimerView();
       return;
@@ -2464,18 +2488,16 @@ function handleQuickSubjectClick(subjectName) {
   } else if (
     active &&
     active.slot.timerStatus === 'paused' &&
-    active.slot.subject === subjectName &&
-    String(active.day.dayCountdown) === String(day.dayCountdown) &&
-    active.slotKey === currentSlotKey
+    active.slot.subject === subjectName
   ) {
     handleYptTimerAction('ypt-resume', active.day.dayCountdown, active.slotKey);
     renderQuickTimerView();
     return;
   }
 
-  // 依當前「開始時間」嚴格判定時段（以開始時間作為唯一依據，14:00+ 一律歸入下午時段）
+  // 依當前即時學習日與開始時間嚴格判定時段（鎖定當下即時時刻，絕不跳到其他天！）
   const slotKey = currentSlotKey;
-  const slot = day[slotKey];
+  const slot = realTodayDay[slotKey];
 
   slot.subject = subjectName;
   slot.updatedAt = Date.now();
@@ -2483,7 +2505,7 @@ function handleQuickSubjectClick(subjectName) {
     slot.startTime = getCurrentTimeHM();
   }
 
-  handleYptTimerAction('ypt-start', day.dayCountdown, slotKey);
+  handleYptTimerAction('ypt-start', realTodayDay.dayCountdown, slotKey);
   renderQuickTimerView();
 }
 
@@ -2655,9 +2677,9 @@ function renderDailySlotsDetailed(day) {
             </div>
 
             <div class="daily-timer-clock-box">
-              <span style="font-size:12px;color:var(--text-secondary);">${isThisPaused ? '☕ 短期休息：' : '專注計時：'}</span>
+              <span style="font-size:12px;color:var(--text-secondary);">${isThisPaused ? '⏸ 專注已暫停：' : '專注計時：'}</span>
               <span class="daily-live-clock ${isThisPaused ? 'rest-mode' : ''}" id="daily-clock-${day.dayCountdown}-${key}">
-                ${isThisPaused ? formatMsToClock(getSlotShortRestLiveMs(s)) : formatMsToClock(liveMs)}
+                ${isThisPaused ? `⏸ 專注 ${formatMsToClock(liveMs)}（☕ 休息 ${formatMsToClock(getSlotShortRestLiveMs(s))}）` : formatMsToClock(liveMs)}
               </span>
               ${(s.restMinutes > 0 || isThisPaused) ? `<span class="rest-badge">☕ 累積休息 ${formatMinutesToHM(getSlotRestEffectiveMinutes(s))}</span>` : ''}
             </div>
@@ -2722,11 +2744,14 @@ function renderDailySlotsDetailed(day) {
 }
 
 function updateDailyPlanLiveClocks(active) {
-  if (!active || String(active.day.dayCountdown) !== String(currentActiveDayCountdown)) return;
+  const viewedDay = getCalendarEditorDay();
+  if (!active || !viewedDay || String(active.day.dayCountdown) !== String(viewedDay.dayCountdown)) return;
   const clockEl = document.getElementById(`daily-clock-${active.day.dayCountdown}-${active.slotKey}`);
   if (clockEl) {
     if (active.slot.timerStatus === 'paused') {
-      clockEl.textContent = formatMsToClock(getSlotShortRestLiveMs(active.slot));
+      const focusStr = formatMsToClock(getSlotLiveMs(active.slot));
+      const restStr = formatMsToClock(getSlotShortRestLiveMs(active.slot));
+      clockEl.textContent = `⏸ 專注 ${focusStr}（☕ 休息 ${restStr}）`;
     } else {
       clockEl.textContent = formatMsToClock(getSlotLiveMs(active.slot));
     }
@@ -3072,7 +3097,9 @@ function buildSlotCellHtml(dayCountdown, slotKey, slot) {
           </div>
 
           <span class="ypt-live-display" id="ypt-clock-${dayCountdown}-${slotKey}">
-            ${formatMsToClock(liveMs)}
+            ${isPaused
+              ? `⏸ 專注 ${formatMsToClock(liveMs)}（☕ ${formatMsToClock(getSlotShortRestLiveMs(slot))}）`
+              : formatMsToClock(liveMs)}
           </span>
         </div>
 
@@ -3167,16 +3194,20 @@ function updateSingleDayRowSummaryDom(day) {
     rowEl.classList.toggle('row-complete-all', doneCount === 3);
   }
 
-  // 2. 若為當前單日編輯/快捷計時選定日，同步更新其頂部指標
-  if (String(day.dayCountdown) === String(currentActiveDayCountdown)) {
+  // 2. 若為當前單日詳細編輯日或快捷計時目標日，分別同步更新頂部指標
+  const editorDay = getCalendarEditorDay();
+  if (editorDay && String(day.dayCountdown) === String(editorDay.dayCountdown)) {
     const dailyDoneCount = document.getElementById('dailyDoneCount');
     const dailyDoneRate = document.getElementById('dailyDoneRate');
     const dailyTotalTime = document.getElementById('dailyTotalTime');
-    const quickTodayTotalTime = document.getElementById('quickTodayTotalTime');
-
     if (dailyDoneCount) dailyDoneCount.textContent = `${doneCount} / 3`;
     if (dailyDoneRate) dailyDoneRate.textContent = `${ratePct}%`;
     if (dailyTotalTime) dailyTotalTime.textContent = formatMinutesToHM(totalDayMins);
+  }
+
+  const timerDay = getTimerTargetDay();
+  if (timerDay && String(day.dayCountdown) === String(timerDay.dayCountdown)) {
+    const quickTodayTotalTime = document.getElementById('quickTodayTotalTime');
     if (quickTodayTotalTime) quickTodayTotalTime.textContent = formatMinutesToHM(totalDayMins);
   }
 }
@@ -3210,7 +3241,7 @@ async function syncScreenWakeLock() {
 
 function getAllDaysList() {
   const extras = appState && appState.extraDays ? Object.values(appState.extraDays) : [];
-  return [...(appState.days || []), ...extras];
+  return [...((appState && appState.days) ? appState.days : []), ...extras];
 }
 
 function findActiveTimerSlot() {
@@ -3407,6 +3438,80 @@ function refreshSlotDom(day, slotKey) {
 }
 
 /**
+ * 凌晨 05:00 跨日自動結算檢查：
+ * 規則：
+ * 1. 若凌晨五點前忘記按掉結束，只按下暫停則默認結束！
+ * 2. 若跨過隔日凌晨五點且前一日時段仍處於 paused，自動以當前累計專注時長結束結算，標記為完成；
+ * 3. 若連暫停都沒按一直處於 running，自動截斷至 05:00 並結算結束。
+ */
+function checkAndAutoFinalizeOvernightSlots() {
+  const currentStudyIso = getTodayIsoString();
+  let changed = false;
+  const now = Date.now();
+
+  for (const day of getAllDaysList()) {
+    if (!day || !day.isoDate || day.isoDate >= currentStudyIso) continue;
+
+    for (const { key } of SLOT_KEYS) {
+      const slot = day[key];
+      if (!slot) continue;
+
+      if (slot.timerStatus === 'paused') {
+        const totalMs = slot.accumulatedMs || 0;
+        const netMinutes = totalMs >= 1000 ? Math.max(1, Math.round(totalMs / 60000)) : 0;
+        slot.durationMinutes = netMinutes;
+        slot.accumulatedMs = netMinutes * 60000;
+        slot.timerStatus = 'ended';
+        slot.completed = true;
+        slot.lastPauseTimestamp = null;
+        slot.lastResumeTimestamp = null;
+        if (!slot.endTime) {
+          slot.endTime = '05:00';
+        }
+        slot.updatedAt = now;
+        changed = true;
+      } else if (slot.timerStatus === 'running') {
+        if (slot.lastResumeTimestamp) {
+          const dayParts = day.isoDate.split('-').map(Number);
+          const cutoffDate = new Date(dayParts[0], dayParts[1] - 1, dayParts[2] + 1, 5, 0, 0, 0);
+          const capTs = Math.min(now, cutoffDate.getTime());
+          if (capTs > slot.lastResumeTimestamp) {
+            slot.accumulatedMs = (slot.accumulatedMs || 0) + (capTs - slot.lastResumeTimestamp);
+          }
+        }
+        const totalMs = slot.accumulatedMs || 0;
+        const netMinutes = totalMs >= 1000 ? Math.max(1, Math.round(totalMs / 60000)) : 0;
+        slot.durationMinutes = netMinutes;
+        slot.accumulatedMs = netMinutes * 60000;
+        slot.timerStatus = 'ended';
+        slot.completed = true;
+        slot.lastResumeTimestamp = null;
+        slot.lastPauseTimestamp = null;
+        if (!slot.endTime) {
+          slot.endTime = '05:00';
+        }
+        slot.updatedAt = now;
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    appState.updatedAt = now;
+    saveState(true, false);
+    renderAllStatistics();
+    updateActiveTimerBanner();
+    renderQuickTimerView();
+    renderDailyPlanView();
+    renderHomeView();
+    renderPureCalendarTable();
+    if (currentRoomId && !isReceivingRemoteUpdate) {
+      broadcastFullStateToRoom();
+    }
+  }
+}
+
+/**
  * 每秒定時更新正在運行或暫停中的時鐘與統計（背景分頁、關螢幕或滑掉重開時自動以 Date.now() 差值無縫接續）
  */
 function startGlobalTimerTicker() {
@@ -3414,6 +3519,7 @@ function startGlobalTimerTicker() {
   let lastMinuteBucket = -1;
 
   timerIntervalId = setInterval(() => {
+    checkAndAutoFinalizeOvernightSlots();
     const active = findActiveTimerSlot();
     updateActiveTimerBanner(active);
 
@@ -3488,15 +3594,23 @@ function startGlobalTimerTicker() {
     } else if (active && active.slot.timerStatus === 'paused') {
       const shortRestMs = getSlotShortRestLiveMs(active.slot);
       const shortRestStr = formatMsToClock(shortRestMs);
+      const focusMs = getSlotLiveMs(active.slot);
+      const focusStr = formatMsToClock(focusMs);
       const clockEl = document.getElementById(`ypt-clock-${active.day.dayCountdown}-${active.slotKey}`);
       if (clockEl) {
-        clockEl.textContent = '☕ ' + shortRestStr;
+        clockEl.textContent = `⏸ 專注 ${focusStr}（☕ ${shortRestStr}）`;
       }
+      const effectiveMins = getSlotEffectiveMinutes(active.slot);
+      const hrEl = document.getElementById(`dur-hr-${active.day.dayCountdown}-${active.slotKey}`);
+      const minEl = document.getElementById(`dur-min-${active.day.dayCountdown}-${active.slotKey}`);
+      if (hrEl && document.activeElement !== hrEl) hrEl.value = Math.floor(effectiveMins / 60);
+      if (minEl && document.activeElement !== minEl) minEl.value = effectiveMins % 60;
+
       if (typeof document !== 'undefined' && document.title !== undefined) {
-        document.title = `☕ 短期休息 ${shortRestStr}｜讀書計劃表`;
+        document.title = `⏸ 專注 ${focusStr} ☕ 休息 ${shortRestStr}｜讀書計劃表`;
       }
     } else {
-      if (typeof document !== 'undefined' && document.title && (document.title.startsWith('⏱️') || document.title.startsWith('☕'))) {
+      if (typeof document !== 'undefined' && document.title && (document.title.startsWith('⏱️') || document.title.startsWith('☕') || document.title.startsWith('⏸'))) {
         document.title = appSettings.theme === 'dark' ? '讀書計劃表 ◈' : '小櫻讀書計劃表 🌸';
       }
     }
@@ -3536,7 +3650,9 @@ function updateActiveTimerBanner(activeObj = findActiveTimerSlot()) {
   }
   if (clockEl) {
     if (isPaused) {
-      clockEl.textContent = `☕ 短期 ${formatMsToClock(getSlotShortRestLiveMs(slot))} / 累積 ${formatMsToClock(getDayTotalRestLiveMs(day))}`;
+      const focusStr = formatMsToClock(getSlotLiveMs(slot));
+      const restStr = formatMsToClock(getSlotShortRestLiveMs(slot));
+      clockEl.textContent = `⏸ 專注 ${focusStr} ｜ ☕ 短期 ${restStr}`;
     } else {
       clockEl.textContent = formatMsToClock(getSlotLiveMs(slot));
     }
@@ -3551,6 +3667,7 @@ function updateActiveTimerBanner(activeObj = findActiveTimerSlot()) {
     }
   }
 
+  if (!banner.dataset) banner.dataset = {};
   banner.dataset.day = day.dayCountdown;
   banner.dataset.slot = slotKey;
 }
@@ -3750,8 +3867,12 @@ function setupEventListeners() {
         saveState();
         updateActiveTimerBanner();
         renderAllStatistics();
-        if (currentActiveDayCountdown === dayCountdown) {
+        const editorDay = getCalendarEditorDay();
+        if (editorDay && String(editorDay.dayCountdown) === String(dayCountdown)) {
           renderDailySlotsDetailed(day);
+        }
+        const timerDay = getTimerTargetDay();
+        if (timerDay && String(timerDay.dayCountdown) === String(dayCountdown)) {
           renderQuickTimerView();
         }
         if (currentRoomId && !isReceivingRemoteUpdate) {
@@ -3766,8 +3887,12 @@ function setupEventListeners() {
         saveState();
         updateSingleDayRowSummaryDom(day);
         renderAllStatistics();
-        if (currentActiveDayCountdown === dayCountdown) {
+        const editorDay = getCalendarEditorDay();
+        if (editorDay && String(editorDay.dayCountdown) === String(dayCountdown)) {
           renderDailySlotsDetailed(day);
+        }
+        const timerDay = getTimerTargetDay();
+        if (timerDay && String(timerDay.dayCountdown) === String(dayCountdown)) {
           renderQuickTimerView();
         }
         if (currentRoomId && !isReceivingRemoteUpdate) {
@@ -3808,8 +3933,12 @@ function setupEventListeners() {
         saveState();
         updateSingleDayRowSummaryDom(day);
         renderAllStatistics();
-        if (currentActiveDayCountdown === dayCountdown) {
+        const editorDay = getCalendarEditorDay();
+        if (editorDay && String(editorDay.dayCountdown) === String(dayCountdown)) {
           renderDailySlotsDetailed(day);
+        }
+        const timerDay = getTimerTargetDay();
+        if (timerDay && String(timerDay.dayCountdown) === String(dayCountdown)) {
           renderQuickTimerView();
         }
         if (currentRoomId && !isReceivingRemoteUpdate) {
@@ -3847,8 +3976,12 @@ function setupEventListeners() {
         updateSingleDayRowSummaryDom(day);
         updateActiveTimerBanner();
         renderAllStatistics();
-        if (currentActiveDayCountdown === dayCountdown) {
+        const editorDay = getCalendarEditorDay();
+        if (editorDay && String(editorDay.dayCountdown) === String(dayCountdown)) {
           renderDailySlotsDetailed(day);
+        }
+        const timerDay = getTimerTargetDay();
+        if (timerDay && String(timerDay.dayCountdown) === String(dayCountdown)) {
           renderQuickTimerView();
         }
         if (currentRoomId && !isReceivingRemoteUpdate) {
@@ -3881,7 +4014,8 @@ function setupEventListeners() {
         day[slotKey].updatedAt = nowTs;
         appState.updatedAt = nowTs;
         saveState();
-        if (currentActiveDayCountdown === dayCountdown) {
+        const editorDay = getCalendarEditorDay();
+        if (editorDay && String(editorDay.dayCountdown) === String(dayCountdown)) {
           const dailyCard = document.getElementById(`daily-card-${dayCountdown}-${slotKey}`);
           if (dailyCard) {
             const inp = dailyCard.querySelector('.daily-task-input');
@@ -3968,11 +4102,7 @@ function setupEventListeners() {
   const jumpBtn = document.getElementById('jumpToTodayOrTopBtn');
   if (jumpBtn) {
     jumpBtn.addEventListener('click', () => {
-      const now = new Date();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
-      const todayMatch = appState.days.find(d => d.isoDate.endsWith(`-${mm}-${dd}`));
-      const targetCountdown = todayMatch ? todayMatch.dayCountdown : 80;
+      const targetCountdown = getTodayDayCountdown();
       scrollToDayRow(targetCountdown);
     });
   }
@@ -4446,7 +4576,7 @@ function setupEventListeners() {
   const homeCalendarMemoInput = document.getElementById('homeCalendarMemoInput');
   if (homeCalendarMemoInput) {
     homeCalendarMemoInput.addEventListener('input', (e) => {
-      const day = findDayByKey(currentActiveDayCountdown);
+      const day = getHomeActiveDay();
       if (!day) return;
       const nowTs = Date.now();
       day.calendar = e.target.value;
@@ -4522,7 +4652,8 @@ function setupEventListeners() {
   const quickJumpToDailyBtn = document.getElementById('quickJumpToDailyBtn');
   if (quickJumpToDailyBtn) {
     quickJumpToDailyBtn.addEventListener('click', () => {
-      openCalendarDayEditor(currentActiveDayCountdown);
+      const targetDay = getTimerTargetDay();
+      openCalendarDayEditor(targetDay.dayCountdown);
       switchMainTab('calendar-schedule');
     });
   }
@@ -5257,6 +5388,8 @@ function mergeRemoteState(remote) {
 
   let latestRunning = null;
   let latestRunningTs = -1;
+  let latestPaused = null;
+  let latestPausedTs = -1;
 
   appState.days.forEach((localDay, idx) => {
     const remoteDay = remote.days[idx] || remote.days.find(d => d.dayCountdown === localDay.dayCountdown);
@@ -5299,14 +5432,23 @@ function mergeRemoteState(remote) {
           latestRunningTs = startScore;
           latestRunning = { dayCountdown: localDay.dayCountdown, slotKey: key };
         }
+      } else if (finalSlot.timerStatus === 'paused') {
+        const pauseScore = Number(finalSlot.updatedAt) || Number(finalSlot.lastPauseTimestamp) || 0;
+        if (pauseScore >= latestPausedTs) {
+          latestPausedTs = pauseScore;
+          latestPaused = { dayCountdown: localDay.dayCountdown, slotKey: key };
+        }
       }
     });
   });
 
-  // 確保全表最多只有一個 running 時段（以最新啟動者為準）
+  // 確保全表最多只有一個 active 時段（若遠端為 running，其他時段暫停；若為 paused，其他時段亦不應 running）
   if (latestRunning) {
     pauseOtherActiveSlots(latestRunning.dayCountdown, latestRunning.slotKey, latestRunningTs);
     currentActiveDayCountdown = latestRunning.dayCountdown;
+  } else if (latestPaused) {
+    pauseOtherActiveSlots(latestPaused.dayCountdown, latestPaused.slotKey, latestPausedTs);
+    currentActiveDayCountdown = latestPaused.dayCountdown;
   }
 
   appState.updatedAt = Math.max(appState.updatedAt || 0, remote.updatedAt || 0);
@@ -5673,8 +5815,10 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
       if (day && day[p.slot]) {
         const localSlot = day[p.slot];
         if (eventTs >= (localSlot.updatedAt || 0)) {
-          if (p.timerStatus === 'running') {
-            pauseOtherActiveSlots(day.dayCountdown, p.slot, eventTs);
+          if (p.timerStatus === 'running' || p.timerStatus === 'paused') {
+            if (p.timerStatus === 'running') {
+              pauseOtherActiveSlots(day.dayCountdown, p.slot, eventTs);
+            }
             currentActiveDayCountdown = day.dayCountdown;
           }
           if (p.subject !== undefined && p.subject !== '') {
@@ -5708,6 +5852,10 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
           updateSingleDayRowSummaryDom(day);
           updateActiveTimerBanner();
           renderAllStatistics();
+          renderQuickTimerView();
+          renderDailyPlanView();
+          renderHomeView();
+          renderPureCalendarTable();
           syncScreenWakeLock();
           saveState(false, false);
 
@@ -6185,6 +6333,7 @@ function showToast(message) {
  * 當裝置從鎖屏、其他 App、或重新開啟瀏覽器回到畫面時，立即對齊真實時間並同步跨裝置狀態
  */
 function handleAppWakeOrFocus() {
+  checkAndAutoFinalizeOvernightSlots();
   const active = findActiveTimerSlot();
   if (active) {
     currentActiveDayCountdown = active.day.dayCountdown;
@@ -6241,10 +6390,17 @@ function bootstrapApp() {
     console.warn('Canvas init error:', err);
   }
 
-  // 若重新打開瀏覽器時有正在計時的項目，自動切換至該天並維持計時
+  // 檢查並自動結算隔夜遺漏結束之時段（凌晨五點分界）
+  try {
+    checkAndAutoFinalizeOvernightSlots();
+  } catch (err) {
+    console.warn('Overnight check warning:', err);
+  }
+
+  // 若重新打開瀏覽器時有正在計時或暫停的項目，維持該時段目標
   try {
     const initialActive = findActiveTimerSlot();
-    if (initialActive && initialActive.slot.timerStatus === 'running') {
+    if (initialActive && (initialActive.slot.timerStatus === 'running' || initialActive.slot.timerStatus === 'paused')) {
       currentActiveDayCountdown = initialActive.day.dayCountdown;
     }
   } catch (err) {
@@ -6286,7 +6442,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261108_v8').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261109_v9').then((reg) => {
         console.log('🌸 PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);
