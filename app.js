@@ -2082,7 +2082,7 @@ function renderAdvancedStatTable(stats) {
    全新 5 大分頁導航與視圖管理模組（首頁、計時器、行事曆、每日專注、統計列表）
    ========================================================================== */
 
-let currentActiveTab = 'daily-plan';
+let currentActiveTab = 'home';
 let currentActiveDayCountdown = 80;
 let homeActiveDayCountdown = null;
 let calendarEditorDayKey = null;
@@ -6686,7 +6686,7 @@ function bootstrapApp() {
   try {
     startGlobalTimerTicker();
     initRoomSyncFromStorageOrUrl();
-    switchMainTab('daily-plan');
+    switchMainTab('home');
     syncScreenWakeLock();
     fallbackToGitHubBackup();
   } catch (err) {
@@ -6705,7 +6705,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261111_v15').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261111_v16').then((reg) => {
         console.log('PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);
