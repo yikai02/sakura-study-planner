@@ -1,0 +1,267 @@
+:root,
+[data-theme="blush"],
+[data-theme="sakura"] {
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+  --space-2xl: 64px;
+  --space-3xl: 96px;
+  --space-4xl: 144px;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.2rem;
+  --text-xl: 1.44rem;
+  --text-2xl: 1.728rem;
+  --text-3xl: 2.074rem;
+
+  --text-display-s: 1.44rem;
+  --text-display: 1.728rem;
+  --text-section: 1.2rem;
+  --text-title: 1rem;
+  --text-lead: 1rem;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
+
+  --container: 1440px;
+  --gutter: 24px;
+  --gap-columns: 24px;
+  --section-gap-s: 120px;
+  --section-gap: 144px;
+  --section-gap-l: 176px;
+  --nav-height: 48px;
+
+  --z-base: 1;
+  --z-raised: 10;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-sticky-nav: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+  --z-tooltip: 600;
+
+  --font-display: "Plus Jakarta Sans", "Noto Sans TC", sans-serif;
+  --font-body: "Inter", "Noto Sans TC", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-outlier: var(--font-mono);
+
+  --radius-card: 4px;
+  --radius-sm: 4px;
+  --radius-pill: 999px;
+  --rule-hair: 1px;
+  --shadow-card: none;
+  --tracking-display: -0.02em;
+  --tracking-editorial: 0.02em;
+
+  /* 6 Curated Fashion Fabric Swatches (Subject Entities) */
+  --swatch-rose: #9E6B70;
+  --swatch-denim: #52687D;
+  --swatch-olive: #6D7864;
+  --swatch-suede: #A67B5B;
+  --swatch-cement: #7A7D80;
+  --swatch-cocoa: #6E5A53;
+  --subj-color: var(--swatch-cement);
+
+  /* 5 Theme Selector Swatch Dots (token-scoped for Top Bar switcher) */
+  --theme-dot-blush: #EBDADC;
+  --theme-dot-blush-ring: #B88488;
+  --theme-dot-ink: #2B2D30;
+  --theme-dot-ink-ring: #969DA3;
+  --theme-dot-ecru: #E5DED2;
+  --theme-dot-ecru-ring: #8C735B;
+  --theme-dot-sage: #DCE2DA;
+  --theme-dot-sage-ring: #6E7F73;
+  --theme-dot-navy: #DCE2EA;
+  --theme-dot-navy-ring: #435B73;
+
+  /* Preset Cover Canvas Gradients (token-scoped, zero external leaks) */
+  --cover-sakura-grad: linear-gradient(135deg, #EDE3E4 0%, #DFD1D3 100%);
+  --cover-antigravity-grad: linear-gradient(135deg, #1A1B1D 0%, #242629 100%);
+  --cover-monolith-grad: linear-gradient(135deg, #252628 0%, #323438 100%);
+  --cover-cosmos-grad: linear-gradient(135deg, #1E242B 0%, #2B333C 100%);
+  --cover-concrete-grad: linear-gradient(135deg, #E2E0DC 0%, #D3CFC9 100%);
+  --cover-dawn-grad: linear-gradient(135deg, #E8E3DC 0%, #D9CFC4 100%);
+  --cover-ocean-grad: linear-gradient(135deg, #DCE2E8 0%, #C8D2DC 100%);
+  --cover-ink-grad: linear-gradient(135deg, #282524 0%, #3A3533 100%);
+  --scrim-cover: rgba(22, 23, 24, 0.28);
+  --scrim-modal: rgba(22, 23, 24, 0.42);
+  --popover-shadow: 0 8px 24px rgba(24, 21, 22, 0.12);
+  --swatch-ring-outline: rgba(24, 21, 22, 0.22);
+
+  /* Theme 1: Auralee Blush (霧粉生絲 - 預設) */
+  --bg: #FAF8F7;
+  --surface: #F2ECEB;
+  --text: #242122;
+  --muted: #8C8485;
+  --accent: #B88488;
+  --border: #E6DFDE;
+
+  --color-paper: var(--bg);
+  --color-paper-2: var(--surface);
+  --color-paper-3: #EAE2E0;
+  --color-ink: var(--text);
+  --color-ink-2: #595253;
+  --color-muted: var(--muted);
+  --color-rule: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-fill: #8D5B5F;
+  --color-accent-text: #855256;
+  --color-accent-ink: #FAF8F7;
+  --color-focus: #8D5B5F;
+
+  --color-error: #A6444C;
+  --color-error-bg: #F5E6E7;
+  --color-success: #3E6B52;
+  --color-success-bg: #E6EFE9;
+  --color-warning: #8C5C2B;
+  --color-warning-bg: #F4EBE1;
+
+  --ratio-morning: #B88488;
+  --ratio-noon: #A67B5B;
+  --ratio-night: #52687D;
+}
+
+/* Theme 2: Graphpaper Ink (石墨水洗黑 - 極簡深黑) */
+[data-theme="ink"],
+[data-theme="dark"] {
+  --bg: #161718;
+  --surface: #1F2022;
+  --text: #E8E8E6;
+  --muted: #82868C;
+  --accent: #969DA3;
+  --border: #2B2D30;
+
+  --color-paper: var(--bg);
+  --color-paper-2: var(--surface);
+  --color-paper-3: #282A2D;
+  --color-ink: var(--text);
+  --color-ink-2: #B0B4BA;
+  --color-muted: var(--muted);
+  --color-rule: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-fill: #969DA3;
+  --color-accent-text: #B8BEC4;
+  --color-accent-ink: #161718;
+  --color-focus: #B8BEC4;
+
+  --color-error: #D98289;
+  --color-error-bg: #2B1F21;
+  --color-success: #7DB093;
+  --color-success-bg: #1D2922;
+  --color-warning: #CCA06E;
+  --color-warning-bg: #2A241C;
+
+  --popover-shadow: 0 10px 28px rgba(10, 11, 12, 0.56);
+  --swatch-ring-outline: rgba(232, 232, 230, 0.25);
+
+  --swatch-rose: #B9878C;
+  --swatch-denim: #7A92A8;
+  --swatch-olive: #8A9680;
+  --swatch-suede: #C29674;
+  --swatch-cement: #9A9EA2;
+  --swatch-cocoa: #9E867D;
+
+  --ratio-morning: #B9878C;
+  --ratio-noon: #C29674;
+  --ratio-night: #7A92A8;
+}
+
+/* Theme 3: Nicholson Ecru (燕麥卡其 - 經典風衣卡其) */
+[data-theme="ecru"] {
+  --bg: #F6F4F0;
+  --surface: #EBE7E0;
+  --text: #22201E;
+  --muted: #857E75;
+  --accent: #8C735B;
+  --border: #DED9D0;
+
+  --color-paper: var(--bg);
+  --color-paper-2: var(--surface);
+  --color-paper-3: #E1DCD3;
+  --color-ink: var(--text);
+  --color-ink-2: #57524C;
+  --color-muted: var(--muted);
+  --color-rule: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-fill: #6E5843;
+  --color-accent-text: #6E5843;
+  --color-accent-ink: #F6F4F0;
+  --color-focus: #6E5843;
+
+  --color-error: #A1463E;
+  --color-error-bg: #F3E4E2;
+  --color-success: #41684E;
+  --color-success-bg: #E5EDE7;
+  --color-warning: #875C27;
+  --color-warning-bg: #F1E8DC;
+}
+
+/* Theme 4: Daikanyama Sage (鼠尾草灰綠 - 選貨店灰綠) */
+[data-theme="sage"] {
+  --bg: #F4F5F3;
+  --surface: #E8EBE6;
+  --text: #1E221F;
+  --muted: #7C857E;
+  --accent: #6E7F73;
+  --border: #D7DDD5;
+
+  --color-paper: var(--bg);
+  --color-paper-2: var(--surface);
+  --color-paper-3: #DCE1DA;
+  --color-ink: var(--text);
+  --color-ink-2: #4E5650;
+  --color-muted: var(--muted);
+  --color-rule: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-fill: #4F6054;
+  --color-accent-text: #4F6054;
+  --color-accent-ink: #F4F5F3;
+  --color-focus: #4F6054;
+
+  --color-error: #A34A4A;
+  --color-error-bg: #F2E5E5;
+  --color-success: #396649;
+  --color-success-bg: #E1ECE5;
+  --color-warning: #825E2D;
+  --color-warning-bg: #EFE9DE;
+}
+
+/* Theme 5: Okayama Navy (岡山丹寧 - City Boy 灰藍) */
+[data-theme="navy"] {
+  --bg: #F5F6F8;
+  --surface: #EAECEF;
+  --text: #191E24;
+  --muted: #78818C;
+  --accent: #435B73;
+  --border: #D8DDE3;
+
+  --color-paper: var(--bg);
+  --color-paper-2: var(--surface);
+  --color-paper-3: #DFE2E7;
+  --color-ink: var(--text);
+  --color-ink-2: #4B535D;
+  --color-muted: var(--muted);
+  --color-rule: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-fill: #435B73;
+  --color-accent-text: #435B73;
+  --color-accent-ink: #F5F6F8;
+  --color-focus: #435B73;
+
+  --color-error: #A6444C;
+  --color-error-bg: #F3E5E7;
+  --color-success: #3D6953;
+  --color-success-bg: #E3ECE7;
+  --color-warning: #865F2D;
+  --color-warning-bg: #F0EAE1;
+}

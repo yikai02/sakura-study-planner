@@ -1,962 +1,643 @@
 <!DOCTYPE html>
-<html lang="zh-Hant" data-theme="dark">
+<html lang="zh-Hant" data-theme="blush">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>小櫻讀書計劃表 🌸 YPT 專注計時 × Notion 行事曆</title>
-  
-  <!-- PWA & Mobile Web App Manifest -->
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#141519" id="themeColorMeta" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" id="themeColorMeta" content="#FAF8F7" />
+  <meta name="description" content="高質感編輯器風格的讀書計時與 80 天衝刺規劃工作台，支援即時跨裝置同步與日系低飽和布料主題。" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="小櫻讀書" />
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
-  <link rel="shortcut icon" href="icons/icon-192.png" />
-
+  <title>小櫻讀書計劃表</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23FAF8F7' stroke='%23E6DFDE'/%3E%3Ccircle cx='16' cy='16' r='7' fill='%23B88488'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <script>
-    // 立即依據 localStorage 套用主題，防止畫面閃爍並確保離線/秒開時主題正確
-    (function() {
+    (function () {
       try {
         var raw = localStorage.getItem('sakura_user_settings_v1') || localStorage.getItem('sakura_planner_settings_v1');
-        var theme = 'dark'; // 預設深灰色護眼極簡主題，舒適沉穩無大面積刺眼白光
+        var theme = 'blush';
         if (raw) {
           var s = JSON.parse(raw);
-          if (s && s.theme === 'sakura') {
-            theme = 'sakura';
+          if (s && s.theme) {
+            if (s.theme === 'sakura') theme = 'blush';
+            else if (s.theme === 'dark') theme = 'ink';
+            else if (['blush', 'ink', 'ecru', 'sage', 'navy'].indexOf(s.theme) !== -1) theme = s.theme;
           }
         }
         document.documentElement.setAttribute('data-theme', theme);
+        var metaColors = {
+          blush: '#FAF8F7',
+          ink: '#161718',
+          ecru: '#F6F4F0',
+          sage: '#F4F5F3',
+          navy: '#F5F6F8'
+        };
         var meta = document.getElementById('themeColorMeta');
-        if (meta) meta.content = (theme === 'dark' ? '#141418' : '#FAF8F5');
+        if (meta && metaColors[theme]) meta.content = metaColors[theme];
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=20261109_v14" />
+  <link rel="stylesheet" href="style.css?v=20261111_v15" />
 </head>
 <body>
+  <canvas id="sakuraCanvas" class="petal-canvas" aria-hidden="true"></canvas>
 
-  <!-- Floating Falling Sakura Petals Background Canvas (Hidden in Antigravity Dark Theme) -->
-  <canvas id="sakuraCanvas" class="sakura-canvas" aria-hidden="true"></canvas>
-
-  <!-- Top Navigation & Floating Active YPT Timer Bar -->
-  <header class="top-navbar">
-    <div class="brand-area">
-      <div class="sakura-logo" id="brandLogoIcon" aria-hidden="true">🌸</div>
-      <div class="brand-title">
-        <h1>
-          小櫻讀書計劃表
-          <span class="brand-badge">11/8 (Day 80) – 1/26 (Day 1)</span>
-        </h1>
+  <!-- 48px Minimal Editorial Top Bar -->
+  <header class="topbar" role="banner">
+    <div class="topbar-inner">
+      <div class="topbar-left">
+        <span id="brandLogoIcon" class="brand-mark" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="4" width="16" height="16" rx="3" />
+            <line x1="9" y1="4" x2="9" y2="20" />
+          </svg>
+        </span>
+        <nav class="breadcrumb-nav" aria-label="計畫路徑">
+          <button type="button" id="currentRoomPill" class="breadcrumb-room-btn" title="同步房間與備份設定">
+            <span id="currentRoomPillText">sakura-study-2026</span>
+          </button>
+          <span class="breadcrumb-sep" aria-hidden="true">/</span>
+          <h1 class="breadcrumb-title-wrap">
+            <span id="planTitleEditable" class="inline-editable breadcrumb-title" data-inline-target="planTitle" tabindex="0" role="textbox" aria-label="編輯讀書計畫主標題">2026 衝刺讀書計畫</span>
+          </h1>
+        </nav>
       </div>
-    </div>
 
-    <!-- 5 Main Navigation Tab Buttons -->
-    <nav class="main-tabs-nav" id="mainTabsNav" aria-label="主要分頁導航">
-      <button class="tab-nav-btn active" data-tab="home" type="button" title="極簡首頁與今日總覽">
-        <span class="tab-icon">🏠</span>
-        <span class="tab-text">首頁</span>
-      </button>
-      <button class="tab-nav-btn" data-tab="quick-timer" type="button" title="YPT 快捷科目計時與休息統計">
-        <span class="tab-icon">⏱️</span>
-        <span class="tab-text">計時器</span>
-      </button>
-      <button class="tab-nav-btn" data-tab="calendar-schedule" type="button" title="Notion 日曆資料庫行事曆">
-        <span class="tab-icon">🗓️</span>
-        <span class="tab-text">行事曆</span>
-      </button>
-      <button class="tab-nav-btn" data-tab="daily-plan" type="button" title="80天早中晚專注總表">
-        <span class="tab-icon">📖</span>
-        <span class="tab-text">每日專注</span>
-      </button>
-      <button class="tab-nav-btn" data-tab="statistics-dashboard" type="button" title="5大連動統計量表與衝刺指標">
-        <span class="tab-icon">📊</span>
-        <span class="tab-text">統計列表</span>
-      </button>
-    </nav>
-
-    <!-- Floating Active Timer Banner (shown when a slot is running or paused) -->
-    <div id="activeTimerBanner" class="active-timer-banner hidden">
-      <span class="live-dot"></span>
-      <div class="active-timer-info">
-        <span id="bannerSlotLabel">11月8日 早上</span>
-        <span id="bannerSubjectPill" class="subj-pill" data-subj="經濟">經濟</span>
-        <span id="bannerClock" class="active-timer-clock">00:00:00</span>
+      <!-- Compact Running Timer Banner (visible when navigating elsewhere on small viewports or when active) -->
+      <div id="activeTimerBanner" class="active-banner hidden" aria-live="polite">
+        <span id="bannerSubjectPill" class="banner-subject">專注</span>
+        <span id="bannerSlotLabel" class="banner-slot">上午</span>
+        <span id="bannerClock" class="banner-clock mono-tabular">00:00:00</span>
+        <button type="button" id="bannerToggleBtn" class="banner-btn">暫停</button>
+        <button type="button" id="bannerStopBtn" class="banner-btn banner-btn-stop">結束</button>
+        <button type="button" id="bannerJumpBtn" class="banner-btn banner-btn-quiet" aria-label="前往計時區">查看</button>
       </div>
-      <div class="ypt-btn-group">
-        <button id="bannerToggleBtn" class="ypt-btn btn-pause" type="button">暫停 ⏸</button>
-        <button id="bannerStopBtn" class="ypt-btn btn-stop" type="button">結束 ⏹</button>
-        <button id="bannerJumpBtn" class="btn btn-xs" type="button">前往計時 ↵</button>
-      </div>
-    </div>
 
-    <!-- Right Actions: Dual Theme Switcher, Sound, Petals, Save Status, Room Sync, Settings Modal -->
-    <div class="top-actions">
-      <!-- Two-Theme Switcher (Sakura vs Antigravity Dark) -->
-      <div class="theme-dual-switcher" id="themeDualSwitcher" role="group" aria-label="主題風格選擇">
-        <button type="button" class="theme-switch-pill" data-theme-choice="sakura" data-theme-val="sakura" id="themeBtnSakura" title="櫻花粉白主題" onclick="window.switchThemeMode && window.switchThemeMode('sakura')">
-          🌸 櫻花
+      <div class="topbar-right">
+        <button type="button" id="roomSyncBtn" class="sync-status-btn" title="跨裝置同步狀態與分享">
+          <span id="roomDot" class="sync-micro-dot" aria-hidden="true"></span>
+          <span id="roomCloudIcon" class="visually-hidden">雲端連線</span>
+          <span id="roomStatusText" class="sync-status-label">已連線</span>
         </button>
-        <button type="button" class="theme-switch-pill active" data-theme-choice="dark" data-theme-val="dark" id="themeBtnDark" title="Antigravity 深色極簡風" onclick="window.switchThemeMode && window.switchThemeMode('dark')">
-          🖤 極簡黑
-        </button>
-      </div>
 
-      <!-- Quick Atmosphere Controls -->
-      <div class="quick-atmosphere-controls">
-        <button id="soundToggleBtn" class="icon-toggle-btn" type="button" title="切換專注和弦鐘聲音效（開/關）">
-          <span id="soundToggleIcon">🔔</span>
+        <div id="themeSwatchSwitcher" class="theme-swatches" role="radiogroup" aria-label="服裝布料配色主題">
+          <button type="button" class="theme-swatch-btn is-active" data-theme-choice="blush" role="radio" aria-checked="true" aria-label="霧粉生絲 Auralee Blush" title="霧粉生絲 Auralee Blush"></button>
+          <button type="button" class="theme-swatch-btn" data-theme-choice="ink" role="radio" aria-checked="false" aria-label="石墨水洗黑 Graphpaper Ink" title="石墨水洗黑 Graphpaper Ink"></button>
+          <button type="button" class="theme-swatch-btn" data-theme-choice="ecru" role="radio" aria-checked="false" aria-label="燕麥卡其 Nicholson Ecru" title="燕麥卡其 Nicholson Ecru"></button>
+          <button type="button" class="theme-swatch-btn" data-theme-choice="sage" role="radio" aria-checked="false" aria-label="鼠尾草灰綠 Daikanyama Sage" title="鼠尾草灰綠 Daikanyama Sage"></button>
+          <button type="button" class="theme-swatch-btn" data-theme-choice="navy" role="radio" aria-checked="false" aria-label="岡山丹寧 Okayama Navy" title="岡山丹寧 Okayama Navy"></button>
+        </div>
+
+        <button type="button" id="pwaInstallBtn" class="topbar-icon-btn hidden" title="安裝離線桌面應用">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12" />
+            <polyline points="7 10 12 15 17 10" />
+            <path d="M5 21h14" />
+          </svg>
         </button>
-        <button id="petalToggleBtn" class="icon-toggle-btn active" type="button" title="切換落櫻飄落動效（開/關）">
-          <span id="petalToggleIcon">🌸</span>
+
+        <button type="button" id="openSettingsModalBtn" class="topbar-icon-btn" aria-label="系統與衝刺階段設定" title="系統設定">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="4" y1="7" x2="20" y2="7" />
+            <circle cx="9" cy="7" r="2" fill="var(--bg)" />
+            <line x1="4" y1="17" x2="20" y2="17" />
+            <circle cx="15" cy="17" r="2" fill="var(--bg)" />
+          </svg>
         </button>
       </div>
-
-      <div class="save-indicator" id="saveIndicator" title="所有變更皆自動儲存於瀏覽器 localStorage 與雲端">
-        <span class="dot" id="saveIndicatorDot"></span>
-        <span id="saveStatusText">已自動儲存</span>
-      </div>
-      <button id="roomSyncBtn" class="btn btn-cloud" type="button" title="開啟免註冊・多人即時同步讀書房">
-        <span class="cloud-dot" id="roomDot"></span>
-        <span class="cloud-icon" id="roomCloudIcon">🌸</span>
-        <span id="roomStatusText">多人同步房</span>
-      </button>
-      <button id="openSettingsModalBtn" class="btn btn-subtle" type="button" title="開啟設定、衝刺階段與備份工具">
-        <span>⚙️ 設定</span>
-      </button>
     </div>
   </header>
 
-  <!-- Main Container with 5 Tab Views -->
-  <main class="app-container" id="appContainer">
+  <!-- Asymmetric Dual-Pane Editorial Workspace -->
+  <main id="appContainer" class="workspace-shell">
+    <!-- Left Rail: Countdown + Strict Real-Time Focus Timer + Subject Entities -->
+    <aside class="workspace-rail" aria-label="即時專注計時與科目管理">
+      <!-- Exam Countdown Hairline Block -->
+      <section class="rail-section rail-countdown">
+        <div class="rail-section-head">
+          <span id="subtitleCountdown" class="inline-editable section-kicker" data-inline-target="subtitleCountdown" tabindex="0" role="textbox" aria-label="編輯倒數副標題">衝刺倒數進度</span>
+          <span class="countdown-inline-metric">
+            <span id="homeExamCountdownNum" class="countdown-num mono-tabular">80</span>
+            <span class="countdown-unit">天</span>
+          </span>
+        </div>
+        <div class="hairline-progress" aria-hidden="true">
+          <div id="homeExamProgressBar" class="hairline-progress-fill"></div>
+        </div>
+        <p id="homeExamCountdownMeta" class="countdown-meta mono-tabular">Day 1 / 80</p>
+      </section>
 
-    <!-- =========================================================================
-         第 1 頁：🏠 首頁（Notion 風格極簡看板、日期、考試倒數、今日要做的事、行事曆）
-         ========================================================================= -->
-    <section id="tabHome" class="tab-view active">
-      <div class="home-notion-wrapper">
-        <!-- Notion Style Customizable Cover Banner -->
-        <div class="notion-cover-container">
-          <div class="notion-cover-banner" id="homeCoverBanner" data-cover="cover-sakura">
-            <div class="notion-cover-backdrop" id="homeCoverBackdrop"></div>
-            <div class="notion-cover-foreground" id="homeCoverForeground"></div>
-            <div class="notion-cover-overlay"></div>
-            <div class="notion-cover-actions">
-              <button id="toggleCoverPickerBtn" class="cover-action-btn" type="button">
-                🎨 更換背板
-              </button>
-            </div>
-          </div>
-
-          <!-- Cover Picker Popover -->
-          <div id="coverPickerPopover" class="cover-picker-popover hidden">
-            <div class="cover-picker-header">
-              <span>選擇背板風格（Notion Cover）</span>
-              <button id="closeCoverPickerBtn" class="cover-picker-close" type="button">✕</button>
-            </div>
-            <div class="cover-presets-grid" id="coverPresetsGrid">
-              <button type="button" class="cover-preset-item" data-cover-id="cover-antigravity">
-                <span class="cover-swatch swatch-antigravity"></span>
-                <span>極簡黑曜網格</span>
-              </button>
-              <button type="button" class="cover-preset-item" data-cover-id="cover-monolith">
-                <span class="cover-swatch swatch-monolith"></span>
-                <span>幾何光影建築</span>
-              </button>
-              <button type="button" class="cover-preset-item" data-cover-id="cover-cosmos">
-                <span class="cover-swatch swatch-cosmos"></span>
-                <span>靜謐午夜星軌</span>
-              </button>
-              <button type="button" class="cover-preset-item" data-cover-id="cover-concrete">
-                <span class="cover-swatch swatch-concrete"></span>
-                <span>極簡清水模</span>
-              </button>
-              <button type="button" class="cover-preset-item" data-cover-id="cover-sakura">
-                <span class="cover-swatch swatch-sakura"></span>
-                <span>春日櫻吹雪</span>
-              </button>
-              <button type="button" class="cover-preset-item" data-cover-id="cover-dawn">
-                <span class="cover-swatch swatch-dawn"></span>
-                <span>晨霧山稜線</span>
-              </button>
-              <button type="button" class="cover-preset-item" data-cover-id="cover-ocean">
-                <span class="cover-swatch swatch-ocean"></span>
-                <span>北歐靜海波光</span>
-              </button>
-              <button type="button" class="cover-preset-item" data-cover-id="cover-ink">
-                <span class="cover-swatch swatch-ink"></span>
-                <span>水墨極簡留白</span>
-              </button>
-            </div>
-            <div class="cover-custom-row">
-              <input id="customCoverUrlInput" type="url" class="search-input" placeholder="貼上自訂圖片網址 (https://...)" style="flex:1;" />
-              <button id="applyCustomCoverUrlBtn" class="btn btn-xs btn-primary" type="button">套用網址</button>
-              <label for="customCoverFileInput" class="btn btn-xs btn-subtle" style="cursor:pointer; margin:0;">📁 上傳照片</label>
-              <input id="customCoverFileInput" type="file" accept="image/*" style="display:none;" />
-            </div>
-
-            <!-- 跨裝置背板顯示微調控制項（統一手機與電腦截圖畫面） -->
-            <div class="cover-settings-card" id="coverSettingsCard" style="display:none;">
-              <div class="cover-settings-title">背板跨裝置顯示微調（手機與電腦統一）</div>
-              <div class="cover-settings-row">
-                <span class="cover-settings-label">顯示模式：</span>
-                <div class="cover-segmented-pills" id="coverFitPills">
-                  <button type="button" class="cover-pill-btn active" data-fit-choice="contain" title="手機與電腦顯示完全相同整張圖片，絕不裁切任何角落">
-                    🖼️ 完整全圖（推薦）
-                  </button>
-                  <button type="button" class="cover-pill-btn" data-fit-choice="cover" title="滿版填滿整個橫幅">
-                    ✂️ 滿版裁切
-                  </button>
-                </div>
-              </div>
-
-              <div class="cover-settings-row" id="coverPositionRow" style="display:none;">
-                <span class="cover-settings-label">裁切視角：</span>
-                <div class="cover-segmented-pills" id="coverPositionPills">
-                  <button type="button" class="cover-pill-btn" data-pos-choice="top" title="以頂部為焦點">⬆️ 偏上</button>
-                  <button type="button" class="cover-pill-btn active" data-pos-choice="center" title="置中對齊">⏺️ 置中</button>
-                  <button type="button" class="cover-pill-btn" data-pos-choice="bottom" title="以底部為焦點">⬇️ 偏下</button>
-                </div>
-              </div>
-            </div>
+      <!-- Real-Time Focus Timer Panel -->
+      <section id="tabQuickTimer" class="rail-section rail-timer-section tab-pane" aria-label="即時專注計時器">
+        <div class="rail-section-head">
+          <span id="subtitleTimer" class="inline-editable section-kicker" data-inline-target="subtitleTimer" tabindex="0" role="textbox" aria-label="編輯計時器副標題">即時專注計時</span>
+          <div class="rail-day-meta">
+            <span id="quickDayBadge" class="day-tag mono-tabular">Day 1</span>
+            <span id="quickPhaseTag" class="phase-tag">第一階段</span>
           </div>
         </div>
 
-        <!-- Home Hero Bar: Date + Exam Countdown -->
-        <div class="home-hero-bar">
-          <div class="home-hero-left">
-            <div class="home-live-date-line">
-              <span class="home-today-pill" id="homeTodayTag">TODAY</span>
-              <span class="home-live-clock" id="homeLiveClock">00:00:00</span>
-            </div>
-            <h2 class="home-date-heading" id="homeDateHeading">2026年 11月 8日（週日）</h2>
-            <div class="home-day-switcher">
-              <button id="homePrevDayBtn" class="btn btn-xs btn-subtle" type="button">◀ 前一天</button>
-              <span class="home-selected-day-label" id="homeSelectedDayLabel">Day 80 · 第一階段</span>
-              <button id="homeTodayBtn" class="btn btn-xs btn-subtle" type="button">今日</button>
-              <button id="homeNextDayBtn" class="btn btn-xs btn-subtle" type="button">後一天 ▶</button>
-            </div>
-          </div>
+        <div class="timer-date-row">
+          <span id="quickDateTitle" class="timer-date-label">今日</span>
+          <span class="timer-today-total">累計 <strong id="quickTodayTotalTime" class="mono-tabular">00:00:00</strong></span>
+        </div>
 
-          <div class="home-countdown-card">
-            <div class="countdown-top-label">距離 1/26 研究所正式考試</div>
-            <div class="countdown-main-row">
-              <span class="countdown-big-num" id="homeExamCountdownNum">80</span>
-              <span class="countdown-unit">天</span>
-            </div>
-            <div class="countdown-sub-meta" id="homeExamCountdownMeta">11/8 起算 · 共 80 天衝刺</div>
-            <div class="countdown-progress-track">
-              <div class="countdown-progress-fill" id="homeExamProgressBar" style="width: 0%;"></div>
-            </div>
+        <div class="timer-mode-row">
+          <div id="timerModeSelector" class="mode-switch" role="group" aria-label="計時模式">
+            <button type="button" class="mode-btn mode-chip active" data-mode="stopwatch">正計時</button>
+            <button type="button" class="mode-btn mode-chip" data-mode="pomodoro-25">番茄 25m</button>
+            <button type="button" class="mode-btn mode-chip" data-mode="pomodoro-50">深度 50m</button>
+          </div>
+          <div class="timer-quick-links">
+            <button type="button" id="quickSwitchDayBtn" class="quiet-text-btn" title="鎖定真實今天">切回今日</button>
+            <button type="button" id="quickJumpToDailyBtn" class="quiet-text-btn">展開大表</button>
           </div>
         </div>
 
-        <!-- Home Main Content Grid (Notion Workspace Blocks) -->
-        <div class="home-workspace-grid">
-          <!-- Left Block: Today's Tasks (Morning, Afternoon, Evening) -->
-          <div class="card home-block-card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">✦</span> 當日要做的事情</div>
-              </div>
-              <div style="display:flex; align-items:center; gap:8px;">
-                <span class="home-done-counter" id="homeDoneCounter">0 / 3 完成</span>
-                <button class="btn btn-xs btn-primary home-nav-shortcut" data-goto-tab="quick-timer" type="button">計時器 ➔</button>
-              </div>
-            </div>
-            <div class="card-body">
-              <div class="home-slots-list" id="homeSlotsList">
-                <!-- Rendered by app.js -->
-              </div>
-            </div>
+        <!-- Monospace Tabular Clock Readout -->
+        <div class="clock-stage">
+          <div class="clock-status-row">
+            <span id="quickStatusDot" class="status-dot" aria-hidden="true"></span>
+            <span id="quickStatusText" class="status-label">待機中</span>
           </div>
-
-          <!-- Right Column: Calendar Memo & Upcoming Milestones + Focus Summary -->
-          <div class="home-right-col">
-            <!-- Today's Calendar Memo & Upcoming Events -->
-            <div class="card home-block-card">
-              <div class="card-header">
-                <div>
-                  <div class="card-title"><span class="icon">🗓️</span> 當日行事曆與近期重要日程</div>
-                </div>
-                <button class="btn btn-xs btn-subtle home-nav-shortcut" data-goto-tab="calendar-schedule" type="button">月曆 ➔</button>
-              </div>
-              <div class="card-body">
-                <div class="home-memo-box">
-                  <label class="home-memo-label" for="homeCalendarMemoInput">📌 當日行程備忘</label>
-                  <input
-                    id="homeCalendarMemoInput"
-                    type="text"
-                    class="daily-calendar-input"
-                    placeholder="點此輸入當日重要行程、考試或死線..."
-                  />
-                </div>
-                <div class="home-upcoming-section">
-                  <div class="home-upcoming-title">即將到來的重要日程</div>
-                  <div class="home-upcoming-list" id="homeUpcomingList">
-                    <!-- Rendered by app.js -->
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Focus & Rest Quick Snapshot -->
-            <div class="card home-block-card">
-              <div class="card-header">
-                <div class="card-title"><span class="icon">⏱️</span> 當日專注與休息統計</div>
-                <button class="btn btn-xs btn-subtle home-nav-shortcut" data-goto-tab="daily-plan" type="button">每日專注 ➔</button>
-              </div>
-              <div class="card-body">
-                <div class="home-mini-stats-grid">
-                  <div class="home-mini-stat">
-                    <span class="hms-label">當日專注時長</span>
-                    <span class="hms-val" id="homeStatFocusTime">0小時 0分</span>
-                  </div>
-                  <div class="home-mini-stat">
-                    <span class="hms-label">休息時間</span>
-                    <span class="hms-val" id="homeStatShortRest">00:00:00</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div id="quickClockDisplay" class="clock-display mono-tabular">00:00:00</div>
+          <p id="quickSlotHint" class="clock-hint">選擇科目後開始計時，依開始時間自動歸檔</p>
         </div>
-      </div>
-    </section>
 
+        <div id="quickActionsRow" class="timer-actions">
+          <button type="button" id="quickPauseResumeBtn" class="btn-primary-solid" disabled>暫停</button>
+          <button type="button" id="quickStopBtn" class="btn-secondary-hairline" disabled>結束紀錄</button>
+        </div>
 
-    <!-- =========================================================================
-         第 2 頁：⏱️ 計時器（YPT 模式：依開始時間自動判定早中晚時段，下方顯示休息時間）
-         ========================================================================= -->
-    <section id="tabQuickTimer" class="tab-view">
-      <div class="quick-timer-wrapper">
-        <!-- Date & Today Summary Header -->
-        <div class="quick-header-card">
-          <div class="quick-date-info">
-            <span class="quick-day-badge" id="quickDayBadge">Day 80</span>
-            <span class="quick-date-title" id="quickDateTitle">11月8日（週日）</span>
-            <span class="quick-phase-tag" id="quickPhaseTag">第一階段</span>
-            <button id="quickSwitchDayBtn" class="btn btn-xs btn-subtle" type="button" title="切換選取的日期">切換日期 ▾</button>
-          </div>
-          <div class="quick-today-stat">
-            <div class="quick-stat-line">
-              <span class="quick-stat-label">今日專注：</span>
-              <span class="quick-stat-val" id="quickTodayTotalTime">0小時 0分</span>
+        <!-- Rest Timer Strip -->
+        <div id="quickRestTimerPanel" class="rest-strip">
+          <div id="quickShortRestBox" class="rest-box">
+            <div class="rest-box-head">
+              <span class="rest-box-title">
+                <span id="quickShortRestDot" class="rest-dot" aria-hidden="true"></span>
+                <span>休息時間</span>
+              </span>
+              <span id="quickShortRestClock" class="rest-clock mono-tabular">00:00:00</span>
             </div>
+            <p id="quickShortRestHint" class="rest-hint">專注暫停或結束後開始計算</p>
           </div>
         </div>
 
-        <!-- Big Focus Clock Card + Rest Panel Directly Below -->
-        <div class="card quick-timer-card">
-          <div class="quick-timer-body">
-            <div class="quick-active-badge-bar">
-              <span class="quick-status-dot" id="quickStatusDot"></span>
-              <span class="quick-status-text" id="quickStatusText">點選科目開始計時</span>
-            </div>
-
-            <!-- Mode Selector: Free Stopwatch vs Pomodoro -->
-            <div class="timer-mode-selector" id="timerModeSelector">
-              <button type="button" class="mode-chip active" data-mode="stopwatch">
-                <span class="mode-chip-icon">⏱️</span> 自由計時
-              </button>
-              <button type="button" class="mode-chip" data-mode="pomodoro-25">
-                <span class="mode-chip-icon">🍅</span> 番茄 25分
-              </button>
-              <button type="button" class="mode-chip" data-mode="pomodoro-50">
-                <span class="mode-chip-icon">🎯</span> 衝刺 50分
-              </button>
-            </div>
-
-            <div class="quick-clock-display" id="quickClockDisplay">00:00:00</div>
-
-            <div class="quick-slot-hint" id="quickSlotHint">
-              早上 05:00~12:00 ｜ 下午 12:00~19:00 ｜ 晚上 19:00~05:00
-            </div>
-
-            <!-- Dynamic Control Buttons (Pause / Resume / Stop) -->
-            <div class="quick-actions-row" id="quickActionsRow" style="display: none;">
-              <button id="quickPauseResumeBtn" class="btn btn-lg btn-pause" type="button">暫停 ⏸</button>
-              <button id="quickStopBtn" class="btn btn-lg btn-stop" type="button">結束專注並記錄 ⏹</button>
-            </div>
-
-            <!-- ☕ 休息時間計時面板（位於讀書計時器正下方，按下暫停後休息時間立即跳錶） -->
-            <div class="quick-rest-panel" id="quickRestTimerPanel">
-              <div class="quick-rest-box short-rest-box" id="quickShortRestBox">
-                <div class="rest-box-header">
-                  <span class="rest-dot" id="quickShortRestDot"></span>
-                  <span class="rest-box-title">☕ 休息時間</span>
-                </div>
-                <div class="rest-box-clock" id="quickShortRestClock">00:00:00</div>
-                <div class="rest-box-sub" id="quickShortRestHint">按下暫停鍵後自動開始計時</div>
-              </div>
-            </div>
+        <!-- Subject Entities List (Global Inline Rename + 6 Textile Swatches) -->
+        <div class="subjects-block">
+          <div class="rail-section-head">
+            <span id="subtitleSubjects" class="inline-editable section-kicker" data-inline-target="subtitleSubjects" tabindex="0" role="textbox" aria-label="編輯科目清單副標題">科目清單</span>
+            <span class="subjects-hint">點擊色點換色，點擊名稱編輯</span>
           </div>
+          <div id="quickSubjectsGrid" class="subject-entities-list" role="list"></div>
         </div>
 
-        <!-- Quick Subject Buttons (YPT Style - English Removed) -->
-        <div class="card quick-subjects-card">
-          <div class="card-header">
-            <div>
-              <div class="card-title"><span class="icon">⚡</span> 快捷科目選擇</div>
-            </div>
+        <!-- Compact Today Slots Preview inside Rail -->
+        <div class="rail-slots-block">
+          <div class="rail-section-head">
+            <span class="section-kicker">今日紀錄摘要</span>
           </div>
-          <div class="card-body">
-            <div class="quick-subjects-grid" id="quickSubjectsGrid">
-              <!-- Dynamically populated by app.js: 經濟, 統計, 財管, 上課, 其他 -->
-            </div>
-          </div>
+          <div id="quickSlotsGrid" class="rail-slots-list"></div>
         </div>
 
-        <!-- Today's 3 Slots Status Overview -->
-        <div class="card quick-slots-preview-card">
-          <div class="card-header">
-            <div class="card-title"><span class="icon">📋</span> 今日時段進度</div>
-            <button id="quickJumpToDailyBtn" class="btn btn-xs btn-subtle" type="button">進入當日詳細規劃 ➔</button>
-          </div>
-          <div class="card-body">
-            <div class="quick-slots-grid" id="quickSlotsGrid">
-              <!-- Rendered by app.js: 3 slot summary cards -->
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-
-    <!-- =========================================================================
-         第 3 頁：🗓️ 行事曆（Notion 日曆資料庫 + 每日三橫線工作欄 + 點擊第一格進入當日詳細畫面）
-         ========================================================================= -->
-    <section id="tabCalendarSchedule" class="tab-view">
-      <!-- Sub-View A: Notion Monthly Calendar Database View -->
-      <div id="calendarMonthGridView" class="notion-calendar-wrapper">
-        <div class="card schedule-main-card">
-          <div class="card-header notion-cal-top-header">
-            <div class="notion-cal-title-group">
-              <div class="card-title"><span class="icon">🗓️</span> 行事曆</div>
-              <div class="notion-month-tabs" id="calMonthTabs">
-                <button type="button" class="month-tab active" data-month="2026-11">2026年 11月</button>
-                <button type="button" class="month-tab" data-month="2026-12">2026年 12月</button>
-                <button type="button" class="month-tab" data-month="2027-01">2027年 1月</button>
-              </div>
-            </div>
-
-            <div class="notion-cal-controls">
-              <input id="searchScheduleInput" type="search" class="search-input" placeholder="搜尋行程或工作..." style="width: 180px;" />
-              <div class="cal-nav-btn-group">
-                <button id="calPrevMonthBtn" class="btn btn-xs btn-subtle" type="button">◀ 上個月</button>
-                <button id="calTodayMonthBtn" class="btn btn-xs btn-primary" type="button">今天</button>
-                <button id="calNextMonthBtn" class="btn btn-xs btn-subtle" type="button">下個月 ▶</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Notion 7-Column Calendar Grid (週一 ~ 週日) -->
-          <div class="notion-calendar-scroll">
-            <div class="notion-calendar-board">
-              <div class="notion-cal-weekdays">
-                <div class="notion-weekday-cell">週一</div>
-                <div class="notion-weekday-cell">週二</div>
-                <div class="notion-weekday-cell">週三</div>
-                <div class="notion-weekday-cell">週四</div>
-                <div class="notion-weekday-cell">週五</div>
-                <div class="notion-weekday-cell weekend">週六</div>
-                <div class="notion-weekday-cell weekend">週日</div>
-              </div>
-              <div id="notionCalendarGrid" class="notion-calendar-grid">
-                <!-- Rendered by app.js: 7 columns x N weeks, each cell has 1 date header + 3 horizontal task rows -->
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-
-    <!-- =========================================================================
-         第 4 頁：📖 每日專注（獨立出來的 80 天早中晚專注時間總表，無需跳轉即可直接修改）
-         ========================================================================= -->
-    <section id="tabDailyPlan" class="tab-view">
-      <div class="daily-plan-wrapper">
-        <div class="card daily-focus-schedule-card">
-          <div class="card-header">
-            <div>
-              <div class="card-title"><span class="icon">⏱️</span> 80天早中晚專注時間表</div>
-            </div>
-          </div>
-
-          <!-- Filter & Search Controls for Daily Focus Table -->
-          <div class="schedule-controls">
-            <div class="filter-tabs" id="dailyPhaseFilterTabs">
-              <button class="filter-tab active" data-filter="all" type="button">全部顯示 (80天)</button>
-              <button class="filter-tab" data-filter="phase-0" type="button" id="dailyFilterTabPhase0">第一階段</button>
-              <button class="filter-tab" data-filter="phase-1" type="button" id="dailyFilterTabPhase1">第二階段</button>
-              <button class="filter-tab" data-filter="phase-2" type="button" id="dailyFilterTabPhase2">第三階段</button>
-              <button class="filter-tab" data-filter="has-record" type="button">已有紀錄</button>
-            </div>
-
-            <div class="schedule-right-tools">
-              <select id="dailySubjectFilterSelect" class="search-input" style="min-width: 120px;">
-                <option value="">所有科目</option>
-                <option value="個經">個經</option>
-                <option value="總經">總經</option>
-                <option value="經濟">經濟 (含個/總經)</option>
-                <option value="統計">統計</option>
-                <option value="財管">財管</option>
-                <option value="上課">上課</option>
-                <option value="其他">其他</option>
-              </select>
-              <input id="dailySearchScheduleInput" type="search" class="search-input" placeholder="搜尋日期、科目、任務..." />
-              <button id="dailyJumpToTodayBtn" class="btn btn-xs btn-primary" type="button">跳至今日</button>
-            </div>
-          </div>
-
-          <!-- 80-Day Focus Table with Morning, Afternoon, Evening -->
-          <div class="main-table-wrapper">
-            <table class="plan-table" id="dailyFocusTable">
-              <thead>
-                <tr>
-                  <th rowspan="2" class="sticky-col-1">Date<br><span style="font-weight:400;font-size:11px;color:var(--text-secondary);">日期 / 星期</span></th>
-                  <th rowspan="2" class="sticky-col-2">Day<br><span style="font-weight:400;font-size:11px;color:var(--text-secondary);">倒數天數</span></th>
-                  <th class="slot-header-morning">☀️ 早上（05:00 ~ 12:00）</th>
-                  <th class="slot-header-afternoon">🌤️ 下午（12:00 ~ 19:00）</th>
-                  <th class="slot-header-evening">🌙 晚上（19:00 ~ 05:00）</th>
-                  <th colspan="3" class="summary-header">✦ 每日彙總</th>
-                  <th rowspan="2" style="min-width: 80px;">單日編輯</th>
-                </tr>
-                <tr class="sub-header">
-                  <th>科目 / 範圍任務 / 計時器 / 時長 / 完成</th>
-                  <th>科目 / 範圍任務 / 計時器 / 時長 / 完成</th>
-                  <th>科目 / 範圍任務 / 計時器 / 時長 / 完成</th>
-                  <th>每日完成</th>
-                  <th>每日完成率</th>
-                  <th>每日讀書時間</th>
-                </tr>
-              </thead>
-              <tbody id="dailyFocusTableBody">
-                <!-- 80 Days Rows Rendered by app.js -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
-
-
-
-    <!-- =========================================================================
-         分頁 4：📊 統計列表（5 大統計量表與衝刺指標）
-         ========================================================================= -->
-    <section id="tabStatisticsDashboard" class="tab-view">
-      <!-- 🌸 80天衝刺智能讀書診斷報告 (AI Study Diagnostics) -->
-      <div class="card diagnostic-card" style="margin-bottom: 20px;">
-        <div class="card-header">
-          <div>
-            <div class="card-title"><span class="icon">🌸</span> 智能讀書診斷與衝刺建議</div>
-          </div>
-          <span class="diagnostic-badge" id="diagPaceBadge">衝刺狀態計算中...</span>
-        </div>
-        <div class="card-body">
-          <div class="diag-content-grid">
-            <div class="diag-advice-box">
-              <div class="diag-advice-title">💡 衝刺診斷建議</div>
-              <p class="diag-advice-text" id="diagAdviceText">載入進度數據中...</p>
-            </div>
-            <div class="diag-metrics-row">
-              <div class="diag-metric-item">
-                <span class="diag-metric-label">☀️ 早中晚黃金時段分佈</span>
-                <div class="period-ratio-bar" id="periodRatioBar">
-                  <div class="ratio-segment morning" id="ratioMorningBar" style="width: 33%;" title="早上時段">早 33%</div>
-                  <div class="ratio-segment noon" id="ratioNoonBar" style="width: 33%;" title="下午時段">中 33%</div>
-                  <div class="ratio-segment night" id="ratioNightBar" style="width: 34%;" title="晚上時段">晚 34%</div>
-                </div>
-              </div>
-              <div class="diag-metric-item">
-                <span class="diag-metric-label">⚖️ 科目均衡度診斷</span>
-                <span class="diag-metric-val" id="diagSubjectBalance">分析中...</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Overall 80-Day KPI Card -->
-      <div class="card" style="margin-bottom: 20px;">
-        <div class="card-header">
-          <div>
-            <div class="card-title"><span class="icon">✦</span> 80天衝刺總覽</div>
-            <div class="card-subtitle">11月8日 ～ 1月26日</div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="kpi-grid">
-            <div class="kpi-box">
-              <span class="kpi-label">累計真實讀書總時長</span>
-              <span class="kpi-value" id="kpiTotalStudyTime">0小時 0分</span>
-              <span class="kpi-sub" id="kpiActiveDaysSub">有效讀書天數：0 / 80 天</span>
-            </div>
-            <div class="kpi-box">
-              <span class="kpi-label">總完成時段 / 完成率</span>
-              <span class="kpi-value" id="kpiTotalCompletion">0 / 240 (0%)</span>
-              <span class="kpi-sub" id="kpiAvgSlotPerDay">每日平均完成：0.00 時段</span>
-            </div>
-            <div class="kpi-box">
-              <span class="kpi-label">每日平均讀書總時長</span>
-              <span class="kpi-value" id="kpiDailyMeanTime">0小時 0分</span>
-              <span class="kpi-sub" id="kpiDailyMeanAllSub">全80天日均：0小時 0分</span>
-            </div>
-            <div class="kpi-box">
-              <span class="kpi-label">每日總讀書時間中位數</span>
-              <span class="kpi-value" id="kpiDailyMedianTime">0小時 0分</span>
-              <span class="kpi-sub">單日總時長中位數</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Core 5 Statistical Tables -->
-      <section id="dashboardSection" class="dashboard-section" style="display: block;">
-        <div class="section-header-bar">
-          <div class="section-title-group">
-            <h2>📊 統計量表與小櫻目標</h2>
-          </div>
-        </div>
-
-        <!-- Row 1: Table 1 (Sakura Phase Goals) & Table 2 (Completion Rate Table) -->
-        <div class="dashboard-grid-top">
-          <!-- Table 1: 小櫻目標 -->
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">🎯</span> 小櫻目標</div>
-              </div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive">
-                <table class="stat-table" id="goalTable"></table>
-              </div>
-            </div>
-          </div>
-
-          <!-- Table 2: 完成率表單 -->
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">✅</span> 完成率表單</div>
-              </div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive">
-                <table class="stat-table" id="completionTable"></table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Row 2: Table 3 (Subject Study Counts & %) & Table 4 (Subject Study Time & %) -->
-        <div class="dashboard-grid-middle">
-          <!-- Table 3: 各科讀書次數與佔比 -->
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">🔢</span> 各科讀書次數與佔比</div>
-              </div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive">
-                <table class="stat-table" id="subjectCountTable"></table>
-              </div>
-            </div>
-          </div>
-
-          <!-- Table 4: 各科讀書時間與佔比 -->
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">⏱️</span> 各科讀書時間與佔比</div>
-              </div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive">
-                <table class="stat-table" id="subjectTimeTable"></table>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Row 3: Table 5 (Advanced Time Statistics: Mean & Median) -->
-        <div class="dashboard-grid-bottom">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title"><span class="icon">📈</span> 進階時間統計</div>
-              </div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-              <div class="table-responsive">
-                <table class="stat-table" id="advancedStatTable"></table>
-              </div>
-            </div>
+        <div class="rail-footer">
+          <div id="saveIndicator" class="save-indicator">
+            <span id="saveIndicatorDot" class="save-dot" aria-hidden="true"></span>
+            <span id="saveStatusText" class="save-label">本機與雲端同步就緒</span>
           </div>
         </div>
       </section>
-    </section>
+    </aside>
 
-  </main>
+    <!-- Right Fluid Canvas: View Sub-Nav + Main Views -->
+    <section class="workspace-canvas" aria-label="計畫內容區">
+      <nav id="mainTabsNav" class="subnav-tabs" aria-label="檢視切換">
+        <button type="button" class="nav-tab tab-nav-btn mobile-only-tab" data-tab="quick-timer">專注計時</button>
+        <button type="button" class="nav-tab tab-nav-btn active" data-tab="daily-plan">每日專注</button>
+        <button type="button" class="nav-tab tab-nav-btn" data-tab="calendar-schedule">行事曆</button>
+        <button type="button" class="nav-tab tab-nav-btn" data-tab="home">今日概覽</button>
+        <button type="button" class="nav-tab tab-nav-btn" data-tab="statistics-dashboard">統計分析</button>
+      </nav>
 
-  <!-- =========================================================================
-       Notion 快捷頁面彈窗：當日備忘與早中晚讀書科目（點擊月曆任一日期時彈出）
-       ========================================================================= -->
-  <div id="notionDayModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="dailyDateHeading">
-    <div class="modal-card notion-page-modal">
-      <div class="modal-header notion-modal-header">
-        <div class="notion-modal-title-group">
-          <span class="modal-icon">📅</span>
-          <div>
-            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <h3 id="dailyDateHeading" class="notion-modal-date-title">11月8日（週日）</h3>
-              <span class="daily-day-badge" id="dailyDayBadge">Day 80</span>
-              <span class="daily-phase-badge" id="dailyPhaseBadge">第一階段</span>
+      <!-- Tab 1 (Default Active): 每日專注大表 (Woven Labels Grid) -->
+      <section id="tabDailyPlan" class="tab-pane active" aria-label="每日專注大表">
+        <div class="canvas-header">
+          <div class="canvas-title-group">
+            <h2 id="subtitleDailyPlan" class="inline-editable canvas-title" data-inline-target="subtitleDailyPlan" tabindex="0" role="textbox" aria-label="編輯每日專注大表標題">每日專注大表</h2>
+          </div>
+
+          <div class="canvas-toolbar">
+            <button type="button" id="dailyJumpToTodayBtn" class="quiet-outline-btn">捲動至今日</button>
+          </div>
+        </div>
+
+        <div id="phaseWarning" class="warning-strip hidden"></div>
+
+        <div class="filter-strip">
+          <div id="dailyPhaseFilterTabs" class="phase-filter-group" role="tablist" aria-label="階段篩選">
+            <button type="button" class="filter-tab active" data-filter="all">全部 80 天</button>
+            <button type="button" id="dailyFilterTabPhase0" class="filter-tab" data-filter="phase-0">第一階段</button>
+            <button type="button" id="dailyFilterTabPhase1" class="filter-tab" data-filter="phase-1">第二階段</button>
+            <button type="button" id="dailyFilterTabPhase2" class="filter-tab" data-filter="phase-2">第三階段</button>
+            <button type="button" class="filter-tab" data-filter="has-record">已有紀錄</button>
+          </div>
+          <div class="filter-inputs-group">
+            <select id="dailySubjectFilterSelect" class="select-hairline" aria-label="依科目篩選">
+              <option value="">全部科目</option>
+            </select>
+            <input type="search" id="dailySearchScheduleInput" class="input-hairline" placeholder="搜尋日期或筆記..." aria-label="搜尋排程" />
+          </div>
+        </div>
+
+        <!-- Scannable Editorial Daily Focus Matrix -->
+        <div class="table-scroll-frame">
+          <table id="dailyFocusTable" class="daily-focus-table">
+            <thead>
+              <tr>
+                <th scope="col" class="col-day">日期</th>
+                <th scope="col" class="col-slot">早上 05:00 ~ 12:00</th>
+                <th scope="col" class="col-slot">下午 12:00 ~ 19:00</th>
+                <th scope="col" class="col-slot">晚上 19:00 ~ 05:00</th>
+                <th scope="col" class="col-total">當日總計</th>
+                <th scope="col" class="col-memo">備忘</th>
+              </tr>
+            </thead>
+            <tbody id="dailyFocusTableBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Tab 2: 80 天月曆 (Click Day -> Notion Style Quick Sheet Modal) -->
+      <section id="tabCalendarSchedule" class="tab-pane" aria-label="衝刺行事曆">
+        <div class="canvas-header">
+          <div class="canvas-title-group">
+            <h2 id="subtitleCalendar" class="inline-editable canvas-title" data-inline-target="subtitleCalendar" tabindex="0" role="textbox" aria-label="編輯行事曆標題">衝刺行事曆</h2>
+          </div>
+          <div class="canvas-toolbar">
+            <div class="date-stepper">
+              <button type="button" id="calPrevMonthBtn" class="stepper-btn" aria-label="上個月">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+              </button>
+              <div id="calMonthTabs" class="month-tabs-group">
+                <button type="button" class="month-tab active" data-month="2026-11">2026 11月</button>
+                <button type="button" class="month-tab" data-month="2026-12">2026 12月</button>
+                <button type="button" class="month-tab" data-month="2027-01">2027 1月</button>
+              </div>
+              <button type="button" id="calNextMonthBtn" class="stepper-btn" aria-label="下個月">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+              </button>
             </div>
+            <button type="button" id="calTodayMonthBtn" class="quiet-outline-btn">本月</button>
+            <input type="search" id="searchScheduleInput" class="input-hairline" placeholder="搜尋日程關鍵字..." aria-label="搜尋行事曆" />
           </div>
         </div>
-
-        <div class="notion-modal-header-actions">
-          <div class="daily-nav-btn-group">
-            <button id="dailyPrevDayBtn" class="btn btn-xs btn-subtle" type="button" title="前一天">◀ 前一天</button>
-            <button id="dailyTodayBtn" class="btn btn-xs btn-subtle" type="button" title="跳至今日">今日</button>
-            <button id="dailyNextDayBtn" class="btn btn-xs btn-subtle" type="button" title="後一天">後一天 ▶</button>
+        <div id="calendarMonthGridView" class="calendar-view-frame">
+          <div class="calendar-weekdays-row" aria-hidden="true">
+            <div class="cal-weekday-head">週一</div>
+            <div class="cal-weekday-head">週二</div>
+            <div class="cal-weekday-head">週三</div>
+            <div class="cal-weekday-head">週四</div>
+            <div class="cal-weekday-head">週五</div>
+            <div class="cal-weekday-head">週六</div>
+            <div class="cal-weekday-head">週日</div>
           </div>
-          <button id="closeNotionDayModalBtn" class="modal-close-btn" type="button" aria-label="關閉快捷頁面">✕</button>
+          <div id="notionCalendarGrid" class="calendar-grid-container"></div>
         </div>
-      </div>
+      </section>
 
-      <div class="modal-body notion-modal-body">
-        <!-- 當日重要備忘錄 -->
-        <div class="notion-prop-section">
-          <label class="notion-prop-title" for="dailyCalendarInput">
-            <span class="icon">🗓️</span> 當日重要備忘錄
-          </label>
-          <input
-            type="text"
-            id="dailyCalendarInput"
-            class="daily-calendar-input"
-            placeholder="輸入當日重要行程、考試或死線備忘..."
-          />
-        </div>
-
-        <!-- 上中下午讀書科目（早、午、晚） -->
-        <div class="notion-slots-section">
-          <div class="notion-prop-title" style="margin-bottom: 6px;">
-            <span class="icon">📚</span> 今日讀書科目與工作任務
-          </div>
-          <div class="daily-slots-container" id="dailySlotsContainer">
-            <!-- Rendered by app.js: 3 clean cards for morning, afternoon, evening -->
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- =========================================================================
-       彈窗：⚙️ 設定、衝刺階段與備份管理工具（保持主畫面乾淨不凌亂）
-       ========================================================================= -->
-  <div id="settingsModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
-    <div class="modal-card">
-      <div class="modal-header">
-        <div class="modal-title-group">
-          <span class="modal-icon">⚙️</span>
-          <h3 id="settingsModalTitle">設定、衝刺階段與備份管理</h3>
-        </div>
-        <button id="closeSettingsModalBtn" class="modal-close-btn" type="button" aria-label="關閉彈窗">✕</button>
-      </div>
-
-      <div class="modal-body">
-        <!-- 3-Phase Settings Section -->
-        <div class="settings-section">
-          <div class="settings-sec-title">🌸 三階段衝刺區間設定</div>
-          <p class="settings-sec-desc">點擊可直接修改階段名稱與 Day 起訖天數（預設：Day 80-56、Day 55-28、Day 27-1）</p>
-          <div class="phases-config-grid" id="phasesConfigContainer" style="margin-top: 10px;">
-            <!-- Dynamically rendered by app.js -->
-          </div>
-          <div id="phaseWarning" class="phase-warning" style="display:none; margin-top: 8px;"></div>
-          <div style="margin-top: 8px;">
-            <button id="restoreDefaultPhasesBtn" class="btn btn-xs btn-subtle" type="button">還原預設階段設定</button>
-          </div>
-        </div>
-
-        <!-- Tools & Backup Actions Section -->
-        <div class="settings-section" style="margin-top: 20px;">
-          <div class="settings-sec-title">💾 備份、匯出與數據操作</div>
-          <p class="settings-sec-desc">所有資料平時皆已自動存在瀏覽器與雲端房間，您也可以手動備份 JSON 檔案：</p>
-          <div class="settings-btn-grid" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
-            <button id="exportJsonBtn" class="btn" type="button">匯出 JSON 備份檔</button>
-            <label for="importJsonInput" class="btn" style="margin:0; cursor:pointer;">匯入 JSON 備份檔</label>
-            <input id="importJsonInput" type="file" accept=".json,application/json" style="display:none;" />
-            <button id="loadPdfPlanBtn" class="btn" type="button" title="載入原 Numbers 表中已預排好的科目與範圍">帶入原表預排範圍</button>
-            <button id="toggleLayoutBtn" class="btn btn-subtle" type="button">切換行事曆左右並排 ◫</button>
-          </div>
-        </div>
-
-        <!-- Atmosphere, Theme & Sound Section -->
-        <div class="settings-section" style="margin-top: 20px; border-top: 1px solid var(--border-light); padding-top: 15px;">
-          <div class="settings-sec-title">🎨 主題風格與專注音效</div>
-          <p class="settings-sec-desc">自由切換兩種專屬主題（櫻花粉白 / Antigravity 深色極簡風）：</p>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 12px;">
-            <div class="setting-item-box">
-              <span class="setting-label">🎨 主題風格選擇</span>
-              <select id="settingThemeSelect" class="form-input" style="padding: 6px 10px;">
-                <option value="sakura">🌸 櫻花粉白（粉白基底・落櫻氛圍）</option>
-                <option value="dark">🖤 極簡深黑（Antigravity 黑白灰極簡風）</option>
-              </select>
-            </div>
-            <div class="setting-item-box">
-              <span class="setting-label">🔔 專注提示音效</span>
-              <select id="settingSoundSelect" class="form-input" style="padding: 6px 10px;">
-                <option value="on">🔔 開啟（清脆和弦鐘聲）</option>
-                <option value="off">🔕 靜音模式</option>
-              </select>
-            </div>
-            <div class="setting-item-box" id="settingPetalsBox">
-              <span class="setting-label">🌸 浪漫落櫻飄落動效</span>
-              <select id="settingPetalsSelect" class="form-input" style="padding: 6px 10px;">
-                <option value="on">🌸 開啟（僅於櫻花主題顯示）</option>
-                <option value="off">🍂 關閉動效</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <!-- PWA Mobile Home Screen Installation Section -->
-        <div class="settings-section" style="margin-top: 20px; border-top: 1px solid var(--border-light); padding-top: 15px;">
-          <div class="settings-sec-title">📲 安裝至手機 / 平板桌面 App</div>
-          <p class="settings-sec-desc">本程式支援 PWA 技術，安裝後如同獨立 App：全螢幕無網址列、離線極速開跑！</p>
-          <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-            <button id="pwaInstallBtn" class="btn btn-primary" type="button" style="display: none;">
-              ✨ 一鍵加到桌面 / 安裝 App
-            </button>
-            <div class="pwa-guide-tip">
-              <strong>💡 iOS / iPad 快速加入主畫面：</strong>在 Safari 底部點選<strong>「分享（向上箭頭 ⎋）」➔「加入主畫面 ⊞」</strong>即可獲得全螢幕原生 App 體驗！
-            </div>
-          </div>
-        </div>
-
-        <!-- Danger Zone Section -->
-        <div class="settings-section danger-zone" style="margin-top: 20px; border-top: 1px dashed var(--border-medium); padding-top: 15px;">
-          <div class="settings-sec-title" style="color: #C0392B;">⚠️ 危險區域</div>
-          <p class="settings-sec-desc">全新重置將清除本機所有讀書紀錄並歸零，請謹慎操作：</p>
-          <div style="margin-top: 10px;">
-            <button id="resetAllBtn" class="btn btn-danger-outline" type="button">全新重置所有讀書紀錄</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Multi-user Real-time Sync Room Modal -->
-  <div id="roomSyncModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="roomModalTitle">
-    <div class="modal-card">
-      <div class="modal-header">
-        <div class="modal-title-group">
-          <span class="modal-icon">🌸</span>
-          <h3 id="roomModalTitle">多人即時同步讀書房（免 Google 帳號・免兩階段驗證）</h3>
-        </div>
-        <button id="closeRoomModalBtn" class="modal-close-btn" type="button" aria-label="關閉彈窗">✕</button>
-      </div>
-
-      <div class="modal-body">
-        <div class="cloud-status-strip" id="roomStatusStrip">
-          <div class="cloud-status-indicator">
-            <span class="status-pulse-dot" id="roomStatusDot"></span>
-            <div>
-              <div class="status-main-title" id="roomStatusTitle">尚未加入共同房間（個人單機模式）</div>
-              <div class="status-sub-desc" id="roomStatusDesc">
-                免登入 Google 帳號、免兩階段驗證！只要輸入相同房號，不同人、不同手機或電腦皆可隨時進入，自動同步最新進度！
+      <!-- Tab 3: 今日概覽與自訂封面 -->
+      <section id="tabHome" class="tab-pane" aria-label="今日讀書概覽">
+        <div id="homeCoverBanner" class="editorial-cover">
+          <div id="homeCoverBackdrop" class="cover-backdrop"></div>
+          <div id="homeCoverForeground" class="cover-foreground"></div>
+          <div class="cover-controls-bar">
+            <button type="button" id="toggleCoverPickerBtn" class="cover-action-btn">自訂封面</button>
+            <div id="coverPickerPopover" class="cover-popover hidden">
+              <div class="cover-popover-head">
+                <span>封面風格設定</span>
+                <button type="button" id="closeCoverPickerBtn" class="icon-close-btn" aria-label="關閉封面選擇">關閉</button>
+              </div>
+              <div id="coverPresetsGrid" class="cover-presets-grid">
+                <button type="button" class="cover-preset-item swatch-antigravity" data-cover-id="cover-antigravity" title="極簡曜石"></button>
+                <button type="button" class="cover-preset-item swatch-monolith" data-cover-id="cover-monolith" title="石膏灰階"></button>
+                <button type="button" class="cover-preset-item swatch-cosmos" data-cover-id="cover-cosmos" title="深海礦藍"></button>
+                <button type="button" class="cover-preset-item swatch-concrete" data-cover-id="cover-concrete" title="清水混凝土"></button>
+                <button type="button" class="cover-preset-item swatch-sakura" data-cover-id="cover-sakura" title="霧粉生絲"></button>
+                <button type="button" class="cover-preset-item swatch-dawn" data-cover-id="cover-dawn" title="亞麻晨霧"></button>
+                <button type="button" class="cover-preset-item swatch-ocean" data-cover-id="cover-ocean" title="靜謐丹寧"></button>
+                <button type="button" class="cover-preset-item swatch-ink" data-cover-id="cover-ink" title="水洗濃墨"></button>
+              </div>
+              <div class="cover-custom-row">
+                <input type="url" id="customCoverUrlInput" class="input-hairline" placeholder="貼上圖片網址..." aria-label="自訂封面網址" />
+                <button type="button" id="applyCustomCoverUrlBtn" class="quiet-outline-btn">套用</button>
+              </div>
+              <div class="cover-upload-row">
+                <label class="quiet-outline-btn upload-trigger" for="customCoverFileInput">上傳圖片</label>
+                <input type="file" id="customCoverFileInput" accept="image/*" class="hidden" />
+                <div id="coverFitPills" class="pill-toggle-group">
+                  <button type="button" class="pill-opt cover-pill-btn active" data-fit-choice="cover">滿版裁切</button>
+                  <button type="button" class="pill-opt cover-pill-btn" data-fit-choice="contain">完整置入</button>
+                </div>
+              </div>
+              <div id="coverPositionRow" class="cover-position-row">
+                <span class="cover-pos-label">對齊焦點</span>
+                <div id="coverPositionPills" class="pill-toggle-group">
+                  <button type="button" class="pill-opt cover-pill-btn" data-pos-choice="top">上緣</button>
+                  <button type="button" class="pill-opt cover-pill-btn active" data-pos-choice="center">置中</button>
+                  <button type="button" class="pill-opt cover-pill-btn" data-pos-choice="bottom">下緣</button>
+                </div>
               </div>
             </div>
           </div>
-          <span class="room-pill hidden" id="currentRoomPill">房號：<strong id="currentRoomPillText">-</strong></span>
         </div>
 
-        <div class="sync-mobile-card hidden" id="roomShareSection">
-          <div class="sync-card-title">📱 朋友 / 手機一鍵加入專屬網址與 QR Code</div>
-          <p class="sync-card-desc">
-            將此網址分享給讀書夥伴，或直接拿手機相機掃描 QR Code 開啟，所有人就能立刻進入同一個房間，即時互相看到最新進度並自由修改！
-          </p>
-          <div class="qrcode-wrapper">
-            <div id="roomQrCodeContainer" class="qrcode-box"></div>
-            <div class="sync-link-actions">
-              <input type="text" id="roomShareUrlInput" class="sync-share-url-input" readonly />
-              <button id="copyRoomUrlBtn" class="btn btn-primary" type="button">📋 複製專屬房間連結（傳給朋友或手機點開即連）</button>
+        <div class="canvas-header">
+          <div class="canvas-title-group">
+            <h2 id="subtitleHome" class="inline-editable canvas-title" data-inline-target="subtitleHome" tabindex="0" role="textbox" aria-label="編輯今日概覽標題">今日讀書安排</h2>
+            <span id="homeSelectedDayLabel" class="day-tag mono-tabular">Day 1</span>
+            <span id="homeTodayTag" class="phase-tag">今日</span>
+          </div>
+          <div class="canvas-toolbar">
+            <div class="date-stepper">
+              <button type="button" id="homePrevDayBtn" class="stepper-btn" aria-label="前一天">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+              </button>
+              <span id="homeDateHeading" class="date-heading-text mono-tabular">2026-06-28</span>
+              <button type="button" id="homeNextDayBtn" class="stepper-btn" aria-label="後一天">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+              </button>
+            </div>
+            <button type="button" id="homeTodayBtn" class="quiet-outline-btn">今天</button>
+            <span id="homeLiveClock" class="live-clock-chip mono-tabular">00:00:00</span>
+          </div>
+        </div>
+
+        <div class="home-kpi-strip">
+          <div class="home-stat-cell">
+            <span class="stat-label">完成進度</span>
+            <span id="homeDoneCounter" class="stat-value mono-tabular">0 / 3</span>
+          </div>
+          <div class="home-stat-cell">
+            <span class="stat-label">當日專注</span>
+            <span id="homeStatFocusTime" class="stat-value mono-tabular">00:00:00</span>
+          </div>
+          <div class="home-stat-cell">
+            <span class="stat-label">當日休息</span>
+            <span id="homeStatShortRest" class="stat-value mono-tabular">00:00:00</span>
+          </div>
+        </div>
+
+        <div class="home-memo-block">
+          <label for="homeCalendarMemoInput" class="section-kicker">當日重要備忘錄</label>
+          <input type="text" id="homeCalendarMemoInput" class="input-hairline-full" placeholder="輸入當日重點複習章節、模擬考檢討或提醒..." />
+        </div>
+
+        <div id="homeSlotsList" class="home-slots-list"></div>
+
+        <div class="home-upcoming-block">
+          <h3 class="section-kicker">近期重要檢核與模考</h3>
+          <div id="homeUpcomingList" class="upcoming-list"></div>
+        </div>
+      </section>
+
+      <!-- Tab 4: 統計分析報表 -->
+      <section id="tabStatisticsDashboard" class="tab-pane" aria-label="專注統計儀表板">
+        <div class="canvas-header">
+          <div class="canvas-title-group">
+            <h2 id="subtitleStats" class="inline-editable canvas-title" data-inline-target="subtitleStats" tabindex="0" role="textbox" aria-label="編輯統計報表標題">專注數據與達成統計</h2>
+          </div>
+        </div>
+
+        <div id="dashboardSection" class="dashboard-flow">
+          <div class="kpi-editorial-grid">
+            <div class="kpi-item">
+              <span class="kpi-label">總累積專注</span>
+              <strong id="kpiTotalStudyTime" class="kpi-value mono-tabular">0 小時 00 分</strong>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-label">活躍日均時數</span>
+              <strong id="kpiDailyMeanTime" class="kpi-value mono-tabular">0 小時 00 分</strong>
+              <span id="kpiActiveDaysSub" class="kpi-sub mono-tabular">0 天</span>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-label">日均中位數</span>
+              <strong id="kpiDailyMedianTime" class="kpi-value mono-tabular">0 小時 00 分</strong>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-label">計畫平均日專注</span>
+              <strong id="kpiDailyMeanAllSub" class="kpi-value mono-tabular">0 小時 00 分</strong>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-label">日均完成時段</span>
+              <strong id="kpiAvgSlotPerDay" class="kpi-value mono-tabular">0.0 格</strong>
+            </div>
+            <div class="kpi-item">
+              <span class="kpi-label">時段達成率</span>
+              <strong id="kpiTotalCompletion" class="kpi-value mono-tabular">0%</strong>
             </div>
           </div>
+
+          <section class="diagnostics-band" aria-label="讀書節奏診斷">
+            <div class="diag-head">
+              <span class="section-kicker">作息節奏與科目分佈</span>
+              <span id="diagPaceBadge" class="phase-tag">節奏評估中</span>
+            </div>
+            <p id="diagAdviceText" class="diag-advice">累計更多專注時段後將顯示作息分布解析。</p>
+            <div id="periodRatioBar" class="ratio-bar-track" role="img" aria-label="早中晚時段比例">
+              <div id="ratioMorningBar" class="ratio-segment ratio-morning"></div>
+              <div id="ratioNoonBar" class="ratio-segment ratio-noon"></div>
+              <div id="ratioNightBar" class="ratio-segment ratio-night"></div>
+            </div>
+            <div id="diagSubjectBalance" class="diag-balance-legend"></div>
+          </section>
+
+          <section class="stats-table-section">
+            <h3 class="section-kicker">各科目累積時數分佈</h3>
+            <div class="table-scroll-frame">
+              <table id="subjectTimeTable" class="stats-table"></table>
+            </div>
+          </section>
+
+          <section class="stats-table-section">
+            <h3 class="section-kicker">各科目完成時段次數</h3>
+            <div class="table-scroll-frame">
+              <table id="subjectCountTable" class="stats-table"></table>
+            </div>
+          </section>
+
+          <section class="stats-table-section">
+            <h3 class="section-kicker">階段計畫達成率</h3>
+            <div class="table-scroll-frame">
+              <table id="completionTable" class="stats-table"></table>
+            </div>
+          </section>
+
+          <section class="stats-table-section">
+            <h3 class="section-kicker">科目進度檢核明細</h3>
+            <div class="table-scroll-frame">
+              <table id="goalTable" class="stats-table"></table>
+            </div>
+          </section>
+
+          <section class="stats-table-section">
+            <h3 class="section-kicker">科目統計深度摘要</h3>
+            <div class="table-scroll-frame">
+              <table id="advancedStatTable" class="stats-table"></table>
+            </div>
+          </section>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <!-- Notion-Style Day Detail Sheet Modal (No Timers Inside, Pure Memo + Slots) -->
+  <div id="notionDayModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="當日讀書計畫速覽">
+    <div class="modal-sheet">
+      <div class="modal-sheet-head">
+        <div class="canvas-title-group">
+          <span id="dailyDayBadge" class="day-tag mono-tabular">Day 1</span>
+          <span id="dailyDateHeading" class="modal-title">1月26日</span>
+          <span id="dailyPhaseBadge" class="phase-tag">第一階段</span>
+        </div>
+        <div class="canvas-toolbar">
+          <div class="date-stepper">
+            <button type="button" id="dailyPrevDayBtn" class="stepper-btn" aria-label="前一天">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+            </button>
+            <button type="button" id="dailyTodayBtn" class="quiet-outline-btn">今天</button>
+            <button type="button" id="dailyNextDayBtn" class="stepper-btn" aria-label="後一天">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+            </button>
+          </div>
+          <button type="button" id="closeNotionDayModalBtn" class="icon-close-btn" aria-label="關閉當日速覽">關閉</button>
+        </div>
+      </div>
+      <div class="notion-day-body">
+        <div class="home-memo-block">
+          <label for="dailyCalendarInput" class="section-kicker">當日重要備忘錄</label>
+          <input type="text" id="dailyCalendarInput" class="input-hairline-full" placeholder="輸入當日備忘錄或模考行程..." />
+        </div>
+        <div id="dailySlotsContainer" class="notion-slots-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="modal-sheet">
+      <div class="modal-sheet-head">
+        <h2 id="settingsModalTitle" class="modal-title">偏好設定與衝刺排程</h2>
+        <button type="button" id="closeSettingsModalBtn" class="icon-close-btn" aria-label="關閉設定">關閉</button>
+      </div>
+      <div class="modal-sheet-body">
+        <div class="settings-section">
+          <h3 class="section-kicker">視覺與提示</h3>
+          <div class="settings-row">
+            <label for="settingThemeSelect">布料主題風格</label>
+            <select id="settingThemeSelect" class="select-hairline">
+              <option value="blush">霧粉生絲 Auralee Blush</option>
+              <option value="ink">石墨水洗黑 Graphpaper Ink</option>
+              <option value="ecru">燕麥卡其 Nicholson Ecru</option>
+              <option value="sage">鼠尾草灰綠 Daikanyama Sage</option>
+              <option value="navy">岡山丹寧 Okayama Navy</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label for="settingSoundSelect">計時提示音效</label>
+            <select id="settingSoundSelect" class="select-hairline">
+              <option value="on">開啟柔音提示</option>
+              <option value="off">靜音</option>
+            </select>
+          </div>
+          <div id="settingPetalsBox" class="settings-row">
+            <label for="settingPetalsSelect">背景微飄落效果</label>
+            <select id="settingPetalsSelect" class="select-hairline">
+              <option value="off">關閉保持純淨</option>
+              <option value="on">開啟微飄落</option>
+            </select>
+          </div>
         </div>
 
-        <div class="cloud-setup-form">
-          <div class="form-group">
-            <label for="roomInputId" class="form-label">
-              <span>共同房間代碼 (Room ID)</span>
-              <span class="form-tip">只要輸入相同代碼，任何人即可連入同一張表</span>
-            </label>
-            <input
-              type="text"
-              id="roomInputId"
-              class="form-input"
-              placeholder="例如: sakura-study-2026 或 自訂好記的英文/數字"
-              value="sakura-study-2026"
-            />
-          </div>
+        <div id="coverSettingsCard" class="settings-section">
+          <h3 class="section-kicker">今日概覽封面說明</h3>
+          <p class="settings-note">請切換至「今日概覽」分頁並點擊右上角「自訂封面」更換或上傳專屬背景照片。</p>
+        </div>
 
-          <div class="form-group">
-            <label for="roomInputNickname" class="form-label">
-              <span>我的編輯暱稱</span>
-              <span class="form-tip">打勾或修改時會顯示於同步通知</span>
-            </label>
-            <input
-              type="text"
-              id="roomInputNickname"
-              class="form-input"
-              placeholder="例如: 小凱、小櫻 (iPad)"
-              value="小凱"
-            />
+        <div class="settings-section">
+          <div class="settings-head-row">
+            <h3 class="section-kicker">衝刺三階段日期規劃</h3>
+            <button type="button" id="restoreDefaultPhasesBtn" class="quiet-text-btn">還原預設階段</button>
           </div>
+          <div id="phasesConfigContainer" class="phases-config-list"></div>
+        </div>
 
-          <div class="modal-actions-row">
-            <button id="joinRoomBtn" class="btn btn-primary" type="button">
-              ✨ 進入房間連線同步
-            </button>
-            <button id="leaveRoomBtn" class="btn btn-subtle hidden" type="button">
-              🚪 離開房間（切回個人單機模式）
-            </button>
-          </div>
-
-          <div class="manual-sync-strip hidden" id="roomManualSyncSection">
-            <span style="font-size:12px; color:var(--text-secondary); font-weight:600;">手動同步操作：</span>
-            <button id="roomForcePushBtn" class="btn btn-xs" type="button" title="將目前畫面上的完整進度廣播給房間內所有人">
-              ⬆️ 廣播我目前畫面給所有人
-            </button>
-            <button id="roomForcePullBtn" class="btn btn-xs" type="button" title="向房間內其他成員索取最新進度">
-              ⬇️ 重新自房間拉取最新進度
-            </button>
-          </div>
-
-          <div class="form-help-block">
-            <strong>💡 多人同步房特點：</strong>
-            <ul style="margin: 4px 0 0 16px; line-height: 1.6;">
-              <li><strong>零註冊・免兩階段驗證</strong>：完全不用開 Google 帳號兩步驟驗證，任何裝置打開就能用。</li>
-              <li><strong>多人共同編輯</strong>：一人在手機上按計時結束或打勾，其他人的電腦/平板即刻自動更新。</li>
-              <li><strong>離線安全防護</strong>：所有資料在每個人的瀏覽器（localStorage）皆有本機存檔，斷線或休眠喚醒自動重新連線！</li>
-            </ul>
+        <div class="settings-section">
+          <h3 class="section-kicker">資料備份與匯入</h3>
+          <div class="settings-actions-row">
+            <button type="button" id="loadPdfPlanBtn" class="quiet-outline-btn">載入 80 天預設考程</button>
+            <button type="button" id="exportJsonBtn" class="quiet-outline-btn">匯出 JSON 備份</button>
+            <label for="importJsonInput" class="quiet-outline-btn upload-trigger">匯入 JSON 還原</label>
+            <input type="file" id="importJsonInput" accept="application/json,.json" class="hidden" />
+            <button type="button" id="resetAllBtn" class="btn-danger-hairline">重置所有進度</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="toastContainer" class="toast-container"></div>
+  <!-- Cross-Device Room Sync Modal (No Nested Card-in-Card) -->
+  <div id="roomSyncModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="roomModalTitle">
+    <div class="modal-sheet">
+      <div class="modal-sheet-head">
+        <h2 id="roomModalTitle" class="modal-title">跨裝置房號即時同步</h2>
+        <button type="button" id="closeRoomModalBtn" class="icon-close-btn" aria-label="關閉同步視窗">關閉</button>
+      </div>
+      <div class="modal-sheet-body">
+        <div id="roomStatusStrip" class="sync-strip">
+          <span id="roomStatusDot" class="sync-micro-dot" aria-hidden="true"></span>
+          <div class="sync-strip-text">
+            <strong id="roomStatusTitle">等待同步</strong>
+            <span id="roomStatusDesc" class="settings-note">使用同一組房號即可在手機與電腦雙向同步</span>
+          </div>
+        </div>
 
-  <!-- Lightweight QRCode Generator for Mobile One-Click Room Join -->
+        <div id="roomShareSection" class="settings-section">
+          <h3 class="section-kicker">分享同步網址與行動條碼</h3>
+          <div class="sync-share-row">
+            <input type="text" id="roomShareUrlInput" class="input-hairline mono-tabular" readonly aria-label="同步連結" />
+            <button type="button" id="copyRoomUrlBtn" class="btn-primary-solid">複製連結</button>
+          </div>
+          <div id="roomQrCodeContainer" class="sync-qr-well"></div>
+        </div>
+
+        <div id="roomManualSyncSection" class="settings-section">
+          <h3 class="section-kicker">切換房號與手動雙向校正</h3>
+          <div class="settings-grid-two">
+            <div class="field-col">
+              <label for="roomInputId">房號代碼</label>
+              <input type="text" id="roomInputId" class="input-hairline mono-tabular" placeholder="sakura-study-2026" />
+            </div>
+            <div class="field-col">
+              <label for="roomInputNickname">裝置代稱</label>
+              <input type="text" id="roomInputNickname" class="input-hairline" placeholder="MacBook / iPhone" />
+            </div>
+          </div>
+          <div class="settings-actions-row">
+            <button type="button" id="joinRoomBtn" class="btn-primary-solid">連線房間</button>
+            <button type="button" id="leaveRoomBtn" class="quiet-outline-btn">切回離線本機</button>
+            <button type="button" id="roomForcePullBtn" class="quiet-outline-btn">立即拉取雲端</button>
+            <button type="button" id="roomForcePushBtn" class="quiet-outline-btn">強制推送覆蓋</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toastContainer" class="toast-region" aria-live="polite"></div>
+
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261109_v14"></script>
+  <script src="app.js?v=20261111_v15"></script>
 </body>
 </html>
