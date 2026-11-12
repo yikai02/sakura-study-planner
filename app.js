@@ -644,7 +644,7 @@ function applyRestoredDataIfMissing(state) {
     const restored = RESTORED_USER_DATA[dayCountdown];
     if (!day || !restored) return;
 
-    if (restored.calendar && !day.calendar) {
+    if (restored.calendar && !day.calendar && !day.calendarUpdatedAt) {
       day.calendar = restored.calendar;
     }
     SLOT_KEYS.forEach(({ key }) => {
@@ -2375,6 +2375,22 @@ function updateExamCountdownUi(day) {
   }
 }
 
+function renderHomeUpcomingList() {
+  const upcomingListEl = document.getElementById('homeUpcomingList');
+  if (!upcomingListEl) return;
+  const milestones = appState.days.filter(d => d.calendar && d.calendar.trim());
+  if (milestones.length === 0) {
+    upcomingListEl.innerHTML = `<div class="settings-note">尚無備忘行程，可於上方或行事曆新增</div>`;
+  } else {
+    upcomingListEl.innerHTML = milestones.slice(0, 8).map(m => `
+      <div class="home-upcoming-item" data-home-jump-day="${m.dayCountdown}">
+        <span>${m.dateDisplay} ${m.weekdayDisplay} — ${escapeHtml(m.calendar)}</span>
+        <span class="day-tag mono-tabular">Day ${m.dayCountdown}</span>
+      </div>
+    `).join('');
+  }
+}
+
 function renderHomeView() {
   if (typeof document === 'undefined' || !appState) return;
   applyHomeCover();
@@ -2479,20 +2495,7 @@ function renderHomeView() {
     memoInput.dataset.day = day.dayCountdown;
   }
 
-  const upcomingListEl = document.getElementById('homeUpcomingList');
-  if (upcomingListEl) {
-    const milestones = appState.days.filter(d => d.calendar && d.calendar.trim());
-    if (milestones.length === 0) {
-      upcomingListEl.innerHTML = `<div class="settings-note">尚無備忘行程，可於上方或行事曆新增</div>`;
-    } else {
-      upcomingListEl.innerHTML = milestones.slice(0, 8).map(m => `
-        <div class="home-upcoming-item" data-home-jump-day="${m.dayCountdown}">
-          <span>${m.dateDisplay} ${m.weekdayDisplay} — ${escapeHtml(m.calendar)}</span>
-          <span class="day-tag mono-tabular">Day ${m.dayCountdown}</span>
-        </div>
-      `).join('');
-    }
-  }
+  renderHomeUpcomingList();
 
   const focusEl = document.getElementById('homeStatFocusTime');
   const shortRestEl = document.getElementById('homeStatShortRest');
@@ -4254,7 +4257,7 @@ function setupEventListeners() {
         const mmdd = day.isoDate.slice(5);
         const pre = PDF_PREPLANNED_DATA[mmdd];
         if (!pre) return;
-        if (!day.calendar && pre.calendar) {
+        if (!day.calendar && !day.calendarUpdatedAt && pre.calendar) {
           day.calendar = pre.calendar;
           day.calendarUpdatedAt = nowTs;
         }
@@ -4670,21 +4673,41 @@ function setupEventListeners() {
     });
   }
 
+  /** Sync calendar memo UI elements without stealing focus from the active input. */
+  function syncCalendarMemoUi(day, sourceInput) {
+    if (!day) return;
+    const dailyInp = document.getElementById('dailyCalendarInput');
+    if (dailyInp && sourceInput !== dailyInp && document.activeElement !== dailyInp && String(currentActiveDayCountdown) === String(day.dayCountdown)) {
+      dailyInp.value = day.calendar || '';
+    }
+    const homeDay = getHomeActiveDay();
+    const homeInp = document.getElementById('homeCalendarMemoInput');
+    if (homeInp && sourceInput !== homeInp && document.activeElement !== homeInp && homeDay && String(homeDay.dayCountdown) === String(day.dayCountdown)) {
+      homeInp.value = day.calendar || '';
+    }
+    renderHomeUpcomingList();
+    renderPureCalendarTable();
+    renderDailyFocusScheduleTable();
+  }
+
+  /** Persist, sync UI, and broadcast a local memo edit or deletion with a fresh timestamp. */
+  function updateCalendarMemoForDay(day, rawVal, sourceInput = null) {
+    if (!day) return;
+    const nowTs = Date.now();
+    day.calendar = rawVal;
+    day.calendarUpdatedAt = nowTs;
+    appState.updatedAt = nowTs;
+    saveState();
+    syncCalendarMemoUi(day, sourceInput);
+    if (currentRoomId && !isReceivingRemoteUpdate) {
+      broadcastRoomDeltaDebounced({ kind: 'calendar', day: day.dayCountdown, val: day.calendar, updatedAt: nowTs });
+    }
+  }
+
   const homeCalendarMemoInput = document.getElementById('homeCalendarMemoInput');
   if (homeCalendarMemoInput) {
     homeCalendarMemoInput.addEventListener('input', (e) => {
-      const day = getHomeActiveDay();
-      if (!day) return;
-      const nowTs = Date.now();
-      day.calendar = e.target.value;
-      day.calendarUpdatedAt = nowTs;
-      appState.updatedAt = nowTs;
-      saveState();
-      const dailyInp = document.getElementById('dailyCalendarInput');
-      if (dailyInp && document.activeElement !== dailyInp) dailyInp.value = day.calendar;
-      if (currentRoomId && !isReceivingRemoteUpdate) {
-        broadcastRoomDeltaDebounced({ kind: 'calendar', day: day.dayCountdown, val: day.calendar, updatedAt: nowTs });
-      }
+      updateCalendarMemoForDay(getHomeActiveDay(), e.target.value, e.target);
     });
   }
 
@@ -4875,20 +4898,7 @@ function setupEventListeners() {
   }
   if (dailyCalendarInput) {
     dailyCalendarInput.addEventListener('input', (e) => {
-      const day = getCalendarEditorDay();
-      if (!day) return;
-      const nowTs = Date.now();
-      day.calendar = e.target.value;
-      day.calendarUpdatedAt = nowTs;
-      appState.updatedAt = nowTs;
-      saveState();
-      renderPureCalendarTable();
-      const homeDay = getHomeActiveDay();
-      if (homeDay && String(homeDay.dayCountdown) === String(day.dayCountdown)) {
-        const homeInp = document.getElementById('homeCalendarMemoInput');
-        if (homeInp && document.activeElement !== homeInp) homeInp.value = day.calendar;
-      }
-      broadcastRoomDeltaDebounced({ kind: 'calendar', day: day.dayCountdown, val: day.calendar, updatedAt: nowTs });
+      updateCalendarMemoForDay(getCalendarEditorDay(), e.target.value, e.target);
     });
   }
 
@@ -5263,7 +5273,11 @@ function compactState(st) {
   const compactDays = {};
   st.days.forEach(d => {
     const dayEntry = {};
-    if (d.calendar && d.calendar.trim()) dayEntry.c = d.calendar.trim();
+    if (d.calendar && d.calendar.trim()) {
+      dayEntry.c = d.calendar.trim();
+    } else if (d.calendarUpdatedAt) {
+      dayEntry.c = '';
+    }
     if (d.calendarUpdatedAt) dayEntry.cu = d.calendarUpdatedAt;
     SLOT_KEYS.forEach(({ key }) => {
       const s = d[key];
@@ -5327,7 +5341,11 @@ function compactState(st) {
     Object.keys(st.extraDays).forEach(iso => {
       const ed = st.extraDays[iso];
       const entry = {};
-      if (ed.calendar && ed.calendar.trim()) entry.c = ed.calendar.trim();
+      if (ed.calendar && ed.calendar.trim()) {
+        entry.c = ed.calendar.trim();
+      } else if (ed.calendarUpdatedAt) {
+        entry.c = '';
+      }
       if (ed.calendarUpdatedAt) entry.cu = ed.calendarUpdatedAt;
       SLOT_KEYS.forEach(({ key }) => {
         const s = ed[key];
@@ -5385,7 +5403,11 @@ function unpackCompactState(compact) {
   const days = base.map(day => {
     const saved = compactDays[day.dayCountdown];
     if (saved) {
-      if (typeof saved.c === 'string') day.calendar = saved.c;
+      if (typeof saved.c === 'string') {
+        day.calendar = saved.c;
+      } else if (saved.cu) {
+        day.calendar = '';
+      }
       if (saved.cu) day.calendarUpdatedAt = Number(saved.cu) || 0;
       SLOT_KEYS.forEach(({ key }) => {
         const slotData = saved[key[0]];
@@ -5437,7 +5459,11 @@ function unpackCompactState(compact) {
     Object.keys(compact.ex).forEach(iso => {
       const saved = compact.ex[iso];
       const ed = res.extraDays[iso] || createExtraDayObject(iso, true);
-      if (typeof saved.c === 'string') ed.calendar = saved.c;
+      if (typeof saved.c === 'string') {
+        ed.calendar = saved.c;
+      } else if (saved.cu) {
+        ed.calendar = '';
+      }
       if (saved.cu) ed.calendarUpdatedAt = Number(saved.cu) || 0;
       SLOT_KEYS.forEach(({ key }) => {
         const slotData = saved[key[0]];
@@ -5539,14 +5565,21 @@ function mergeRemoteState(remote) {
     appState.homeCoverPosition = remote.homeCoverPosition;
   }
 
+  /** Return true when remote calendar memo supersedes local (respects timestamped deletions). */
+  const shouldAdoptRemoteCalendar = (localEntry, remoteEntry) => {
+    const rCalTs = Number(remoteEntry.calendarUpdatedAt) || 0;
+    const lCalTs = Number(localEntry.calendarUpdatedAt) || 0;
+    return rCalTs > lCalTs || (rCalTs === lCalTs && lCalTs === 0 && !localEntry.calendar && Boolean(remoteEntry.calendar));
+  };
+
   if (remote.extraDays && typeof remote.extraDays === 'object') {
     if (!appState.extraDays) appState.extraDays = generateInitialExtraDays(true);
     Object.keys(remote.extraDays).forEach(iso => {
       const rExtra = remote.extraDays[iso];
       const lExtra = appState.extraDays[iso] || createExtraDayObject(iso, true);
-      if (rExtra.calendar && (!lExtra.calendar || (rExtra.calendarUpdatedAt || 0) >= (lExtra.calendarUpdatedAt || 0))) {
-        lExtra.calendar = rExtra.calendar;
-        lExtra.calendarUpdatedAt = rExtra.calendarUpdatedAt || 0;
+      if (shouldAdoptRemoteCalendar(lExtra, rExtra)) {
+        lExtra.calendar = rExtra.calendar || '';
+        lExtra.calendarUpdatedAt = Number(rExtra.calendarUpdatedAt) || 0;
       }
       SLOT_KEYS.forEach(({ key }) => {
         const rSlot = rExtra[key];
@@ -5568,11 +5601,9 @@ function mergeRemoteState(remote) {
     const remoteDay = remote.days[idx] || remote.days.find(d => d.dayCountdown === localDay.dayCountdown);
     if (!remoteDay) return;
 
-    const rCalTs = Number(remoteDay.calendarUpdatedAt) || 0;
-    const lCalTs = Number(localDay.calendarUpdatedAt) || 0;
-    if (rCalTs > lCalTs || (!localDay.calendar && remoteDay.calendar)) {
+    if (shouldAdoptRemoteCalendar(localDay, remoteDay)) {
       localDay.calendar = remoteDay.calendar || '';
-      localDay.calendarUpdatedAt = rCalTs;
+      localDay.calendarUpdatedAt = Number(remoteDay.calendarUpdatedAt) || 0;
     }
 
     SLOT_KEYS.forEach(({ key }) => {
@@ -6101,6 +6132,8 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
               }
             }
           }
+          renderHomeUpcomingList();
+          renderDailyFocusScheduleTable();
           saveState(false, false);
         }
       }
@@ -6705,7 +6738,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261111_v16').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261112_v17').then((reg) => {
         console.log('PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);
