@@ -11,6 +11,8 @@ const PLAN_END_DATE_STR = '2027-01-26';   // 1月26日 考試日
 const STORAGE_KEY = 'sakura_study_planner_v1';
 const ROOM_STORAGE_KEY = 'sakura_shared_room_v2';
 const SETTINGS_STORAGE_KEY = 'sakura_user_settings_v1';
+const MILESTONES_STORAGE_KEY = 'sakura_study_milestones_v1';
+const STUDY_NOTES_STORAGE_KEY = 'sakura_study_notes_v1';
 
 // 使用者偏好設定（5 款現代日系服裝布料配色主題）
 const TEXTILE_THEMES = {
@@ -296,12 +298,12 @@ const SUBJECT_FASHION_SWATCHES = [
 ];
 
 const DEFAULT_SUBJECTS = [
-  { id: 'subj_micro', name: '個經', swatch: 'rose', statGroup: '經濟', updatedAt: 0 },
-  { id: 'subj_macro', name: '總經', swatch: 'denim', statGroup: '經濟', updatedAt: 0 },
-  { id: 'subj_stat', name: '統計', swatch: 'olive', statGroup: '統計', updatedAt: 0 },
-  { id: 'subj_fin', name: '財管', swatch: 'suede', statGroup: '財管', updatedAt: 0 },
-  { id: 'subj_class', name: '上課', swatch: 'cocoa', statGroup: '上課', updatedAt: 0 },
-  { id: 'subj_other', name: '其他', swatch: 'cement', statGroup: '其他', updatedAt: 0 }
+  { id: 'subj_micro', name: '個經', swatch: 'rose', statGroup: '經濟', examDate: '2027-01-26', updatedAt: 0 },
+  { id: 'subj_macro', name: '總經', swatch: 'denim', statGroup: '經濟', examDate: '2027-01-26', updatedAt: 0 },
+  { id: 'subj_stat', name: '統計', swatch: 'olive', statGroup: '統計', examDate: '2027-01-26', updatedAt: 0 },
+  { id: 'subj_fin', name: '財管', swatch: 'suede', statGroup: '財管', examDate: '2027-01-26', updatedAt: 0 },
+  { id: 'subj_class', name: '上課', swatch: 'cocoa', statGroup: '上課', examDate: '2027-01-26', updatedAt: 0 },
+  { id: 'subj_other', name: '其他', swatch: 'cement', statGroup: '其他', examDate: '2027-01-26', updatedAt: 0 }
 ];
 
 const DEFAULT_PLAN_TITLE = '2026 衝刺讀書計畫';
@@ -310,8 +312,9 @@ const DEFAULT_SECTION_SUBTITLES = {
   subtitleTimer: '即時專注計時',
   subtitleSubjects: '科目清單',
   subtitleDailyPlan: '每日專注大表',
-  subtitleCalendar: '衝刺行事曆',
+  subtitleCalendar: '專屬行事曆',
   subtitleHome: '今日讀書安排',
+  subtitleMemoGoals: '備忘錄與目標',
   subtitleStats: '專注數據與達成統計'
 };
 
@@ -494,6 +497,7 @@ function createEmptySlot(subject = '', task = '') {
     restAccumulatedMs: 0,      // ☕ YPT 累計休息毫秒數
     lastPauseTimestamp: null,  // ☕ 進入暫停（休息）當下的系統時間戳記
     completed: false,
+    rolledOverTo: '',          // 過期未完成順延目標日期 (例如 '2026-11-17')
     updatedAt: 0               // 最後異動時間戳記 Date.now()
   };
 }
@@ -531,6 +535,7 @@ function generate80DaysSchedule(withPreplanned = true) {
       dayCountdown,
       calendar: calNote,
       calendarUpdatedAt: 0,
+      extraTasks: [],
       morning: createEmptySlot(pre && pre.morning ? pre.morning[0] : '', pre && pre.morning ? pre.morning[1] : ''),
       afternoon: createEmptySlot(pre && pre.afternoon ? pre.afternoon[0] : '', pre && pre.afternoon ? pre.afternoon[1] : ''),
       evening: createEmptySlot(pre && pre.evening ? pre.evening[0] : '', pre && pre.evening ? pre.evening[1] : '')
@@ -573,6 +578,7 @@ function createExtraDayObject(isoDate, withPreplanned = true) {
     dayCountdown: isoDate, // 非倒數區間使用 isoDate 作為唯一識別碼
     calendar: pre ? (pre.calendar || '') : '',
     calendarUpdatedAt: 0,
+    extraTasks: [],
     morning: createEmptySlot(pre && pre.morning ? pre.morning[0] : '', pre && pre.morning ? pre.morning[1] : ''),
     afternoon: createEmptySlot(pre && pre.afternoon ? pre.afternoon[0] : '', pre && pre.afternoon ? pre.afternoon[1] : ''),
     evening: createEmptySlot(pre && pre.evening ? pre.evening[0] : '', pre && pre.evening ? pre.evening[1] : '')
@@ -611,9 +617,132 @@ function findDayByKey(dayKey) {
 }
 
 /**
+ * 正規化單日額外任務清單 (extraTasks)
+ */
+function normalizeExtraTasksList(rawList) {
+  if (!Array.isArray(rawList)) return [];
+  return rawList
+    .filter(t => t && typeof t === 'object' && t.id)
+    .map(t => ({
+      id: String(t.id),
+      subject: typeof t.subject === 'string' ? t.subject.trim() : '',
+      task: typeof t.task === 'string' ? t.task : '',
+      completed: Boolean(t.completed),
+      fromDate: typeof t.fromDate === 'string' ? t.fromDate : '',
+      fromSlot: typeof t.fromSlot === 'string' ? t.fromSlot : '',
+      updatedAt: Number(t.updatedAt) || 0,
+      deleted: Boolean(t.deleted)
+    }));
+}
+
+/**
+ * 由舊版 goals (經濟/統計/財管/其他 × 三階段) 自動無損轉換為初始階段性里程碑
+ */
+function createInitialMilestonesFromGoals(goalsObj = DEFAULT_GOALS, phasesArr = DEFAULT_PHASES) {
+  const milestones = [];
+  const safeGoals = (goalsObj && typeof goalsObj === 'object') ? goalsObj : DEFAULT_GOALS;
+  const safePhases = (Array.isArray(phasesArr) && phasesArr.length === 3) ? phasesArr : DEFAULT_PHASES;
+
+  GOAL_SUBJECTS.forEach(subj => {
+    const g = safeGoals[subj];
+    if (!g || typeof g !== 'object') return;
+    ['phase1', 'phase2', 'phase3'].forEach((phaseKey, idx) => {
+      const rawText = typeof g[phaseKey] === 'string' ? g[phaseKey].trim() : '';
+      if (!rawText) return;
+      const lines = rawText.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (lines.length === 0) return;
+      const phaseName = (safePhases[idx] && safePhases[idx].name) ? safePhases[idx].name : `階段 ${idx + 1}`;
+      milestones.push({
+        id: `ms_seed_${subj}_${phaseKey}`,
+        subject: subj === '經濟' ? '個經' : subj,
+        phaseId: phaseKey,
+        title: `${subj} · ${phaseName}核心目標`,
+        subItems: lines.map((line, lineIdx) => ({
+          id: `sub_${subj}_${phaseKey}_${lineIdx}`,
+          text: line,
+          done: false
+        })),
+        updatedAt: 0,
+        deleted: false
+      });
+    });
+  });
+  return milestones;
+}
+
+/**
+ * 正規化階段性里程碑清單 (milestones)，向下相容舊資料與獨立備份 Key
+ */
+function normalizeMilestonesList(rawList, goalsFallback = DEFAULT_GOALS, phasesFallback = DEFAULT_PHASES) {
+  let source = Array.isArray(rawList) ? rawList : null;
+  if (!source) {
+    try {
+      const cached = localStorage.getItem(MILESTONES_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) source = parsed;
+      }
+    } catch (e) {}
+  }
+  if (!source || source.length === 0) {
+    return createInitialMilestonesFromGoals(goalsFallback, phasesFallback);
+  }
+  return source
+    .filter(m => m && typeof m === 'object' && m.id)
+    .map(m => ({
+      id: String(m.id),
+      subject: typeof m.subject === 'string' && m.subject.trim() ? m.subject.trim() : '其他',
+      phaseId: ['phase1', 'phase2', 'phase3'].includes(m.phaseId) ? m.phaseId : 'phase1',
+      title: typeof m.title === 'string' && m.title.trim() ? m.title.trim() : '未命名里程碑',
+      subItems: Array.isArray(m.subItems)
+        ? m.subItems
+            .filter(sub => sub && typeof sub === 'object' && sub.id)
+            .map(sub => ({
+              id: String(sub.id),
+              text: typeof sub.text === 'string' ? sub.text : '',
+              done: Boolean(sub.done)
+            }))
+        : [],
+      updatedAt: Number(m.updatedAt) || 0,
+      deleted: Boolean(m.deleted)
+    }));
+}
+
+/**
+ * 正規化分科備忘錄清單 (studyNotes)，向下相容舊資料與獨立備份 Key
+ */
+function normalizeStudyNotesList(rawList) {
+  let source = Array.isArray(rawList) ? rawList : null;
+  if (!source) {
+    try {
+      const cached = localStorage.getItem(STUDY_NOTES_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) source = parsed;
+      }
+    } catch (e) {}
+  }
+  if (!source) return [];
+  return source
+    .filter(n => n && typeof n === 'object' && n.id)
+    .map(n => ({
+      id: String(n.id),
+      subject: typeof n.subject === 'string' && n.subject.trim() ? n.subject.trim() : '一般事項',
+      title: typeof n.title === 'string' ? n.title : '',
+      content: typeof n.content === 'string' ? n.content : '',
+      pinned: Boolean(n.pinned),
+      createdAt: Number(n.createdAt) || Number(n.updatedAt) || 0,
+      updatedAt: Number(n.updatedAt) || 0,
+      deleted: Boolean(n.deleted)
+    }));
+}
+
+/**
  * 建立初始完整 App 狀態
  */
 function createDefaultState(withPreplanned = true) {
+  const defaultPhases = JSON.parse(JSON.stringify(DEFAULT_PHASES));
+  const defaultGoals = JSON.parse(JSON.stringify(DEFAULT_GOALS));
   return {
     version: 2,
     anchorStartDate: '2026-11-08',
@@ -626,8 +755,10 @@ function createDefaultState(withPreplanned = true) {
     subtitlesUpdatedAt: 0,
     subjects: JSON.parse(JSON.stringify(DEFAULT_SUBJECTS)),
     homeCover: normalizeThemeKey(appSettings.theme) === 'ink' ? 'cover-antigravity' : 'cover-sakura',
-    phases: JSON.parse(JSON.stringify(DEFAULT_PHASES)),
-    goals: JSON.parse(JSON.stringify(DEFAULT_GOALS)),
+    phases: defaultPhases,
+    goals: defaultGoals,
+    milestones: createInitialMilestonesFromGoals(defaultGoals, defaultPhases),
+    studyNotes: [],
     days: generate80DaysSchedule(withPreplanned),
     extraDays: generateInitialExtraDays(withPreplanned)
   };
@@ -749,7 +880,8 @@ function normalizeState(raw) {
     const day = {
       ...tpl,
       calendar: typeof src.calendar === 'string' ? src.calendar : tpl.calendar,
-      calendarUpdatedAt: Number(src.calendarUpdatedAt) || 0
+      calendarUpdatedAt: Number(src.calendarUpdatedAt) || 0,
+      extraTasks: normalizeExtraTasksList(src.extraTasks)
     };
     SLOT_KEYS.forEach(({ key }) => {
       const s = src[key] && typeof src[key] === 'object' ? src[key] : {};
@@ -766,6 +898,7 @@ function normalizeState(raw) {
       slot.restAccumulatedMs = Math.max(0, Number(s.restAccumulatedMs) || 0);
       slot.lastPauseTimestamp = Number(s.lastPauseTimestamp) || null;
       slot.completed = Boolean(s.completed);
+      slot.rolledOverTo = typeof s.rolledOverTo === 'string' ? s.rolledOverTo : '';
       slot.updatedAt = Number(s.updatedAt) || (slot.lastResumeTimestamp || 0);
       if (slot.timerStatus === 'running' && !slot.lastResumeTimestamp) {
         slot.timerStatus = 'paused';
@@ -838,10 +971,12 @@ function normalizeState(raw) {
       const baseExtra = extraDays[iso] || createExtraDayObject(iso, true);
       if (typeof src.calendar === 'string') baseExtra.calendar = src.calendar;
       baseExtra.calendarUpdatedAt = Number(src.calendarUpdatedAt) || 0;
+      baseExtra.extraTasks = normalizeExtraTasksList(src.extraTasks);
       SLOT_KEYS.forEach(({ key }) => {
         if (src[key] && typeof src[key] === 'object') {
           baseExtra[key] = { ...baseExtra[key], ...src[key] };
           baseExtra[key].subject = typeof baseExtra[key].subject === 'string' ? baseExtra[key].subject.trim() : '';
+          baseExtra[key].rolledOverTo = typeof baseExtra[key].rolledOverTo === 'string' ? baseExtra[key].rolledOverTo : '';
         }
       });
       extraDays[iso] = baseExtra;
@@ -854,15 +989,20 @@ function normalizeState(raw) {
     subjects = DEFAULT_SUBJECTS.map(def => {
       const match = raw.subjects.find(item => item && item.id === def.id);
       if (!match) return { ...def };
+      const rawExamDate = typeof match.examDate === 'string' ? match.examDate.trim() : '';
       return {
         id: def.id,
         name: (typeof match.name === 'string' && match.name.trim()) ? match.name.trim() : def.name,
         swatch: validSwatchKeys.includes(match.swatch) ? match.swatch : def.swatch,
         statGroup: def.statGroup,
+        examDate: /^\d{4}-\d{2}-\d{2}$/.test(rawExamDate) ? rawExamDate : (def.examDate || PLAN_END_DATE_STR),
         updatedAt: Number(match.updatedAt) || 0
       };
     });
   }
+
+  const milestones = normalizeMilestonesList(raw.milestones, goals, phases);
+  const studyNotes = normalizeStudyNotesList(raw.studyNotes);
 
   const planTitle = (typeof raw.planTitle === 'string' && raw.planTitle.trim()) ? raw.planTitle.trim() : DEFAULT_PLAN_TITLE;
   const planTitleUpdatedAt = Number(raw.planTitleUpdatedAt) || 0;
@@ -896,6 +1036,8 @@ function normalizeState(raw) {
     homeCoverPosition,
     phases,
     goals,
+    milestones,
+    studyNotes,
     days,
     extraDays
   };
@@ -985,6 +1127,12 @@ function normalizeTimeInput(str) {
 function saveState(showIndicator = true, broadcastToRoom = true) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+    if (appState && Array.isArray(appState.milestones)) {
+      localStorage.setItem(MILESTONES_STORAGE_KEY, JSON.stringify(appState.milestones));
+    }
+    if (appState && Array.isArray(appState.studyNotes)) {
+      localStorage.setItem(STUDY_NOTES_STORAGE_KEY, JSON.stringify(appState.studyNotes));
+    }
     if (showIndicator) {
       updateSaveStatusDisplay();
     }
@@ -1124,7 +1272,7 @@ function renameSubjectEntity(subjectId, newName) {
   entity.updatedAt = nowTs;
   appState.updatedAt = nowTs;
 
-  // 同步更新所有天與時段中使用舊名稱的紀錄（以及篩選器）
+  // 同步更新所有天與時段、額外待辦、里程碑與備忘錄中使用舊名稱的紀錄（以及篩選器）
   getAllDaysList().forEach(day => {
     SLOT_KEYS.forEach(({ key }) => {
       const slot = day[key];
@@ -1133,10 +1281,44 @@ function renameSubjectEntity(subjectId, newName) {
         slot.updatedAt = nowTs;
       }
     });
+    if (Array.isArray(day.extraTasks)) {
+      day.extraTasks.forEach(t => {
+        if (t && t.subject === oldName) {
+          t.subject = cleanName;
+          t.updatedAt = nowTs;
+        }
+      });
+    }
   });
+
+  if (Array.isArray(appState.milestones)) {
+    appState.milestones.forEach(ms => {
+      if (ms && ms.subject === oldName) {
+        ms.subject = cleanName;
+        ms.updatedAt = nowTs;
+      }
+    });
+  }
+  if (Array.isArray(appState.studyNotes)) {
+    appState.studyNotes.forEach(note => {
+      if (note && note.subject === oldName) {
+        note.subject = cleanName;
+        note.updatedAt = nowTs;
+      }
+    });
+  }
 
   if (currentDailySubjectFilter === oldName) {
     currentDailySubjectFilter = cleanName;
+  }
+  if (typeof currentCalendarSubjectFilter !== 'undefined' && currentCalendarSubjectFilter === oldName) {
+    currentCalendarSubjectFilter = cleanName;
+  }
+  if (typeof currentMilestoneSubjectFilter !== 'undefined' && currentMilestoneSubjectFilter === oldName) {
+    currentMilestoneSubjectFilter = cleanName;
+  }
+  if (typeof currentNoteCategoryFilter !== 'undefined' && currentNoteCategoryFilter === oldName) {
+    currentNoteCategoryFilter = cleanName;
   }
 
   saveState();
@@ -1144,12 +1326,14 @@ function renameSubjectEntity(subjectId, newName) {
   renderQuickTimerView();
   renderDailyPlanView();
   renderPureCalendarTable();
+  if (typeof renderCalendarWeekView === 'function') renderCalendarWeekView();
   renderHomeView();
+  if (typeof renderMemoGoalsView === 'function') renderMemoGoalsView();
   renderFullDashboard();
   updateActiveTimerBanner();
 
   if (currentRoomId && !isReceivingRemoteUpdate) {
-    broadcastRoomDelta({ kind: 'subjectEntity', id: subjectId, oldName, name: cleanName, swatch: entity.swatch, updatedAt: nowTs });
+    broadcastRoomDelta({ kind: 'subjectEntity', id: subjectId, oldName, name: cleanName, swatch: entity.swatch, examDate: entity.examDate, updatedAt: nowTs });
   }
 }
 
@@ -1171,11 +1355,13 @@ function setSubjectEntitySwatch(subjectId, swatchKey) {
   renderQuickTimerView();
   renderDailyPlanView();
   renderPureCalendarTable();
+  if (typeof renderCalendarWeekView === 'function') renderCalendarWeekView();
   renderHomeView();
+  if (typeof renderMemoGoalsView === 'function') renderMemoGoalsView();
   renderFullDashboard();
 
   if (currentRoomId && !isReceivingRemoteUpdate) {
-    broadcastRoomDelta({ kind: 'subjectEntity', id: subjectId, name: entity.name, swatch: swatchKey, updatedAt: nowTs });
+    broadcastRoomDelta({ kind: 'subjectEntity', id: subjectId, name: entity.name, swatch: swatchKey, examDate: entity.examDate, updatedAt: nowTs });
   }
 }
 
@@ -2088,6 +2274,51 @@ let homeActiveDayCountdown = null;
 let calendarEditorDayKey = null;
 let currentCalendarMonth = '2026-11';
 let isCalendarDayEditorOpen = false;
+let currentCalendarViewMode = 'month';       // 'month' | 'week'
+let currentCalendarSubjectFilter = '';       // '' (全部) 或考科名稱
+let currentCalendarWeekStartIso = '';        // 週視圖起始週一 ISO 日期
+let currentMilestoneSubjectFilter = '';      // '' (全部) 或考科名稱
+let currentNoteCategoryFilter = '';          // '' (全部) | '__pinned__' | '一般事項' | 考科名稱
+let currentNoteSearchQuery = '';             // 備忘錄搜尋關鍵字
+
+/**
+ * 取得任一日期或 ISO 字串所屬週的「週一」ISO 日期字串 (YYYY-MM-DD)
+ */
+function getMondayIsoForDate(input = new Date()) {
+  let d;
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input.trim())) {
+    const [y, m, day] = input.trim().split('-').map(Number);
+    d = new Date(y, m - 1, day);
+  } else if (input instanceof Date) {
+    d = new Date(input.getFullYear(), input.getMonth(), input.getDate());
+  } else {
+    const eff = getEffectiveStudyDate();
+    d = new Date(eff.getFullYear(), eff.getMonth(), eff.getDate());
+  }
+  const dayOfWeekMon0 = (d.getDay() + 6) % 7; // 週一=0 ... 週日=6
+  d.setDate(d.getDate() - dayOfWeekMon0);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * 取得自指定週一 ISO 起算連續 7 天之日期資訊與對應單日物件
+ */
+function getWeekDaysFromMondayIso(mondayIso) {
+  const baseIso = (mondayIso && /^\d{4}-\d{2}-\d{2}$/.test(mondayIso)) ? mondayIso : getMondayIsoForDate(getEffectiveStudyDate());
+  const [y, m, dNum] = baseIso.split('-').map(Number);
+  const list = [];
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(y, m - 1, dNum + i);
+    const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    const dayObj = findDayByKey(iso);
+    list.push({
+      isoDate: iso,
+      dateObj: dt,
+      dayObj
+    });
+  }
+  return list;
+}
 
 /**
  * 取得當前學習日基準日期（嚴格以凌晨 05:00 作為一日之分界）
@@ -2162,6 +2393,7 @@ function initCurrentActiveDay() {
   } else {
     currentCalendarMonth = '2026-11';
   }
+  currentCalendarWeekStartIso = getMondayIsoForDate(eff);
 }
 
 function switchMainTab(tabId) {
@@ -2175,6 +2407,7 @@ function switchMainTab(tabId) {
     'home': document.getElementById('tabHome'),
     'quick-timer': document.getElementById('tabQuickTimer'),
     'calendar-schedule': document.getElementById('tabCalendarSchedule'),
+    'memo-goals': document.getElementById('tabMemoGoals'),
     'daily-plan': document.getElementById('tabDailyPlan'),
     'statistics-dashboard': document.getElementById('tabStatisticsDashboard')
   };
@@ -2190,12 +2423,15 @@ function switchMainTab(tabId) {
     railEl.classList.toggle('mobile-rail-active', tabId === 'quick-timer');
   }
 
+  // 僅刷新左欄計時顯示文字，絕不重置或中斷正在倒數/正計時的狀態與時間戳
   renderQuickTimerView();
 
   if (tabId === 'home') {
     renderHomeView();
   } else if (tabId === 'calendar-schedule') {
     renderMainScheduleTable();
+  } else if (tabId === 'memo-goals') {
+    renderMemoGoalsView();
   } else if (tabId === 'daily-plan') {
     renderDailyFocusScheduleTable();
   } else if (tabId === 'statistics-dashboard') {
@@ -2432,12 +2668,41 @@ function renderHomeView() {
   }
 
   const slotsListEl = document.getElementById('homeSlotsList');
+  const extraTasksListEl = document.getElementById('homeExtraTasksList');
   const doneCounterEl = document.getElementById('homeDoneCounter');
-  const doneCount = SLOT_KEYS.filter(({ key }) => day[key].completed).length;
-  if (doneCounterEl) doneCounterEl.textContent = `${doneCount} / 3`;
+  const pctLabelEl = document.getElementById('homeCompletionPctLabel');
+  const progressBarEl = document.getElementById('homeCompletionProgressBar');
+
+  const activeExtraTasks = Array.isArray(day.extraTasks) ? day.extraTasks.filter(t => t && !t.deleted) : [];
+  const doneSlotCount = SLOT_KEYS.filter(({ key }) => day[key].completed).length;
+  const doneExtraCount = activeExtraTasks.filter(t => t.completed).length;
+  const totalTaskCount = 3 + activeExtraTasks.length;
+  const totalDoneCount = doneSlotCount + doneExtraCount;
+  const completionPct = totalTaskCount > 0 ? Math.round((totalDoneCount / totalTaskCount) * 100) : 0;
+
+  if (doneCounterEl) doneCounterEl.textContent = `${totalDoneCount} / ${totalTaskCount}`;
+  if (pctLabelEl) pctLabelEl.textContent = `${completionPct}% (${totalDoneCount}/${totalTaskCount})`;
+  if (progressBarEl) {
+    progressBarEl.style.setProperty('--progress-scale', String((completionPct / 100).toFixed(3)));
+  }
+
+  // 同步更新快速排程 (Quick Add) 預設日期與考科選單
+  const quickDateInp = document.getElementById('quickAddDateInput');
+  if (quickDateInp && !quickDateInp.value) {
+    quickDateInp.value = day.isoDate || todayIso;
+  }
+  const quickSubjSel = document.getElementById('quickAddSubjectSelect');
+  if (quickSubjSel) {
+    const entities = getSubjectEntities();
+    const prevVal = quickSubjSel.value;
+    quickSubjSel.innerHTML = entities.map(s => `
+      <option value="${escapeHtml(s.name)}" ${prevVal === s.name ? 'selected' : ''}>${escapeHtml(s.name)}</option>
+    `).join('');
+  }
 
   const subjectOptionsList = getSubjectOptionsList();
   if (slotsListEl) {
+    const isPastDay = Boolean(day.isoDate && day.isoDate < todayIso);
     slotsListEl.innerHTML = SLOT_KEYS.map(({ key, label, timeRange }) => {
       const s = day[key];
       const effMins = getSlotEffectiveMinutes(s);
@@ -2451,6 +2716,7 @@ function renderHomeView() {
         <option value="${escapeHtml(opt)}" ${s.subject === opt ? 'selected' : ''}>${escapeHtml(opt || '選擇科目')}</option>
       `).join('');
       const stateTag = isRunning ? '計時中' : (isPaused ? '暫停中' : '');
+      const canRollover = isPastDay && !s.completed && !s.rolledOverTo && Boolean((s.task && s.task.trim()) || (s.subject && s.subject !== '上課'));
 
       return `
         <div class="home-slot-item ${s.completed ? 'is-completed' : ''}" data-swatch="${escapeHtml(swatch)}">
@@ -2467,6 +2733,7 @@ function renderHomeView() {
               <span class="phase-date-hint mono-tabular">${timeRange}</span>
             </div>
             <div class="rail-day-meta">
+              ${canRollover ? `<button type="button" class="rollover-action-btn" data-rollover-day="${day.dayCountdown}" data-rollover-slot="${key}">順延至今日</button>` : ''}
               ${stateTag ? `<span class="phase-tag">${stateTag}</span>` : ''}
               <span class="stat-sub-val mono-tabular">${effMins > 0 ? formatMinutesToHM(effMins) : '0分'}</span>
             </div>
@@ -2489,6 +2756,24 @@ function renderHomeView() {
     }).join('');
   }
 
+  if (extraTasksListEl) {
+    extraTasksListEl.innerHTML = buildDayExtraTasksHtml(day, todayIso);
+  }
+
+  renderHomeSubjectStatusGrid();
+
+  const overdueHintEl = document.getElementById('homeOverdueQuickHint');
+  if (overdueHintEl && typeof getOverdueIncompleteItems === 'function') {
+    const overdueList = getOverdueIncompleteItems();
+    if (overdueList.length > 0) {
+      overdueHintEl.classList.remove('hidden');
+      overdueHintEl.innerHTML = `尚有 <strong>${overdueList.length}</strong> 項過期未完成排程 · <button type="button" class="quiet-text-btn" data-jump-overdue-cal="1">前往行事曆順延</button>`;
+    } else {
+      overdueHintEl.classList.add('hidden');
+      overdueHintEl.textContent = '';
+    }
+  }
+
   const memoInput = document.getElementById('homeCalendarMemoInput');
   if (memoInput && document.activeElement !== memoInput) {
     memoInput.value = day.calendar || '';
@@ -2506,6 +2791,193 @@ function renderHomeView() {
     const shortMs = (active && active.slot.timerStatus === 'paused') ? getSlotShortRestLiveMs(active.slot) : 0;
     shortRestEl.textContent = formatMsToClock(shortMs);
   }
+}
+
+/**
+ * 渲染單日額外待辦事項列表 (extraTasks) HTML
+ */
+function buildDayExtraTasksHtml(day, todayIso = getTodayIsoString()) {
+  if (!day || !Array.isArray(day.extraTasks)) return '';
+  const activeTasks = day.extraTasks.filter(t => t && !t.deleted);
+  if (activeTasks.length === 0) return '';
+
+  const isPastDay = Boolean(day.isoDate && day.isoDate < todayIso);
+  return activeTasks.map(t => {
+    const swatch = getSubjectSwatchKey(t.subject);
+    const canRollover = isPastDay && !t.completed;
+    return `
+      <div class="extra-task-item ${t.completed ? 'is-completed' : ''}" data-swatch="${escapeHtml(swatch)}">
+        <div class="extra-task-left">
+          <input
+            type="checkbox"
+            class="done-checkbox extra-task-checkbox"
+            data-day="${day.dayCountdown}"
+            data-extra-task-id="${escapeHtml(t.id)}"
+            ${t.completed ? 'checked' : ''}
+          />
+          <span class="subj-pill" data-swatch="${escapeHtml(swatch)}">${escapeHtml(t.subject || '一般')}</span>
+          <input
+            type="text"
+            class="extra-task-input"
+            data-day="${day.dayCountdown}"
+            data-extra-task-id="${escapeHtml(t.id)}"
+            value="${escapeHtml(t.task)}"
+            placeholder="輸入待辦事項..."
+          />
+        </div>
+        <div class="extra-task-meta">
+          ${t.fromDate ? `<span class="day-tag">順延自 ${escapeHtml(t.fromDate)}</span>` : ''}
+          ${canRollover ? `<button type="button" class="rollover-action-btn" data-rollover-day="${day.dayCountdown}" data-rollover-extra-id="${escapeHtml(t.id)}">順延至今日</button>` : ''}
+          <button type="button" class="quiet-text-btn" data-del-extra-day="${day.dayCountdown}" data-del-extra-id="${escapeHtml(t.id)}" title="刪除此項目">刪除</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * 渲染第一頁「考試倒數與考科本週排程狀態」卡片網格
+ */
+function renderHomeSubjectStatusGrid() {
+  const gridEl = document.getElementById('homeSubjectStatusGrid');
+  if (!gridEl || !appState) return;
+
+  const effDate = getEffectiveStudyDate(new Date());
+  const todayMidnight = new Date(effDate.getFullYear(), effDate.getMonth(), effDate.getDate());
+  const weekDays = getWeekDaysFromMondayIso(getMondayIsoForDate(effDate));
+  const entities = getSubjectEntities();
+
+  gridEl.innerHTML = entities.map(entity => {
+    const examIso = (entity.examDate && /^\d{4}-\d{2}-\d{2}$/.test(entity.examDate)) ? entity.examDate : PLAN_END_DATE_STR;
+    const [ey, em, ed] = examIso.split('-').map(Number);
+    const examDt = new Date(ey, em - 1, ed);
+    const diffDays = Math.max(0, Math.round((examDt - todayMidnight) / 86400000));
+
+    let weekScheduled = 0;
+    let weekCompleted = 0;
+    weekDays.forEach(({ dayObj }) => {
+      if (!dayObj) return;
+      SLOT_KEYS.forEach(({ key }) => {
+        const s = dayObj[key];
+        if (!s) return;
+        const matchSubj = s.subject === entity.name || (entity.id === 'subj_micro' && s.subject === '經濟');
+        if (matchSubj && (s.task || s.subject || s.completed || getSlotEffectiveMinutes(s) > 0)) {
+          weekScheduled += 1;
+          if (s.completed) weekCompleted += 1;
+        }
+      });
+      if (Array.isArray(dayObj.extraTasks)) {
+        dayObj.extraTasks.forEach(t => {
+          if (t && !t.deleted && (t.subject === entity.name || (entity.id === 'subj_micro' && t.subject === '經濟'))) {
+            weekScheduled += 1;
+            if (t.completed) weekCompleted += 1;
+          }
+        });
+      }
+    });
+
+    return `
+      <div class="subject-status-card" data-swatch="${escapeHtml(entity.swatch)}">
+        <div class="subject-status-top">
+          <span class="subj-pill" data-swatch="${escapeHtml(entity.swatch)}">${escapeHtml(entity.name)}</span>
+          <span class="subject-countdown-badge mono-tabular">${diffDays > 0 ? `倒數 ${diffDays} 天` : '考試當日'}</span>
+        </div>
+        <div class="subject-status-metrics">
+          <span>本週已排 <strong class="mono-tabular">${weekScheduled}</strong> 項</span>
+          <span>已完成 <strong class="mono-tabular">${weekCompleted}</strong> 項</span>
+        </div>
+        <div class="subject-exam-date-row">
+          <span>目標考期</span>
+          <input
+            type="date"
+            class="subject-exam-date-inp mono-tabular"
+            data-subject-exam-id="${escapeHtml(entity.id)}"
+            value="${escapeHtml(examIso)}"
+            aria-label="${escapeHtml(entity.name)}考試日期"
+          />
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * 快速新增排程任務並同步寫入指定日期之行事曆（不覆蓋已有任務）
+ */
+function addQuickScheduleTask(targetDateOrKey, slotChoice = 'auto', subjectName = '', taskText = '') {
+  const cleanTask = String(taskText || '').trim();
+  if (!cleanTask) {
+    showToast('請輸入要排入行事曆的讀書任務內容');
+    return null;
+  }
+  const day = findDayByKey(targetDateOrKey) || getHomeActiveDay();
+  if (!day) return null;
+
+  const subj = String(subjectName || '').trim() || (getSubjectEntities()[0] ? getSubjectEntities()[0].name : '其他');
+  const nowTs = Date.now();
+  let placedInSlot = null;
+
+  if (slotChoice === 'morning' || slotChoice === 'afternoon' || slotChoice === 'evening') {
+    const slot = day[slotChoice];
+    const hasExistingTask = Boolean(slot && slot.task && slot.task.trim());
+    if (slot && !hasExistingTask) {
+      slot.subject = subj;
+      slot.task = cleanTask;
+      slot.completed = false;
+      slot.rolledOverTo = '';
+      slot.updatedAt = nowTs;
+      placedInSlot = slotChoice;
+    }
+  } else if (slotChoice === 'auto') {
+    // 優先尋找完全空白的時段，或同科目但尚未填寫任務文字的時段
+    for (const { key } of SLOT_KEYS) {
+      const s = day[key];
+      if (s && !s.subject && !s.task && !s.completed && getSlotEffectiveMinutes(s) === 0) {
+        s.subject = subj;
+        s.task = cleanTask;
+        s.rolledOverTo = '';
+        s.updatedAt = nowTs;
+        placedInSlot = key;
+        break;
+      }
+    }
+    if (!placedInSlot) {
+      for (const { key } of SLOT_KEYS) {
+        const s = day[key];
+        if (s && s.subject === subj && (!s.task || !s.task.trim()) && !s.completed) {
+          s.task = cleanTask;
+          s.rolledOverTo = '';
+          s.updatedAt = nowTs;
+          placedInSlot = key;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!placedInSlot) {
+    if (!Array.isArray(day.extraTasks)) day.extraTasks = [];
+    day.extraTasks.push({
+      id: `et_${nowTs}_${Math.random().toString(36).slice(2, 7)}`,
+      subject: subj,
+      task: cleanTask,
+      completed: false,
+      fromDate: '',
+      fromSlot: '',
+      updatedAt: nowTs,
+      deleted: false
+    });
+  }
+
+  appState.updatedAt = nowTs;
+  saveState();
+  renderHomeView();
+  renderMainScheduleTable();
+  renderQuickTimerView();
+  renderAllStatistics();
+  const slotLabel = placedInSlot ? `${getSlotLabel(placedInSlot)}時段` : '額外待辦';
+  showToast(`已新增至 ${day.dateDisplay}（${slotLabel}）：${subj} — ${cleanTask}`);
+  return { day, placedInSlot };
 }
 
 /* ==========================================================================
@@ -2965,6 +3437,11 @@ function renderDailySlotsDetailed(day) {
       </div>
     `;
   }).join('');
+
+  const extraContainer = document.getElementById('dailyExtraTasksContainer');
+  if (extraContainer) {
+    extraContainer.innerHTML = buildDayExtraTasksHtml(day, getTodayIsoString());
+  }
 }
 
 function updateDailyPlanLiveClocks(active) {
@@ -2983,10 +3460,264 @@ function updateDailyPlanLiveClocks(active) {
 }
 
 /* ==========================================================================
-   第 3 頁子視圖 A：Notion 日曆資料庫（月曆形態 + 每格 3 條橫線直接輸入工作）
+   第 2 頁：專屬行事曆（月視圖 / 週視圖切換 + 考科色標篩選 + 過期順延至今日）
    ========================================================================== */
 
+function doesSubjectMatchFilter(subjectName, filterSubj) {
+  if (!filterSubj) return true;
+  if (!subjectName) return false;
+  if (subjectName === filterSubj) return true;
+  if (filterSubj === '個經' && subjectName === '經濟') return true;
+  return false;
+}
+
+function renderCalendarSubjectFilterBar() {
+  const barEl = document.getElementById('calSubjectFilterBar');
+  if (!barEl) return;
+  const entities = getSubjectEntities();
+  const allBtn = `
+    <button
+      type="button"
+      class="subj-filter-pill ${!currentCalendarSubjectFilter ? 'active' : ''}"
+      data-cal-subj=""
+    >全部考科</button>
+  `;
+  const subjBtns = entities.map(entity => {
+    const isActive = currentCalendarSubjectFilter === entity.name;
+    return `
+      <button
+        type="button"
+        class="subj-filter-pill ${isActive ? 'active' : ''}"
+        data-cal-subj="${escapeHtml(entity.name)}"
+        data-swatch="${escapeHtml(entity.swatch)}"
+      >
+        <span class="subj-filter-dot" data-swatch="${escapeHtml(entity.swatch)}"></span>
+        <span>${escapeHtml(entity.name)}</span>
+      </button>
+    `;
+  }).join('');
+  barEl.innerHTML = allBtn + subjBtns;
+}
+
+/**
+ * 掃描所有早於今日 (isoDate < todayIso) 但尚未完成、且尚未順延的排程項目
+ */
+function getOverdueIncompleteItems(filterSubj = '') {
+  if (!appState) return [];
+  const todayIso = getTodayIsoString();
+  const allDays = getAllDaysList()
+    .filter(d => d && d.isoDate && d.isoDate < todayIso)
+    .sort((a, b) => (a.isoDate < b.isoDate ? -1 : 1));
+
+  const items = [];
+  allDays.forEach(day => {
+    SLOT_KEYS.forEach(({ key, label }) => {
+      const s = day[key];
+      if (!s || s.completed || s.rolledOverTo) return;
+      if (s.timerStatus === 'running' || s.timerStatus === 'paused') return;
+      const hasTaskText = Boolean(s.task && s.task.trim());
+      const hasStudySubj = Boolean(s.subject && s.subject !== '上課');
+      if (!hasTaskText && !hasStudySubj) return;
+      // 若僅有預排科目但無具體任務文字且時長 > 0，代表已讀過，不列入未完成順延
+      if (!hasTaskText && getSlotEffectiveMinutes(s) > 0) return;
+      if (filterSubj && !doesSubjectMatchFilter(s.subject, filterSubj)) return;
+
+      items.push({
+        kind: 'slot',
+        dayKey: day.dayCountdown,
+        isoDate: day.isoDate,
+        dateDisplay: day.dateDisplay,
+        slotKey: key,
+        slotLabel: label,
+        subject: s.subject || '其他',
+        task: (s.task && s.task.trim()) ? s.task.trim() : `${s.subject}複習`
+      });
+    });
+
+    if (Array.isArray(day.extraTasks)) {
+      day.extraTasks.forEach(t => {
+        if (!t || t.deleted || t.completed) return;
+        if (filterSubj && !doesSubjectMatchFilter(t.subject, filterSubj)) return;
+        items.push({
+          kind: 'extra',
+          dayKey: day.dayCountdown,
+          isoDate: day.isoDate,
+          dateDisplay: day.dateDisplay,
+          extraId: t.id,
+          slotLabel: '待辦',
+          subject: t.subject || '其他',
+          task: (t.task && t.task.trim()) ? t.task.trim() : '待辦事項'
+        });
+      });
+    }
+  });
+  return items;
+}
+
+function renderOverdueRolloverBanner() {
+  const bannerEl = document.getElementById('calOverdueRolloverBanner');
+  if (!bannerEl) return;
+  const overdueItems = getOverdueIncompleteItems(currentCalendarSubjectFilter);
+  if (overdueItems.length === 0) {
+    bannerEl.classList.add('hidden');
+    bannerEl.innerHTML = '';
+    return;
+  }
+
+  bannerEl.classList.remove('hidden');
+  const previewItems = overdueItems.slice(-6).reverse();
+  const chipsHtml = previewItems.map(item => {
+    const swatch = getSubjectSwatchKey(item.subject);
+    const btnAttrs = item.kind === 'slot'
+      ? `data-rollover-day="${escapeHtml(item.dayKey)}" data-rollover-slot="${escapeHtml(item.slotKey)}"`
+      : `data-rollover-day="${escapeHtml(item.dayKey)}" data-rollover-extra-id="${escapeHtml(item.extraId)}"`;
+    return `
+      <div class="rollover-item-chip" data-swatch="${escapeHtml(swatch)}">
+        <span>${escapeHtml(item.dateDisplay)} ${escapeHtml(item.slotLabel)} · <strong>${escapeHtml(item.subject)}</strong> ${escapeHtml(item.task)}</span>
+        <button type="button" class="rollover-action-btn" ${btnAttrs}>順延至今日</button>
+      </div>
+    `;
+  }).join('');
+
+  bannerEl.innerHTML = `
+    <div class="rollover-banner-head">
+      <span>貼心進度提醒：偵測到 <strong>${overdueItems.length}</strong> 項過期未完成排程，可單筆或批次順延至今日（若今日時段已滿將自動放入今日額外待辦，絕不覆蓋既有排程）</span>
+      <button type="button" id="calRolloverAllBtn" class="quiet-outline-btn" data-rollover-all="1">全部順延至今日 (${overdueItems.length})</button>
+    </div>
+    <div class="rollover-items-list">${chipsHtml}</div>
+  `;
+}
+
+/**
+ * 安全將過期未完成之時段或額外任務順延至今日：
+ * - 若今日對應時段完全空白，放入今日對應時段；否則尋找今日其他空時段，若皆有排程則放入 todayDay.extraTasks
+ * - 原過期時段保留曾計時過的歷史秒數與科目，清空未完成任務文字並標記 rolledOverTo 防止重複出現
+ */
+function rolloverTaskToToday(sourceDayKey, slotKey = '', extraTaskId = '', silentToast = false) {
+  const sourceDay = findDayByKey(sourceDayKey);
+  const todayDay = findDayByKey(getTodayDayCountdown()) || findDayByKey(getTodayIsoString());
+  if (!sourceDay || !todayDay || sourceDay.isoDate === todayDay.isoDate) return false;
+
+  const nowTs = Date.now();
+  let subj = '其他';
+  let taskText = '';
+  let preferredSlot = slotKey || '';
+
+  if (extraTaskId && Array.isArray(sourceDay.extraTasks)) {
+    const targetExtra = sourceDay.extraTasks.find(t => t && t.id === extraTaskId && !t.deleted);
+    if (!targetExtra) return false;
+    subj = targetExtra.subject || '其他';
+    taskText = (targetExtra.task && targetExtra.task.trim()) ? targetExtra.task.trim() : `${subj}待辦`;
+    targetExtra.deleted = true;
+    targetExtra.updatedAt = nowTs;
+  } else if (slotKey && sourceDay[slotKey]) {
+    const srcSlot = sourceDay[slotKey];
+    subj = srcSlot.subject || '其他';
+    taskText = (srcSlot.task && srcSlot.task.trim()) ? srcSlot.task.trim() : `${subj}複習`;
+    const hadHistoryTime = getSlotEffectiveMinutes(srcSlot) > 0 || (srcSlot.accumulatedMs || 0) > 0;
+    srcSlot.task = '';
+    if (!hadHistoryTime) {
+      srcSlot.subject = '';
+    }
+    srcSlot.rolledOverTo = todayDay.isoDate;
+    srcSlot.updatedAt = nowTs;
+  } else {
+    return false;
+  }
+
+  // 檢查今日對應時段或空時段是否完全空白（不覆蓋今日已有科目或任務的時段）
+  const isSlotCompletelyEmpty = (s) => Boolean(s && !s.subject && !s.task && !s.completed && getSlotEffectiveMinutes(s) === 0 && s.timerStatus === 'idle');
+  let placedSlotKey = '';
+
+  if (preferredSlot && todayDay[preferredSlot] && isSlotCompletelyEmpty(todayDay[preferredSlot])) {
+    placedSlotKey = preferredSlot;
+  } else {
+    for (const { key } of SLOT_KEYS) {
+      if (isSlotCompletelyEmpty(todayDay[key])) {
+        placedSlotKey = key;
+        break;
+      }
+    }
+  }
+
+  if (placedSlotKey) {
+    todayDay[placedSlotKey].subject = subj;
+    todayDay[placedSlotKey].task = taskText;
+    todayDay[placedSlotKey].completed = false;
+    todayDay[placedSlotKey].rolledOverTo = '';
+    todayDay[placedSlotKey].updatedAt = nowTs;
+  } else {
+    if (!Array.isArray(todayDay.extraTasks)) todayDay.extraTasks = [];
+    todayDay.extraTasks.push({
+      id: `et_roll_${nowTs}_${Math.random().toString(36).slice(2, 7)}`,
+      subject: subj,
+      task: taskText,
+      completed: false,
+      fromDate: sourceDay.dateDisplay,
+      fromSlot: preferredSlot ? getSlotLabel(preferredSlot) : '待辦',
+      updatedAt: nowTs,
+      deleted: false
+    });
+  }
+
+  appState.updatedAt = nowTs;
+  saveState();
+
+  if (!silentToast) {
+    renderHomeView();
+    renderMainScheduleTable();
+    renderQuickTimerView();
+    renderAllStatistics();
+    const destDesc = placedSlotKey ? `今日${getSlotLabel(placedSlotKey)}時段` : '今日額外待辦清單';
+    showToast(`已將「${subj}：${taskText}」自 ${sourceDay.dateDisplay} 順延至${destDesc}`);
+  }
+  return true;
+}
+
+function rolloverAllOverdueToToday() {
+  const list = getOverdueIncompleteItems(currentCalendarSubjectFilter);
+  if (list.length === 0) return 0;
+  let count = 0;
+  list.forEach(item => {
+    const ok = item.kind === 'slot'
+      ? rolloverTaskToToday(item.dayKey, item.slotKey, '', true)
+      : rolloverTaskToToday(item.dayKey, '', item.extraId, true);
+    if (ok) count += 1;
+  });
+  if (count > 0) {
+    renderHomeView();
+    renderMainScheduleTable();
+    renderQuickTimerView();
+    renderAllStatistics();
+    showToast(`已將 ${count} 項過期未完成排程安全順延至今日！`);
+  }
+  return count;
+}
+
+function setCalendarViewMode(mode) {
+  currentCalendarViewMode = mode === 'week' ? 'week' : 'month';
+  const monthBtn = document.getElementById('calViewMonthBtn');
+  const weekBtn = document.getElementById('calViewWeekBtn');
+  const monthViewEl = document.getElementById('calendarMonthGridView');
+  const weekViewEl = document.getElementById('calendarWeekView');
+  const monthStepper = document.getElementById('calMonthStepperWrap');
+  const weekStepper = document.getElementById('calWeekStepperWrap');
+
+  if (monthBtn) monthBtn.classList.toggle('active', currentCalendarViewMode === 'month');
+  if (weekBtn) weekBtn.classList.toggle('active', currentCalendarViewMode === 'week');
+  if (monthViewEl) monthViewEl.classList.toggle('hidden', currentCalendarViewMode !== 'month');
+  if (weekViewEl) weekViewEl.classList.toggle('hidden', currentCalendarViewMode !== 'week');
+  if (monthStepper) monthStepper.classList.toggle('hidden', currentCalendarViewMode !== 'month');
+  if (weekStepper) weekStepper.classList.toggle('hidden', currentCalendarViewMode !== 'week');
+
+  renderPureCalendarTable();
+  renderCalendarWeekView();
+}
+
 function renderPureCalendarTable() {
+  renderCalendarSubjectFilterBar();
+  renderOverdueRolloverBanner();
+
   const gridEl = document.getElementById('notionCalendarGrid');
   if (!gridEl) return;
 
@@ -3026,18 +3757,26 @@ function renderPureCalendarTable() {
     const dayKey = dayObj ? dayObj.dayCountdown : isoDate;
     const isNumericCountdown = dayObj && typeof dayObj.dayCountdown === 'number';
     const totalMins = dayObj ? getDayTotalEffectiveMinutes(dayObj) : 0;
+    const activeExtras = (dayObj && Array.isArray(dayObj.extraTasks)) ? dayObj.extraTasks.filter(t => t && !t.deleted) : [];
 
-    // 關鍵字搜尋高光過濾
-    let matchesSearch = true;
+    // 關鍵字搜尋與考科篩選高光過濾
+    let matchesFilter = true;
     if (q && dayObj) {
+      const extraHay = activeExtras.map(t => `${t.subject} ${t.task}`).join(' ');
       const hay = [
         dayObj.dateDisplay,
         dayObj.calendar || '',
         dayObj.morning.subject, dayObj.morning.task,
         dayObj.afternoon.subject, dayObj.afternoon.task,
-        dayObj.evening.subject, dayObj.evening.task
+        dayObj.evening.subject, dayObj.evening.task,
+        extraHay
       ].join(' ').toLowerCase();
-      matchesSearch = hay.includes(q);
+      matchesFilter = hay.includes(q);
+    }
+    if (matchesFilter && currentCalendarSubjectFilter && dayObj) {
+      const hasSubjInSlots = SLOT_KEYS.some(({ key }) => doesSubjectMatchFilter(dayObj[key].subject, currentCalendarSubjectFilter));
+      const hasSubjInExtra = activeExtras.some(t => doesSubjectMatchFilter(t.subject, currentCalendarSubjectFilter));
+      matchesFilter = hasSubjInSlots || hasSubjInExtra;
     }
 
     const dateLabel = cD === 1 ? `${cM}月1日` : String(cD);
@@ -3072,29 +3811,426 @@ function renderPureCalendarTable() {
       `;
     }).join('');
 
+    const extraRowsHtml = activeExtras.slice(0, 2).map(t => {
+      const swatch = getSubjectSwatchKey(t.subject);
+      return `
+        <div class="cal-cell-slot-row">
+          <span class="cal-slot-tag has-subj" data-swatch="${escapeHtml(swatch)}" data-open-day-editor="${dayKey}">${escapeHtml(t.subject || '待辦')}</span>
+          <input
+            type="text"
+            class="cal-slot-input extra-task-input"
+            data-day="${dayKey}"
+            data-extra-task-id="${escapeHtml(t.id)}"
+            value="${escapeHtml(t.task || '')}"
+            placeholder="額外待辦..."
+          />
+          ${t.completed ? '<span class="cal-slot-done-dot" title="已完成">✓</span>' : ''}
+        </div>
+      `;
+    }).join('');
+
     const isSelected = String(dayKey) === String(calendarEditorDayKey);
 
     cellsHtml.push(`
       <div
         class="notion-cal-cell ${isOutsideMonth ? 'outside-month' : ''} ${isToday ? 'is-today' : ''} ${isSelected ? 'is-selected-day' : ''}"
-        style="${!matchesSearch ? 'opacity: 0.25;' : ''}"
+        style="${!matchesFilter ? 'opacity: 0.22;' : ''}"
         data-cal-cell-day="${dayKey}"
       >
         <div class="cal-cell-date-row" data-open-day-editor="${dayKey}" title="點擊開啟 ${cM}月${cD}日 快捷編輯頁面">
           <div class="cal-date-left-meta">
             ${isNumericCountdown ? `<span class="cal-countdown-mini mono-tabular">D-${dayObj.dayCountdown}</span>` : ''}
             ${dayObj && dayObj.calendar ? `<span class="cal-memo-pill" title="${escapeHtml(dayObj.calendar)}">${escapeHtml(dayObj.calendar)}</span>` : ''}
+            ${activeExtras.length > 0 ? `<span class="cal-countdown-mini mono-tabular">+${activeExtras.length}待辦</span>` : ''}
             ${totalMins > 0 ? `<span class="cal-countdown-mini mono-tabular">${formatMinutesToHM(totalMins)}</span>` : ''}
           </div>
           <span class="cal-date-num ${isToday ? 'today-circle' : ''}">${dateLabel}</span>
         </div>
 
         ${slotRowsHtml}
+        ${extraRowsHtml}
       </div>
     `);
   }
 
   gridEl.innerHTML = cellsHtml.join('');
+}
+
+/**
+ * 渲染專屬行事曆「週視圖 (Week View)」：展開單週 7 天每日排程細節與順延操作
+ */
+function renderCalendarWeekView() {
+  const weekGridEl = document.getElementById('calendarWeekGrid');
+  const rangeLabelEl = document.getElementById('calWeekRangeLabel');
+  if (!weekGridEl || !appState) return;
+
+  if (!currentCalendarWeekStartIso) {
+    currentCalendarWeekStartIso = getMondayIsoForDate(getEffectiveStudyDate());
+  }
+  const weekDays = getWeekDaysFromMondayIso(currentCalendarWeekStartIso);
+  const firstDay = weekDays[0] && weekDays[0].dayObj;
+  const lastDay = weekDays[6] && weekDays[6].dayObj;
+  if (rangeLabelEl && firstDay && lastDay) {
+    rangeLabelEl.textContent = `${firstDay.dateDisplay} ~ ${lastDay.dateDisplay}`;
+  }
+
+  const todayIso = getTodayIsoString();
+  const q = (currentSearchQuery || '').trim().toLowerCase();
+
+  weekGridEl.innerHTML = weekDays.map(({ isoDate, dayObj }) => {
+    if (!dayObj) return '';
+    const dayKey = dayObj.dayCountdown;
+    const isToday = isoDate === todayIso;
+    const isPastDay = isoDate < todayIso;
+    const isNumeric = typeof dayObj.dayCountdown === 'number';
+    const totalMins = getDayTotalEffectiveMinutes(dayObj);
+    const activeExtras = Array.isArray(dayObj.extraTasks) ? dayObj.extraTasks.filter(t => t && !t.deleted) : [];
+
+    const slotRows = SLOT_KEYS.map(({ key, label }) => {
+      const s = dayObj[key];
+      if (currentCalendarSubjectFilter && !doesSubjectMatchFilter(s.subject, currentCalendarSubjectFilter)) {
+        return '';
+      }
+      if (q) {
+        const hay = `${dayObj.dateDisplay} ${dayObj.calendar || ''} ${s.subject || ''} ${s.task || ''}`.toLowerCase();
+        if (!hay.includes(q)) return '';
+      }
+      const swatch = getSubjectSwatchKey(s.subject);
+      const canRollover = isPastDay && !s.completed && !s.rolledOverTo && Boolean((s.task && s.task.trim()) || (s.subject && s.subject !== '上課'));
+      const effMins = getSlotEffectiveMinutes(s);
+
+      return `
+        <div class="week-slot-row ${s.completed ? 'is-completed' : ''}" data-swatch="${escapeHtml(swatch)}">
+          <input
+            type="checkbox"
+            class="done-checkbox week-slot-checkbox"
+            data-day="${dayKey}"
+            data-slot="${key}"
+            ${s.completed ? 'checked' : ''}
+          />
+          <span
+            class="cal-slot-tag ${s.subject ? 'has-subj' : ''}"
+            data-swatch="${escapeHtml(swatch)}"
+            data-cycle-subj-day="${dayKey}"
+            data-cycle-subj-slot="${key}"
+            title="點擊切換科目"
+          >${escapeHtml(s.subject || label)}</span>
+          <input
+            type="text"
+            class="week-slot-task-inp cal-slot-input"
+            data-day="${dayKey}"
+            data-slot="${key}"
+            value="${escapeHtml(s.task || '')}"
+            placeholder="輸入${label}排程任務..."
+          />
+          ${effMins > 0 ? `<span class="stat-sub-val mono-tabular">${formatMinutesToHM(effMins)}</span>` : ''}
+          ${canRollover ? `<button type="button" class="rollover-action-btn" data-rollover-day="${dayKey}" data-rollover-slot="${key}">順延至今日</button>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    const extraRows = activeExtras.map(t => {
+      if (currentCalendarSubjectFilter && !doesSubjectMatchFilter(t.subject, currentCalendarSubjectFilter)) {
+        return '';
+      }
+      const swatch = getSubjectSwatchKey(t.subject);
+      const canRollover = isPastDay && !t.completed;
+      return `
+        <div class="week-slot-row ${t.completed ? 'is-completed' : ''}" data-swatch="${escapeHtml(swatch)}">
+          <input
+            type="checkbox"
+            class="done-checkbox extra-task-checkbox"
+            data-day="${dayKey}"
+            data-extra-task-id="${escapeHtml(t.id)}"
+            ${t.completed ? 'checked' : ''}
+          />
+          <span class="cal-slot-tag has-subj" data-swatch="${escapeHtml(swatch)}">${escapeHtml(t.subject || '待辦')}</span>
+          <input
+            type="text"
+            class="week-slot-task-inp extra-task-input"
+            data-day="${dayKey}"
+            data-extra-task-id="${escapeHtml(t.id)}"
+            value="${escapeHtml(t.task || '')}"
+            placeholder="額外待辦..."
+          />
+          ${canRollover ? `<button type="button" class="rollover-action-btn" data-rollover-day="${dayKey}" data-rollover-extra-id="${escapeHtml(t.id)}">順延至今日</button>` : ''}
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="week-day-card ${isToday ? 'is-today' : ''}" data-week-day="${dayKey}">
+        <div class="week-day-head">
+          <div class="week-day-title-group">
+            <span>${dayObj.dateDisplay} ${dayObj.weekdayDisplay}</span>
+            ${isNumeric ? `<span class="day-tag mono-tabular">D-${dayObj.dayCountdown}</span>` : ''}
+            ${isToday ? `<span class="phase-tag">今日</span>` : ''}
+          </div>
+          <div class="rail-day-meta">
+            ${totalMins > 0 ? `<span class="stat-sub-val mono-tabular">${formatMinutesToHM(totalMins)}</span>` : ''}
+            <button type="button" class="quiet-text-btn" data-open-day-editor="${dayKey}">詳細</button>
+          </div>
+        </div>
+        <input
+          type="text"
+          class="input-hairline week-memo-input"
+          data-week-memo-day="${dayKey}"
+          value="${escapeHtml(dayObj.calendar || '')}"
+          placeholder="當日備忘或模考提醒..."
+        />
+        <div class="week-day-slots">
+          ${slotRows || '<div class="settings-note">無符合篩選條件的時段</div>'}
+          ${extraRows}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ==========================================================================
+   第 3 頁：備忘錄與目標（階段性里程碑 Milestones + 分科備忘錄卡片牆 Study Notes）
+   ========================================================================== */
+
+function renderMemoGoalsView() {
+  if (typeof document === 'undefined' || !appState) return;
+  renderEditableMetadataDom();
+  renderMilestonesSection();
+  renderStudyNotesSection();
+}
+
+function renderMilestonesSection() {
+  const filterBarEl = document.getElementById('milestoneSubjectFilterBar');
+  const subjSelectEl = document.getElementById('milestoneSubjectSelect');
+  const phaseSelectEl = document.getElementById('milestonePhaseSelect');
+  const summaryEl = document.getElementById('milestoneOverallSummary');
+  const gridEl = document.getElementById('milestonesGrid');
+  if (!gridEl || !appState) return;
+
+  const entities = getSubjectEntities();
+  if (subjSelectEl) {
+    const prev = subjSelectEl.value;
+    subjSelectEl.innerHTML = entities.map(s => `
+      <option value="${escapeHtml(s.name)}" ${prev === s.name ? 'selected' : ''}>${escapeHtml(s.name)}</option>
+    `).join('');
+  }
+  if (phaseSelectEl && Array.isArray(appState.phases) && appState.phases.length === 3) {
+    const prevP = phaseSelectEl.value || 'phase1';
+    phaseSelectEl.innerHTML = appState.phases.map((p, idx) => {
+      const pKey = `phase${idx + 1}`;
+      return `<option value="${pKey}" ${prevP === pKey ? 'selected' : ''}>${escapeHtml(p.name)} (Day ${p.startDay}-${p.endDay})</option>`;
+    }).join('');
+  }
+
+  if (filterBarEl) {
+    const allPill = `<button type="button" class="subj-filter-pill ${!currentMilestoneSubjectFilter ? 'active' : ''}" data-ms-subj="">全部考科</button>`;
+    const subjPills = entities.map(e => `
+      <button type="button" class="subj-filter-pill ${currentMilestoneSubjectFilter === e.name ? 'active' : ''}" data-ms-subj="${escapeHtml(e.name)}" data-swatch="${escapeHtml(e.swatch)}">
+        <span class="subj-filter-dot" data-swatch="${escapeHtml(e.swatch)}"></span>
+        <span>${escapeHtml(e.name)}</span>
+      </button>
+    `).join('');
+    filterBarEl.innerHTML = allPill + subjPills;
+  }
+
+  const allActiveMs = (appState.milestones || []).filter(m => m && !m.deleted);
+  let totalSubsAll = 0;
+  let doneSubsAll = 0;
+  allActiveMs.forEach(m => {
+    const subs = Array.isArray(m.subItems) ? m.subItems : [];
+    totalSubsAll += subs.length;
+    doneSubsAll += subs.filter(s => s.done).length;
+  });
+  const overallPct = totalSubsAll > 0 ? Math.round((doneSubsAll / totalSubsAll) * 100) : 0;
+  if (summaryEl) {
+    summaryEl.textContent = `總進度 ${overallPct}% (${doneSubsAll}/${totalSubsAll} 子目標完成)`;
+  }
+
+  const filteredMs = allActiveMs.filter(m => doesSubjectMatchFilter(m.subject, currentMilestoneSubjectFilter));
+  if (filteredMs.length === 0) {
+    gridEl.innerHTML = `<div class="settings-note">尚無符合條件的階段性里程碑，可於上方新增目標。</div>`;
+    return;
+  }
+
+  const phaseNameMap = {
+    phase1: (appState.phases[0] && appState.phases[0].name) || '第一階段',
+    phase2: (appState.phases[1] && appState.phases[1].name) || '第二階段',
+    phase3: (appState.phases[2] && appState.phases[2].name) || '第三階段'
+  };
+
+  gridEl.innerHTML = filteredMs.map(ms => {
+    const swatch = getSubjectSwatchKey(ms.subject);
+    const subs = Array.isArray(ms.subItems) ? ms.subItems : [];
+    const doneCnt = subs.filter(s => s.done).length;
+    const pct = subs.length > 0 ? Math.round((doneCnt / subs.length) * 100) : 0;
+    const pLabel = phaseNameMap[ms.phaseId] || '衝刺階段';
+
+    const subRowsHtml = subs.map(sub => `
+      <div class="milestone-subitem-row ${sub.done ? 'is-done' : ''}">
+        <label class="done-checkbox-label" style="flex: 1 1 auto;">
+          <input
+            type="checkbox"
+            class="done-checkbox ms-subitem-checkbox"
+            data-ms-id="${escapeHtml(ms.id)}"
+            data-sub-id="${escapeHtml(sub.id)}"
+            ${sub.done ? 'checked' : ''}
+          />
+          <span class="milestone-subitem-text">${escapeHtml(sub.text)}</span>
+        </label>
+        <button
+          type="button"
+          class="quiet-text-btn"
+          data-del-sub-ms-id="${escapeHtml(ms.id)}"
+          data-del-sub-id="${escapeHtml(sub.id)}"
+          title="刪除此子項目"
+        >刪除</button>
+      </div>
+    `).join('');
+
+    return `
+      <div class="milestone-card" data-swatch="${escapeHtml(swatch)}">
+        <div class="milestone-card-head">
+          <div class="milestone-title-group">
+            <div class="study-note-badges">
+              <span class="subj-pill" data-swatch="${escapeHtml(swatch)}">${escapeHtml(ms.subject)}</span>
+              <span class="phase-tag">${escapeHtml(pLabel)}</span>
+            </div>
+            <input
+              type="text"
+              class="study-note-title-input ms-title-input"
+              data-ms-title-id="${escapeHtml(ms.id)}"
+              value="${escapeHtml(ms.title)}"
+              aria-label="里程碑標題"
+            />
+          </div>
+          <button type="button" class="quiet-text-btn" data-del-ms-id="${escapeHtml(ms.id)}" title="刪除此里程碑">刪除</button>
+        </div>
+
+        <div class="milestone-progress-row">
+          <span>完成度</span>
+          <span class="mono-tabular">${doneCnt} / ${subs.length} (${pct}%)</span>
+        </div>
+        <div class="hairline-progress" aria-hidden="true">
+          <div class="hairline-progress-fill" style="--progress-scale: ${(pct / 100).toFixed(3)};"></div>
+        </div>
+
+        <div class="milestone-subitems-list">
+          ${subRowsHtml}
+        </div>
+
+        <div class="milestone-subadd-row">
+          <input
+            type="text"
+            class="input-hairline milestone-subadd-inp"
+            data-subadd-input-ms="${escapeHtml(ms.id)}"
+            placeholder="新增子目標項目 (按 Enter 新增)..."
+          />
+          <button type="button" class="quiet-outline-btn" data-add-sub-ms-id="${escapeHtml(ms.id)}">+ 子項目</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderStudyNotesSection() {
+  const filterBarEl = document.getElementById('notesCategoryFilterBar');
+  const catSelectEl = document.getElementById('noteCategorySelect');
+  const countLabelEl = document.getElementById('studyNotesCountLabel');
+  const gridEl = document.getElementById('studyNotesGrid');
+  if (!gridEl || !appState) return;
+
+  const entities = getSubjectEntities();
+  const categories = ['一般事項', ...entities.map(s => s.name)];
+
+  if (catSelectEl) {
+    const prev = catSelectEl.value;
+    catSelectEl.innerHTML = categories.map(cat => `
+      <option value="${escapeHtml(cat)}" ${prev === cat ? 'selected' : ''}>${escapeHtml(cat)}</option>
+    `).join('');
+  }
+
+  if (filterBarEl) {
+    const basePills = `
+      <button type="button" class="subj-filter-pill ${!currentNoteCategoryFilter ? 'active' : ''}" data-note-cat="">全部筆記</button>
+      <button type="button" class="subj-filter-pill ${currentNoteCategoryFilter === '__pinned__' ? 'active' : ''}" data-note-cat="__pinned__">已釘選</button>
+      <button type="button" class="subj-filter-pill ${currentNoteCategoryFilter === '一般事項' ? 'active' : ''}" data-note-cat="一般事項">一般事項</button>
+    `;
+    const subjPills = entities.map(e => `
+      <button type="button" class="subj-filter-pill ${currentNoteCategoryFilter === e.name ? 'active' : ''}" data-note-cat="${escapeHtml(e.name)}" data-swatch="${escapeHtml(e.swatch)}">
+        <span class="subj-filter-dot" data-swatch="${escapeHtml(e.swatch)}"></span>
+        <span>${escapeHtml(e.name)}</span>
+      </button>
+    `).join('');
+    filterBarEl.innerHTML = basePills + subjPills;
+  }
+
+  const activeNotes = (appState.studyNotes || []).filter(n => n && !n.deleted);
+  if (countLabelEl) {
+    countLabelEl.textContent = `共 ${activeNotes.length} 則筆記`;
+  }
+
+  const q = (currentNoteSearchQuery || '').trim().toLowerCase();
+  const filteredNotes = activeNotes
+    .filter(n => {
+      if (currentNoteCategoryFilter === '__pinned__' && !n.pinned) return false;
+      if (currentNoteCategoryFilter && currentNoteCategoryFilter !== '__pinned__') {
+        if (!doesSubjectMatchFilter(n.subject, currentNoteCategoryFilter)) return false;
+      }
+      if (q) {
+        const hay = `${n.subject || ''} ${n.title || ''} ${n.content || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (Boolean(b.pinned) !== Boolean(a.pinned)) {
+        return b.pinned ? 1 : -1;
+      }
+      return (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0);
+    });
+
+  if (filteredNotes.length === 0) {
+    gridEl.innerHTML = `<div class="settings-note">尚無符合條件的備忘錄卡片，可於上方輸入框快速建立分科筆記或重要提醒。</div>`;
+    return;
+  }
+
+  gridEl.innerHTML = filteredNotes.map(note => {
+    const swatch = getSubjectSwatchKey(note.subject);
+    const dt = note.updatedAt ? new Date(note.updatedAt) : null;
+    const timeStr = dt && !Number.isNaN(dt.getTime())
+      ? `${dt.getMonth() + 1}/${dt.getDate()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
+      : '剛剛';
+
+    return `
+      <article class="study-note-card ${note.pinned ? 'is-pinned' : ''}" data-swatch="${escapeHtml(swatch)}" data-note-card-id="${escapeHtml(note.id)}">
+        <div class="study-note-head">
+          <div class="study-note-badges">
+            <span class="subj-pill" data-swatch="${escapeHtml(swatch)}">${escapeHtml(note.subject || '一般事項')}</span>
+            ${note.pinned ? `<span class="pin-badge">已釘選</span>` : ''}
+          </div>
+          <div class="rail-day-meta">
+            <button type="button" class="quiet-text-btn" data-pin-note-id="${escapeHtml(note.id)}">${note.pinned ? '取消釘選' : '釘選置頂'}</button>
+            <button type="button" class="quiet-text-btn" data-del-note-id="${escapeHtml(note.id)}">刪除</button>
+          </div>
+        </div>
+        <input
+          type="text"
+          class="study-note-title-input"
+          data-note-title-id="${escapeHtml(note.id)}"
+          value="${escapeHtml(note.title || '')}"
+          placeholder="備忘錄標題..."
+        />
+        <textarea
+          class="study-note-body-textarea"
+          data-note-body-id="${escapeHtml(note.id)}"
+          rows="4"
+          placeholder="輸入筆記內容..."
+        >${escapeHtml(note.content || '')}</textarea>
+        <div class="study-note-foot">
+          <span class="mono-tabular">最後更新 ${escapeHtml(timeStr)}</span>
+        </div>
+      </article>
+    `;
+  }).join('');
 }
 
 
@@ -3204,6 +4340,7 @@ function renderMainScheduleTable() {
     calendarEditorDayKey = getTodayDayCountdown();
   }
   renderPureCalendarTable();
+  renderCalendarWeekView();
   renderDailyPlanView(calendarEditorDayKey);
   renderDailyFocusScheduleTable();
 }
@@ -4722,6 +5859,193 @@ function setupEventListeners() {
     });
   }
 
+  // 10D. 第一頁：快速排程 (Quick Add)、額外待辦、順延與考科考期設定
+  const quickAddDateInput = document.getElementById('quickAddDateInput');
+  const quickAddSlotSelect = document.getElementById('quickAddSlotSelect');
+  const quickAddSubjectSelect = document.getElementById('quickAddSubjectSelect');
+  const quickAddTaskInput = document.getElementById('quickAddTaskInput');
+  const quickAddSubmitBtn = document.getElementById('quickAddSubmitBtn');
+  const quickAddSetTodayBtn = document.getElementById('quickAddSetTodayBtn');
+  const quickAddSetTomorrowBtn = document.getElementById('quickAddSetTomorrowBtn');
+
+  if (quickAddSetTodayBtn && quickAddDateInput) {
+    quickAddSetTodayBtn.addEventListener('click', () => {
+      quickAddDateInput.value = getTodayIsoString();
+    });
+  }
+  if (quickAddSetTomorrowBtn && quickAddDateInput) {
+    quickAddSetTomorrowBtn.addEventListener('click', () => {
+      const eff = getEffectiveStudyDate();
+      const tmr = new Date(eff.getFullYear(), eff.getMonth(), eff.getDate() + 1);
+      quickAddDateInput.value = `${tmr.getFullYear()}-${String(tmr.getMonth() + 1).padStart(2, '0')}-${String(tmr.getDate()).padStart(2, '0')}`;
+    });
+  }
+  const triggerQuickAddFromUi = () => {
+    const targetIso = (quickAddDateInput && quickAddDateInput.value) ? quickAddDateInput.value : (getHomeActiveDay() ? getHomeActiveDay().isoDate : getTodayIsoString());
+    const slotChoice = (quickAddSlotSelect && quickAddSlotSelect.value) ? quickAddSlotSelect.value : 'auto';
+    const subj = (quickAddSubjectSelect && quickAddSubjectSelect.value) ? quickAddSubjectSelect.value : '';
+    const taskVal = quickAddTaskInput ? quickAddTaskInput.value : '';
+    const res = addQuickScheduleTask(targetIso, slotChoice, subj, taskVal);
+    if (res && quickAddTaskInput) {
+      quickAddTaskInput.value = '';
+    }
+  };
+  if (quickAddSubmitBtn) {
+    quickAddSubmitBtn.addEventListener('click', triggerQuickAddFromUi);
+  }
+  if (quickAddTaskInput) {
+    quickAddTaskInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        triggerQuickAddFromUi();
+      }
+    });
+  }
+
+  const homeSubjectStatusGrid = document.getElementById('homeSubjectStatusGrid');
+  if (homeSubjectStatusGrid) {
+    homeSubjectStatusGrid.addEventListener('change', (e) => {
+      const inp = e.target.closest('input[data-subject-exam-id]');
+      if (!inp) return;
+      const subjId = inp.dataset.subjectExamId;
+      const newDate = inp.value.trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return;
+      const entity = findSubjectEntity(subjId);
+      if (entity) {
+        const nowTs = Date.now();
+        entity.examDate = newDate;
+        entity.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
+        saveState();
+        renderHomeSubjectStatusGrid();
+        showToast(`已更新「${entity.name}」目標考期為 ${newDate}`);
+        if (currentRoomId && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({ kind: 'subjectEntity', id: entity.id, name: entity.name, swatch: entity.swatch, examDate: entity.examDate, updatedAt: nowTs });
+        }
+      }
+    });
+  }
+
+  const homeOverdueQuickHint = document.getElementById('homeOverdueQuickHint');
+  if (homeOverdueQuickHint) {
+    homeOverdueQuickHint.addEventListener('click', (e) => {
+      if (e.target.closest('[data-jump-overdue-cal]')) {
+        switchMainTab('calendar-schedule');
+      }
+    });
+  }
+
+  // 全域委派：順延至今日按鈕 (data-rollover-day / data-rollover-all) 與額外待辦 (extra-task) 操作
+  document.addEventListener('click', (e) => {
+    const rollAllBtn = e.target.closest('[data-rollover-all]');
+    if (rollAllBtn) {
+      e.preventDefault();
+      const count = getOverdueIncompleteItems(currentCalendarSubjectFilter).length;
+      if (count > 1 && typeof window.confirm === 'function') {
+        if (!window.confirm(`確定要將 ${count} 項過期未完成排程全部順延至今日嗎？（也可以點下方單一排程旁的「順延至今日」逐筆順延）`)) {
+          return;
+        }
+      }
+      rolloverAllOverdueToToday();
+      return;
+    }
+    const rollBtn = e.target.closest('[data-rollover-day]');
+    if (rollBtn) {
+      e.preventDefault();
+      const dayKey = rollBtn.dataset.rolloverDay;
+      const slotKey = rollBtn.dataset.rolloverSlot || '';
+      const extraId = rollBtn.dataset.rolloverExtraId || '';
+      rolloverTaskToToday(dayKey, slotKey, extraId, false);
+      return;
+    }
+    const delExtraBtn = e.target.closest('[data-del-extra-id]');
+    if (delExtraBtn) {
+      e.preventDefault();
+      const dayKey = delExtraBtn.dataset.delExtraDay;
+      const extraId = delExtraBtn.dataset.delExtraId;
+      const day = findDayByKey(dayKey);
+      if (day && Array.isArray(day.extraTasks)) {
+        const t = day.extraTasks.find(item => item && item.id === extraId);
+        if (t) {
+          const nowTs = Date.now();
+          t.deleted = true;
+          t.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+          renderHomeView();
+          renderMainScheduleTable();
+          showToast('已刪除待辦事項');
+        }
+      }
+    }
+  });
+
+  document.addEventListener('change', (e) => {
+    const target = e.target;
+    if (target.classList && target.classList.contains('extra-task-checkbox')) {
+      const dayKey = target.dataset.day;
+      const extraId = target.dataset.extraTaskId;
+      const day = findDayByKey(dayKey);
+      if (day && Array.isArray(day.extraTasks)) {
+        const t = day.extraTasks.find(item => item && item.id === extraId && !item.deleted);
+        if (t) {
+          const nowTs = Date.now();
+          t.completed = Boolean(target.checked);
+          t.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+          renderHomeView();
+          renderMainScheduleTable();
+        }
+      }
+    } else if (target.classList && target.classList.contains('week-slot-checkbox')) {
+      const dayKey = target.dataset.day;
+      const slotKey = target.dataset.slot;
+      const day = findDayByKey(dayKey);
+      if (day && day[slotKey]) {
+        const nowTs = Date.now();
+        day[slotKey].completed = Boolean(target.checked);
+        day[slotKey].updatedAt = nowTs;
+        appState.updatedAt = nowTs;
+        saveState();
+        refreshSlotDom(day, slotKey);
+        updateSingleDayRowSummaryDom(day);
+        renderHomeView();
+        renderMainScheduleTable();
+        renderQuickTimerView();
+        renderAllStatistics();
+        if (currentRoomId && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({ kind: 'completed', day: dayKey, slot: slotKey, val: day[slotKey].completed, updatedAt: nowTs, label: `${day.dateDisplay} ${getSlotLabel(slotKey)}` });
+        }
+      }
+    }
+  });
+
+  document.addEventListener('input', (e) => {
+    const target = e.target;
+    if (target.classList && target.classList.contains('extra-task-input')) {
+      const dayKey = target.dataset.day;
+      const extraId = target.dataset.extraTaskId;
+      const day = findDayByKey(dayKey);
+      if (day && Array.isArray(day.extraTasks)) {
+        const t = day.extraTasks.find(item => item && item.id === extraId && !item.deleted);
+        if (t) {
+          const nowTs = Date.now();
+          t.task = target.value;
+          t.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+        }
+      }
+    } else if (target.classList && target.classList.contains('week-memo-input')) {
+      const dayKey = target.dataset.weekMemoDay;
+      const day = findDayByKey(dayKey);
+      if (day) {
+        updateCalendarMemoForDay(day, target.value, target);
+      }
+    }
+  });
+
 
 
   // 11. 左欄（即時專注計時與科目管理）互動處理
@@ -4834,9 +6158,110 @@ function setupEventListeners() {
   const calTodayMonthBtn = document.getElementById('calTodayMonthBtn');
   if (calTodayMonthBtn) {
     calTodayMonthBtn.addEventListener('click', () => {
-      const now = new Date();
-      currentCalendarMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const eff = getEffectiveStudyDate();
+      const ym = `${eff.getFullYear()}-${String(eff.getMonth() + 1).padStart(2, '0')}`;
+      currentCalendarMonth = ['2026-11', '2026-12', '2027-01'].includes(ym) ? ym : '2026-11';
+      currentCalendarWeekStartIso = getMondayIsoForDate(eff);
       renderPureCalendarTable();
+      renderCalendarWeekView();
+    });
+  }
+
+  const calViewModeSwitcher = document.getElementById('calViewModeSwitcher');
+  if (calViewModeSwitcher) {
+    calViewModeSwitcher.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-cal-view]');
+      if (btn && btn.dataset.calView) {
+        setCalendarViewMode(btn.dataset.calView);
+      }
+    });
+  }
+
+  const calSubjectFilterBar = document.getElementById('calSubjectFilterBar');
+  if (calSubjectFilterBar) {
+    calSubjectFilterBar.addEventListener('click', (e) => {
+      const pill = e.target.closest('[data-cal-subj]');
+      if (!pill) return;
+      const subj = pill.dataset.calSubj || '';
+      currentCalendarSubjectFilter = (currentCalendarSubjectFilter === subj && subj !== '') ? '' : subj;
+      renderPureCalendarTable();
+      renderCalendarWeekView();
+    });
+  }
+
+  const calPrevWeekBtn = document.getElementById('calPrevWeekBtn');
+  if (calPrevWeekBtn) {
+    calPrevWeekBtn.addEventListener('click', () => {
+      const base = currentCalendarWeekStartIso || getMondayIsoForDate(getEffectiveStudyDate());
+      const [y, m, d] = base.split('-').map(Number);
+      const dt = new Date(y, m - 1, d - 7);
+      currentCalendarWeekStartIso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      renderCalendarWeekView();
+    });
+  }
+
+  const calNextWeekBtn = document.getElementById('calNextWeekBtn');
+  if (calNextWeekBtn) {
+    calNextWeekBtn.addEventListener('click', () => {
+      const base = currentCalendarWeekStartIso || getMondayIsoForDate(getEffectiveStudyDate());
+      const [y, m, d] = base.split('-').map(Number);
+      const dt = new Date(y, m - 1, d + 7);
+      currentCalendarWeekStartIso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      renderCalendarWeekView();
+    });
+  }
+
+  const calendarWeekGrid = document.getElementById('calendarWeekGrid');
+  if (calendarWeekGrid) {
+    calendarWeekGrid.addEventListener('click', (e) => {
+      const openEditorEl = e.target.closest('[data-open-day-editor]');
+      if (openEditorEl) {
+        openCalendarDayEditor(openEditorEl.dataset.openDayEditor);
+        return;
+      }
+      const cycleSubjEl = e.target.closest('[data-cycle-subj-day]');
+      if (cycleSubjEl) {
+        const dayKey = cycleSubjEl.dataset.cycleSubjDay;
+        const slotKey = cycleSubjEl.dataset.cycleSubjSlot;
+        const day = findDayByKey(dayKey);
+        if (day && day[slotKey]) {
+          const subjectChoices = getSubjectOptionsList();
+          const curSubj = day[slotKey].subject || '';
+          const nextSubj = subjectChoices[(subjectChoices.indexOf(curSubj) + 1) % subjectChoices.length];
+          const nowTs = Date.now();
+          day[slotKey].subject = nextSubj;
+          day[slotKey].updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+          renderMainScheduleTable();
+          renderHomeView();
+          renderQuickTimerView();
+          renderAllStatistics();
+          if (currentRoomId && !isReceivingRemoteUpdate) {
+            broadcastRoomDelta({ kind: 'subject', day: dayKey, slot: slotKey, val: nextSubj, updatedAt: nowTs });
+          }
+        }
+      }
+    });
+    calendarWeekGrid.addEventListener('input', (e) => {
+      const inp = e.target;
+      if (inp.classList && inp.classList.contains('cal-slot-input') && inp.dataset.slot) {
+        const dayKey = inp.dataset.day;
+        const slotKey = inp.dataset.slot;
+        const day = findDayByKey(dayKey);
+        if (day && day[slotKey]) {
+          const nowTs = Date.now();
+          day[slotKey].task = inp.value;
+          day[slotKey].updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+          refreshSlotDom(day, slotKey);
+          renderPureCalendarTable();
+          if (currentRoomId && !isReceivingRemoteUpdate) {
+            broadcastRoomDeltaDebounced({ kind: 'task', day: dayKey, slot: slotKey, val: inp.value, updatedAt: nowTs });
+          }
+        }
+      }
     });
   }
 
@@ -5131,6 +6556,304 @@ function setupEventListeners() {
       }
     });
   }
+
+  // 17. 第三頁：備忘錄與目標 (Milestones & Study Notes) 互動處理
+  const milestoneSubjectFilterBar = document.getElementById('milestoneSubjectFilterBar');
+  if (milestoneSubjectFilterBar) {
+    milestoneSubjectFilterBar.addEventListener('click', (e) => {
+      const pill = e.target.closest('[data-ms-subj]');
+      if (!pill) return;
+      const subj = pill.dataset.msSubj || '';
+      currentMilestoneSubjectFilter = (currentMilestoneSubjectFilter === subj && subj !== '') ? '' : subj;
+      renderMilestonesSection();
+    });
+  }
+
+  const addMilestoneBtn = document.getElementById('addMilestoneBtn');
+  const milestoneTitleInput = document.getElementById('milestoneTitleInput');
+  const milestoneSubjectSelect = document.getElementById('milestoneSubjectSelect');
+  const milestonePhaseSelect = document.getElementById('milestonePhaseSelect');
+
+  const handleCreateMilestone = () => {
+    const titleVal = milestoneTitleInput ? milestoneTitleInput.value.trim() : '';
+    if (!titleVal) {
+      showToast('請輸入階段性里程碑標題');
+      return;
+    }
+    const subj = (milestoneSubjectSelect && milestoneSubjectSelect.value) ? milestoneSubjectSelect.value : (getSubjectEntities()[0] ? getSubjectEntities()[0].name : '其他');
+    const phaseId = (milestonePhaseSelect && milestonePhaseSelect.value) ? milestonePhaseSelect.value : 'phase1';
+    const nowTs = Date.now();
+    if (!Array.isArray(appState.milestones)) appState.milestones = [];
+    appState.milestones.push({
+      id: `ms_${nowTs}_${Math.random().toString(36).slice(2, 7)}`,
+      subject: subj,
+      phaseId,
+      title: titleVal,
+      subItems: [],
+      updatedAt: nowTs,
+      deleted: false
+    });
+    appState.updatedAt = nowTs;
+    if (milestoneTitleInput) milestoneTitleInput.value = '';
+    saveState();
+    renderMilestonesSection();
+    showToast(`已新增里程碑：${subj} — ${titleVal}`);
+  };
+
+  if (addMilestoneBtn) {
+    addMilestoneBtn.addEventListener('click', handleCreateMilestone);
+  }
+  if (milestoneTitleInput) {
+    milestoneTitleInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleCreateMilestone();
+      }
+    });
+  }
+
+  const milestonesGrid = document.getElementById('milestonesGrid');
+  if (milestonesGrid) {
+    milestonesGrid.addEventListener('click', (e) => {
+      const delMsBtn = e.target.closest('[data-del-ms-id]');
+      if (delMsBtn) {
+        const msId = delMsBtn.dataset.delMsId;
+        const ms = (appState.milestones || []).find(m => m && m.id === msId);
+        if (ms) {
+          const nowTs = Date.now();
+          ms.deleted = true;
+          ms.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+          renderMilestonesSection();
+          showToast('已刪除里程碑');
+        }
+        return;
+      }
+
+      const addSubBtn = e.target.closest('[data-add-sub-ms-id]');
+      if (addSubBtn) {
+        const msId = addSubBtn.dataset.addSubMsId;
+        const inp = milestonesGrid.querySelector(`input[data-subadd-input-ms="${CSS.escape(msId)}"]`);
+        const textVal = inp ? inp.value.trim() : '';
+        if (!textVal) {
+          showToast('請輸入子目標內容');
+          return;
+        }
+        const ms = (appState.milestones || []).find(m => m && m.id === msId && !m.deleted);
+        if (ms) {
+          const nowTs = Date.now();
+          if (!Array.isArray(ms.subItems)) ms.subItems = [];
+          ms.subItems.push({
+            id: `sub_${nowTs}_${Math.random().toString(36).slice(2, 6)}`,
+            text: textVal,
+            done: false
+          });
+          ms.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          if (inp) inp.value = '';
+          saveState();
+          renderMilestonesSection();
+        }
+        return;
+      }
+
+      const delSubBtn = e.target.closest('[data-del-sub-ms-id]');
+      if (delSubBtn) {
+        const msId = delSubBtn.dataset.delSubMsId;
+        const subId = delSubBtn.dataset.delSubId;
+        const ms = (appState.milestones || []).find(m => m && m.id === msId && !m.deleted);
+        if (ms && Array.isArray(ms.subItems)) {
+          const nowTs = Date.now();
+          ms.subItems = ms.subItems.filter(s => s && s.id !== subId);
+          ms.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+          renderMilestonesSection();
+        }
+      }
+    });
+
+    milestonesGrid.addEventListener('change', (e) => {
+      const chk = e.target.closest('.ms-subitem-checkbox');
+      if (chk) {
+        const msId = chk.dataset.msId;
+        const subId = chk.dataset.subId;
+        const ms = (appState.milestones || []).find(m => m && m.id === msId && !m.deleted);
+        if (ms && Array.isArray(ms.subItems)) {
+          const sub = ms.subItems.find(s => s && s.id === subId);
+          if (sub) {
+            const nowTs = Date.now();
+            sub.done = Boolean(chk.checked);
+            ms.updatedAt = nowTs;
+            appState.updatedAt = nowTs;
+            saveState();
+            renderMilestonesSection();
+          }
+        }
+      }
+    });
+
+    milestonesGrid.addEventListener('input', (e) => {
+      const titleInp = e.target.closest('.ms-title-input');
+      if (titleInp) {
+        const msId = titleInp.dataset.msTitleId;
+        const ms = (appState.milestones || []).find(m => m && m.id === msId && !m.deleted);
+        if (ms) {
+          const nowTs = Date.now();
+          ms.title = titleInp.value;
+          ms.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+        }
+      }
+    });
+
+    milestonesGrid.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('milestone-subadd-inp')) {
+        e.preventDefault();
+        const msId = e.target.dataset.subaddInputMs;
+        const textVal = e.target.value.trim();
+        if (!textVal) return;
+        const ms = (appState.milestones || []).find(m => m && m.id === msId && !m.deleted);
+        if (ms) {
+          const nowTs = Date.now();
+          if (!Array.isArray(ms.subItems)) ms.subItems = [];
+          ms.subItems.push({
+            id: `sub_${nowTs}_${Math.random().toString(36).slice(2, 6)}`,
+            text: textVal,
+            done: false
+          });
+          ms.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          e.target.value = '';
+          saveState();
+          renderMilestonesSection();
+        }
+      }
+    });
+  }
+
+  const notesCategoryFilterBar = document.getElementById('notesCategoryFilterBar');
+  if (notesCategoryFilterBar) {
+    notesCategoryFilterBar.addEventListener('click', (e) => {
+      const pill = e.target.closest('[data-note-cat]');
+      if (!pill) return;
+      const cat = pill.dataset.noteCat || '';
+      currentNoteCategoryFilter = (currentNoteCategoryFilter === cat && cat !== '') ? '' : cat;
+      renderStudyNotesSection();
+    });
+  }
+
+  const studyNotesSearchInput = document.getElementById('studyNotesSearchInput');
+  if (studyNotesSearchInput) {
+    studyNotesSearchInput.addEventListener('input', (e) => {
+      currentNoteSearchQuery = e.target.value;
+      renderStudyNotesSection();
+    });
+  }
+
+  const addStudyNoteBtn = document.getElementById('addStudyNoteBtn');
+  const noteCategorySelect = document.getElementById('noteCategorySelect');
+  const noteTitleInput = document.getElementById('noteTitleInput');
+  const noteContentInput = document.getElementById('noteContentInput');
+  const notePinCheckbox = document.getElementById('notePinCheckbox');
+
+  if (addStudyNoteBtn) {
+    addStudyNoteBtn.addEventListener('click', () => {
+      const titleVal = noteTitleInput ? noteTitleInput.value.trim() : '';
+      const contentVal = noteContentInput ? noteContentInput.value.trim() : '';
+      if (!titleVal && !contentVal) {
+        showToast('請輸入備忘錄標題或內容');
+        return;
+      }
+      const cat = (noteCategorySelect && noteCategorySelect.value) ? noteCategorySelect.value : '一般事項';
+      const pinned = Boolean(notePinCheckbox && notePinCheckbox.checked);
+      const nowTs = Date.now();
+      if (!Array.isArray(appState.studyNotes)) appState.studyNotes = [];
+      appState.studyNotes.unshift({
+        id: `sn_${nowTs}_${Math.random().toString(36).slice(2, 7)}`,
+        subject: cat,
+        title: titleVal || '重點備忘',
+        content: contentVal,
+        pinned,
+        createdAt: nowTs,
+        updatedAt: nowTs,
+        deleted: false
+      });
+      appState.updatedAt = nowTs;
+      if (noteTitleInput) noteTitleInput.value = '';
+      if (noteContentInput) noteContentInput.value = '';
+      if (notePinCheckbox) notePinCheckbox.checked = false;
+      saveState();
+      renderStudyNotesSection();
+      showToast(`已新增「${cat}」備忘錄筆記！`);
+    });
+  }
+
+  const studyNotesGrid = document.getElementById('studyNotesGrid');
+  if (studyNotesGrid) {
+    studyNotesGrid.addEventListener('click', (e) => {
+      const pinBtn = e.target.closest('[data-pin-note-id]');
+      if (pinBtn) {
+        const noteId = pinBtn.dataset.pinNoteId;
+        const note = (appState.studyNotes || []).find(n => n && n.id === noteId && !n.deleted);
+        if (note) {
+          const nowTs = Date.now();
+          note.pinned = !note.pinned;
+          note.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+          renderStudyNotesSection();
+          showToast(note.pinned ? '已釘選置頂此則備忘錄' : '已取消釘選');
+        }
+        return;
+      }
+
+      const delBtn = e.target.closest('[data-del-note-id]');
+      if (delBtn) {
+        const noteId = delBtn.dataset.delNoteId;
+        const note = (appState.studyNotes || []).find(n => n && n.id === noteId && !n.deleted);
+        if (note) {
+          const nowTs = Date.now();
+          note.deleted = true;
+          note.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+          renderStudyNotesSection();
+          showToast('已刪除此則備忘錄');
+        }
+      }
+    });
+
+    studyNotesGrid.addEventListener('input', (e) => {
+      const titleInp = e.target.closest('[data-note-title-id]');
+      if (titleInp) {
+        const noteId = titleInp.dataset.noteTitleId;
+        const note = (appState.studyNotes || []).find(n => n && n.id === noteId && !n.deleted);
+        if (note) {
+          const nowTs = Date.now();
+          note.title = titleInp.value;
+          note.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+        }
+        return;
+      }
+      const bodyInp = e.target.closest('[data-note-body-id]');
+      if (bodyInp) {
+        const noteId = bodyInp.dataset.noteBodyId;
+        const note = (appState.studyNotes || []).find(n => n && n.id === noteId && !n.deleted);
+        if (note) {
+          const nowTs = Date.now();
+          note.content = bodyInp.value;
+          note.updatedAt = nowTs;
+          appState.updatedAt = nowTs;
+          saveState();
+        }
+      }
+    });
+  }
 }
 
 /* ==========================================================================
@@ -5279,6 +7002,9 @@ function compactState(st) {
       dayEntry.c = '';
     }
     if (d.calendarUpdatedAt) dayEntry.cu = d.calendarUpdatedAt;
+    if (Array.isArray(d.extraTasks) && d.extraTasks.length > 0) {
+      dayEntry.et = d.extraTasks;
+    }
     SLOT_KEYS.forEach(({ key }) => {
       const s = d[key];
       const hasTimerState = s.timerStatus && s.timerStatus !== 'idle';
@@ -5287,6 +7013,7 @@ function compactState(st) {
         s.task ||
         s.durationMinutes ||
         s.completed ||
+        s.rolledOverTo ||
         s.startTime ||
         s.endTime ||
         hasTimerState ||
@@ -5310,10 +7037,12 @@ function compactState(st) {
           s.updatedAt || 0,
           s.restMinutes || 0,
           s.restAccumulatedMs || 0,
-          s.lastPauseTimestamp || 0
+          s.lastPauseTimestamp || 0,
+          s.rolledOverTo || ''
         ];
         // 移除尾部預設值以極度精簡傳輸體積
         while (arr.length > 2 && (
+          (arr.length === 14 && arr[13] === '') ||
           (arr.length === 13 && arr[12] === 0) ||
           (arr.length === 12 && arr[11] === 0) ||
           (arr.length === 11 && arr[10] === 0) ||
@@ -5347,9 +7076,12 @@ function compactState(st) {
         entry.c = '';
       }
       if (ed.calendarUpdatedAt) entry.cu = ed.calendarUpdatedAt;
+      if (Array.isArray(ed.extraTasks) && ed.extraTasks.length > 0) {
+        entry.et = ed.extraTasks;
+      }
       SLOT_KEYS.forEach(({ key }) => {
         const s = ed[key];
-        if (s && (s.subject || s.task || s.durationMinutes || s.completed)) {
+        if (s && (s.subject || s.task || s.durationMinutes || s.completed || s.rolledOverTo || s.updatedAt)) {
           entry[key[0]] = [
             s.subject || '',
             s.task || '',
@@ -5363,7 +7095,8 @@ function compactState(st) {
             s.updatedAt || 0,
             s.restMinutes || 0,
             s.restAccumulatedMs || 0,
-            s.lastPauseTimestamp || 0
+            s.lastPauseTimestamp || 0,
+            s.rolledOverTo || ''
           ];
         }
       });
@@ -5387,6 +7120,8 @@ function compactState(st) {
     sub: st.sectionSubtitles || null,
     subu: st.subtitlesUpdatedAt || 0,
     sbj: Array.isArray(st.subjects) ? st.subjects : null,
+    ms: Array.isArray(st.milestones) ? st.milestones : [],
+    sn: Array.isArray(st.studyNotes) ? st.studyNotes : [],
     u: st.updatedAt || Date.now()
   };
 }
@@ -5409,6 +7144,9 @@ function unpackCompactState(compact) {
         day.calendar = '';
       }
       if (saved.cu) day.calendarUpdatedAt = Number(saved.cu) || 0;
+      if (Array.isArray(saved.et)) {
+        day.extraTasks = normalizeExtraTasksList(saved.et);
+      }
       SLOT_KEYS.forEach(({ key }) => {
         const slotData = saved[key[0]];
         if (Array.isArray(slotData)) {
@@ -5418,6 +7156,7 @@ function unpackCompactState(compact) {
           const restMinutes = Number(slotData[10]) || 0;
           const restAccumulatedMs = Number(slotData[11]) || 0;
           const pauseTs = Number(slotData[12]) || 0;
+          const rolledOverTo = typeof slotData[13] === 'string' ? slotData[13] : '';
           day[key] = {
             subject: slotData[0] || '',
             task: slotData[1] || '',
@@ -5431,6 +7170,7 @@ function unpackCompactState(compact) {
             restMinutes,
             restAccumulatedMs,
             lastPauseTimestamp: timerStatus === 'paused' ? (pauseTs || updatedAt || null) : null,
+            rolledOverTo,
             updatedAt
           };
         }
@@ -5451,10 +7191,16 @@ function unpackCompactState(compact) {
     sectionSubtitles: compact.sub || undefined,
     subtitlesUpdatedAt: Number(compact.subu) || 0,
     subjects: Array.isArray(compact.sbj) ? compact.sbj : undefined,
+    milestones: Array.isArray(compact.ms) ? compact.ms : undefined,
+    studyNotes: Array.isArray(compact.sn) ? compact.sn : undefined,
     phases,
     goals,
     days
   });
+  if (res) {
+    res._hasRemoteMs = Array.isArray(compact.ms);
+    res._hasRemoteSn = Array.isArray(compact.sn);
+  }
   if (compact.ex && res && res.extraDays) {
     Object.keys(compact.ex).forEach(iso => {
       const saved = compact.ex[iso];
@@ -5465,6 +7211,9 @@ function unpackCompactState(compact) {
         ed.calendar = '';
       }
       if (saved.cu) ed.calendarUpdatedAt = Number(saved.cu) || 0;
+      if (Array.isArray(saved.et)) {
+        ed.extraTasks = normalizeExtraTasksList(saved.et);
+      }
       SLOT_KEYS.forEach(({ key }) => {
         const slotData = saved[key[0]];
         if (Array.isArray(slotData)) {
@@ -5481,7 +7230,8 @@ function unpackCompactState(compact) {
             updatedAt: Number(slotData[9]) || 0,
             restMinutes: Number(slotData[10]) || 0,
             restAccumulatedMs: Number(slotData[11]) || 0,
-            lastPauseTimestamp: slotData[6] === 'paused' ? (Number(slotData[12]) || null) : null
+            lastPauseTimestamp: slotData[6] === 'paused' ? (Number(slotData[12]) || null) : null,
+            rolledOverTo: typeof slotData[13] === 'string' ? slotData[13] : ''
           };
         }
       });
@@ -5497,6 +7247,34 @@ function unpackCompactState(compact) {
  */
 function mergeRemoteState(remote) {
   if (!remote || !Array.isArray(remote.days) || remote.days.length !== 80 || !remote.days[0] || remote.days[0].isoDate !== '2026-11-08') return false;
+
+  /**
+   * 合併具備 { id, updatedAt, deleted } 結構的陣列（extraTasks、milestones、studyNotes）
+   * 當遠端為無新欄位的舊快照時，100% 保留本地已新增的資料。
+   */
+  const mergeTimestampedIdArray = (localArr, remoteArr) => {
+    const safeLocal = Array.isArray(localArr) ? localArr : [];
+    const safeRemote = Array.isArray(remoteArr) ? remoteArr : [];
+    if (safeRemote.length === 0) return safeLocal;
+    const map = new Map();
+    safeLocal.forEach(item => {
+      if (item && item.id) map.set(item.id, JSON.parse(JSON.stringify(item)));
+    });
+    safeRemote.forEach(rItem => {
+      if (!rItem || !rItem.id) return;
+      const lItem = map.get(rItem.id);
+      if (!lItem) {
+        map.set(rItem.id, JSON.parse(JSON.stringify(rItem)));
+      } else {
+        const rTs = Number(rItem.updatedAt) || 0;
+        const lTs = Number(lItem.updatedAt) || 0;
+        if (rTs > lTs) {
+          map.set(rItem.id, JSON.parse(JSON.stringify(rItem)));
+        }
+      }
+    });
+    return Array.from(map.values());
+  };
 
   if (remote.updatedAt >= (appState.updatedAt || 0)) {
     if (Array.isArray(remote.phases) && remote.phases.length === 3) {
@@ -5524,12 +7302,27 @@ function mergeRemoteState(remote) {
       const localSubj = appState.subjects.find(s => s.id === rSubj.id);
       if (!localSubj) {
         appState.subjects.push({ ...rSubj });
-      } else if ((Number(rSubj.updatedAt) || 0) >= (Number(localSubj.updatedAt) || 0)) {
-        localSubj.name = rSubj.name || localSubj.name;
-        localSubj.swatch = rSubj.swatch || localSubj.swatch;
-        localSubj.updatedAt = Number(rSubj.updatedAt) || localSubj.updatedAt || 0;
+      } else {
+        const rSubjTs = Number(rSubj.updatedAt) || 0;
+        const lSubjTs = Number(localSubj.updatedAt) || 0;
+        if (rSubjTs > lSubjTs || (rSubjTs === lSubjTs && lSubjTs === 0)) {
+          localSubj.name = rSubj.name || localSubj.name;
+          localSubj.swatch = rSubj.swatch || localSubj.swatch;
+          if (rSubj.examDate && (rSubjTs > lSubjTs || !localSubj.examDate)) {
+            localSubj.examDate = rSubj.examDate;
+          }
+          localSubj.updatedAt = rSubjTs || lSubjTs;
+        }
       }
     });
+  }
+
+  // 合併階段性里程碑 (milestones) 與分科備忘錄 (studyNotes)
+  if (Array.isArray(remote.milestones)) {
+    appState.milestones = mergeTimestampedIdArray(appState.milestones, remote.milestones);
+  }
+  if (Array.isArray(remote.studyNotes)) {
+    appState.studyNotes = mergeTimestampedIdArray(appState.studyNotes, remote.studyNotes);
   }
 
   // 🌸 關鍵封面同步防覆蓋保護：若遠端為自訂圖片，優先更新並永久快取；若本地已是自訂圖，絕不被預設主題刷掉
@@ -5581,10 +7374,13 @@ function mergeRemoteState(remote) {
         lExtra.calendar = rExtra.calendar || '';
         lExtra.calendarUpdatedAt = Number(rExtra.calendarUpdatedAt) || 0;
       }
+      lExtra.extraTasks = mergeTimestampedIdArray(lExtra.extraTasks, rExtra.extraTasks);
       SLOT_KEYS.forEach(({ key }) => {
         const rSlot = rExtra[key];
         const lSlot = lExtra[key];
-        if (rSlot && ((rSlot.updatedAt || 0) >= (lSlot.updatedAt || 0) || !lSlot.subject)) {
+        const rTs = Number(rSlot && rSlot.updatedAt) || 0;
+        const lTs = Number(lSlot && lSlot.updatedAt) || 0;
+        if (rSlot && (rTs > lTs || (rTs === lTs && lTs === 0 && !lSlot.subject && !lSlot.rolledOverTo))) {
           lExtra[key] = { ...rSlot };
         }
       });
@@ -5606,6 +7402,8 @@ function mergeRemoteState(remote) {
       localDay.calendarUpdatedAt = Number(remoteDay.calendarUpdatedAt) || 0;
     }
 
+    localDay.extraTasks = mergeTimestampedIdArray(localDay.extraTasks, remoteDay.extraTasks);
+
     SLOT_KEYS.forEach(({ key }) => {
       const lSlot = localDay[key];
       const rSlot = remoteDay[key];
@@ -5614,15 +7412,16 @@ function mergeRemoteState(remote) {
       const lTs = Number(lSlot.updatedAt) || Number(lSlot.lastResumeTimestamp) || 0;
       const rTs = Number(rSlot.updatedAt) || Number(rSlot.lastResumeTimestamp) || 0;
 
-      const lEmpty = !lSlot.subject && !lSlot.task && lSlot.durationMinutes === 0 && !lSlot.completed && lSlot.timerStatus === 'idle' && (lSlot.accumulatedMs || 0) === 0;
-      const rHasData = Boolean(rSlot.subject || rSlot.task || rSlot.durationMinutes > 0 || rSlot.completed || rSlot.timerStatus !== 'idle' || (rSlot.accumulatedMs || 0) > 0);
+      const lEmpty = !lSlot.subject && !lSlot.task && lSlot.durationMinutes === 0 && !lSlot.completed && lSlot.timerStatus === 'idle' && (lSlot.accumulatedMs || 0) === 0 && !lSlot.rolledOverTo;
+      const rHasData = Boolean(rSlot.subject || rSlot.task || rSlot.durationMinutes > 0 || rSlot.completed || rSlot.timerStatus !== 'idle' || (rSlot.accumulatedMs || 0) > 0 || rSlot.rolledOverTo);
 
       // 重要保護：絕不允許空遠端覆蓋有實質讀書紀錄的本機資料！
       if (!rHasData && (lSlot.durationMinutes > 0 || (lSlot.accumulatedMs || 0) > 0)) return;
 
-      if (rTs > lTs || (rTs === lTs && rHasData && lEmpty) || (lTs === 0 && rHasData)) {
+      if (rTs > lTs || (rTs === lTs && rHasData && lEmpty) || (lTs === 0 && rHasData && !lSlot.rolledOverTo)) {
         localDay[key] = {
           ...rSlot,
+          rolledOverTo: rSlot.rolledOverTo || '',
           restMinutes: rSlot.restMinutes || 0,
           restAccumulatedMs: rSlot.restAccumulatedMs || 0,
           lastPauseTimestamp: rSlot.lastPauseTimestamp || null
@@ -5918,6 +7717,7 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
     renderQuickTimerView();
     renderDailyPlanView();
     renderHomeView();
+    renderMemoGoalsView();
     applyHomeCover();
     updateActiveTimerBanner();
     syncScreenWakeLock();
@@ -6220,17 +8020,38 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
                 day[key].subject = nextName;
               }
             });
+            if (Array.isArray(day.extraTasks)) {
+              day.extraTasks.forEach(t => {
+                if (t && t.subject === prevName) t.subject = nextName;
+              });
+            }
           });
+          if (Array.isArray(appState.milestones)) {
+            appState.milestones.forEach(ms => {
+              if (ms && ms.subject === prevName) ms.subject = nextName;
+            });
+          }
+          if (Array.isArray(appState.studyNotes)) {
+            appState.studyNotes.forEach(n => {
+              if (n && n.subject === prevName) n.subject = nextName;
+            });
+          }
           if (currentDailySubjectFilter === prevName) currentDailySubjectFilter = nextName;
+          if (currentCalendarSubjectFilter === prevName) currentCalendarSubjectFilter = nextName;
         }
         entity.name = nextName;
         if (p.swatch && SUBJECT_FASHION_SWATCHES.some(sw => sw.key === p.swatch)) {
           entity.swatch = p.swatch;
         }
+        if (typeof p.examDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.examDate.trim())) {
+          entity.examDate = p.examDate.trim();
+        }
         entity.updatedAt = eventTs;
         appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
         renderEditableMetadataDom();
         renderDailyFocusScheduleTable();
+        renderCalendarWeekView();
+        renderMemoGoalsView();
         renderFullDashboard();
         updateActiveTimerBanner();
         saveState(false, false);
@@ -6709,6 +8530,7 @@ function bootstrapApp() {
     renderMainScheduleTable();
     renderFullDashboard();
     renderHomeView();
+    renderMemoGoalsView();
     renderQuickTimerView();
     renderDailyPlanView();
     updateActiveTimerBanner();
@@ -6738,7 +8560,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261112_v17').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261117_v18').then((reg) => {
         console.log('PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);
@@ -6802,6 +8624,8 @@ if (typeof document !== 'undefined') {
       renderPhasesConfig();
       renderMainScheduleTable();
       renderFullDashboard();
+      renderHomeView();
+      renderMemoGoalsView();
       renderQuickTimerView();
       renderDailyPlanView();
       updateActiveTimerBanner();

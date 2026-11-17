@@ -39,7 +39,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=20261111_v15" />
+  <link rel="stylesheet" href="style.css?v=20261117_v18" />
 </head>
 <body>
   <canvas id="sakuraCanvas" class="petal-canvas" aria-hidden="true"></canvas>
@@ -214,10 +214,12 @@
     <!-- Right Fluid Canvas: View Sub-Nav + Main Views -->
     <section class="workspace-canvas" aria-label="計畫內容區">
       <nav id="mainTabsNav" class="subnav-tabs" aria-label="檢視切換">
-        <button type="button" class="nav-tab tab-nav-btn active" data-tab="home">今日概覽</button>
+        <button type="button" class="nav-tab tab-nav-btn active" data-tab="home">1. 今日總覽</button>
+        <button type="button" class="nav-tab tab-nav-btn" data-tab="calendar-schedule">2. 專屬行事曆</button>
+        <button type="button" class="nav-tab tab-nav-btn" data-tab="memo-goals">3. 備忘錄與目標</button>
+        <span class="subnav-divider" aria-hidden="true"></span>
         <button type="button" class="nav-tab tab-nav-btn mobile-only-tab" data-tab="quick-timer">專注計時</button>
-        <button type="button" class="nav-tab tab-nav-btn" data-tab="daily-plan">每日專注</button>
-        <button type="button" class="nav-tab tab-nav-btn" data-tab="calendar-schedule">行事曆</button>
+        <button type="button" class="nav-tab tab-nav-btn" data-tab="daily-plan">每日專注大表</button>
         <button type="button" class="nav-tab tab-nav-btn" data-tab="statistics-dashboard">統計分析</button>
       </nav>
 
@@ -269,14 +271,18 @@
         </div>
       </section>
 
-      <!-- Tab 2: 80 天月曆 (Click Day -> Notion Style Quick Sheet Modal) -->
+      <!-- Tab 2: 專屬行事曆 (月視圖 / 週視圖切換 + 考科色標篩選 + 過期順延至今日) -->
       <section id="tabCalendarSchedule" class="tab-pane" aria-label="衝刺行事曆">
         <div class="canvas-header">
           <div class="canvas-title-group">
-            <h2 id="subtitleCalendar" class="inline-editable canvas-title" data-inline-target="subtitleCalendar" tabindex="0" role="textbox" aria-label="編輯行事曆標題">衝刺行事曆</h2>
+            <h2 id="subtitleCalendar" class="inline-editable canvas-title" data-inline-target="subtitleCalendar" tabindex="0" role="textbox" aria-label="編輯行事曆標題">專屬行事曆</h2>
+            <div id="calViewModeSwitcher" class="mode-switch cal-view-switcher" role="group" aria-label="行事曆視圖模式">
+              <button type="button" id="calViewMonthBtn" class="mode-btn mode-chip active" data-cal-view="month">月視圖</button>
+              <button type="button" id="calViewWeekBtn" class="mode-btn mode-chip" data-cal-view="week">週視圖</button>
+            </div>
           </div>
           <div class="canvas-toolbar">
-            <div class="date-stepper">
+            <div id="calMonthStepperWrap" class="date-stepper">
               <button type="button" id="calPrevMonthBtn" class="stepper-btn" aria-label="上個月">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
               </button>
@@ -289,10 +295,30 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
               </button>
             </div>
-            <button type="button" id="calTodayMonthBtn" class="quiet-outline-btn">本月</button>
+            <div id="calWeekStepperWrap" class="date-stepper hidden">
+              <button type="button" id="calPrevWeekBtn" class="stepper-btn" aria-label="上一週">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6" /></svg>
+              </button>
+              <span id="calWeekRangeLabel" class="date-heading-text mono-tabular">本週</span>
+              <button type="button" id="calNextWeekBtn" class="stepper-btn" aria-label="下一週">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6" /></svg>
+              </button>
+            </div>
+            <button type="button" id="calTodayMonthBtn" class="quiet-outline-btn">回到今日</button>
             <input type="search" id="searchScheduleInput" class="input-hairline" placeholder="搜尋日程關鍵字..." aria-label="搜尋行事曆" />
           </div>
         </div>
+
+        <!-- 考科色標篩選膠囊列 -->
+        <div class="cal-filter-bar" aria-label="考科篩選">
+          <span class="section-kicker">考科篩選</span>
+          <div id="calSubjectFilterBar" class="subj-filter-pills" role="group" aria-label="依考科篩選行事曆"></div>
+        </div>
+
+        <!-- 過期未完成排程貼心順延橫幅 -->
+        <div id="calOverdueRolloverBanner" class="rollover-banner hidden" aria-live="polite"></div>
+
+        <!-- 月視圖 (看全局) -->
         <div id="calendarMonthGridView" class="calendar-view-frame">
           <div class="calendar-weekdays-row" aria-hidden="true">
             <div class="cal-weekday-head">週一</div>
@@ -304,6 +330,11 @@
             <div class="cal-weekday-head">週日</div>
           </div>
           <div id="notionCalendarGrid" class="calendar-grid-container"></div>
+        </div>
+
+        <!-- 週視圖 (看每日細節與順延操作) -->
+        <div id="calendarWeekView" class="calendar-week-frame hidden">
+          <div id="calendarWeekGrid" class="calendar-week-grid"></div>
         </div>
       </section>
 
@@ -389,17 +420,132 @@
           </div>
         </div>
 
+        <!-- 今日任務完成率進度條 -->
+        <div id="homeCompletionProgressWrap" class="home-progress-band">
+          <div class="home-progress-head">
+            <span id="homeProgressText" class="section-kicker">今日排程完成率</span>
+            <span id="homeCompletionPctLabel" class="mono-tabular home-progress-pct">0%</span>
+          </div>
+          <div class="hairline-progress home-progress-track" aria-hidden="true">
+            <div id="homeCompletionProgressBar" class="hairline-progress-fill"></div>
+          </div>
+        </div>
+
+        <!-- 快速排程 (Quick Add) -->
+        <section id="homeQuickAddSection" class="quick-add-box" aria-label="快速新增讀書排程">
+          <div class="quick-add-head">
+            <span class="section-kicker">快速排程 Quick Add</span>
+            <div class="quick-add-date-shortcuts">
+              <button type="button" id="quickAddSetTodayBtn" class="quiet-text-btn">設為今日</button>
+              <button type="button" id="quickAddSetTomorrowBtn" class="quiet-text-btn">設為明日</button>
+            </div>
+          </div>
+          <div class="quick-add-controls">
+            <input type="date" id="quickAddDateInput" class="input-hairline mono-tabular quick-add-date" aria-label="排程日期" />
+            <select id="quickAddSlotSelect" class="select-hairline quick-add-slot" aria-label="排程時段">
+              <option value="auto">自動空時段 / 額外待辦</option>
+              <option value="morning">早上時段 (05:00~12:00)</option>
+              <option value="afternoon">下午時段 (12:00~19:00)</option>
+              <option value="evening">晚上時段 (19:00~05:00)</option>
+              <option value="extra">額外待辦清單</option>
+            </select>
+            <select id="quickAddSubjectSelect" class="select-hairline quick-add-subj" aria-label="選擇考科"></select>
+            <input type="text" id="quickAddTaskInput" class="input-hairline quick-add-task" placeholder="輸入讀書任務（按 Enter 同步寫入行事曆）..." aria-label="讀書任務內容" />
+            <button type="button" id="quickAddSubmitBtn" class="btn-primary-solid">加入排程</button>
+          </div>
+        </section>
+
         <div class="home-memo-block">
           <label for="homeCalendarMemoInput" class="section-kicker">當日重要備忘錄</label>
           <input type="text" id="homeCalendarMemoInput" class="input-hairline-full" placeholder="輸入當日重點複習章節、模擬考檢討或提醒..." />
         </div>
 
-        <div id="homeSlotsList" class="home-slots-list"></div>
+        <!-- 今日任務清單 (三時段 + 額外待辦) -->
+        <div class="home-tasks-section">
+          <div class="home-tasks-head">
+            <h3 class="section-kicker">今日任務清單（與行事曆即時連動）</h3>
+            <span id="homeOverdueQuickHint" class="home-overdue-hint hidden"></span>
+          </div>
+          <div id="homeSlotsList" class="home-slots-list"></div>
+          <div id="homeExtraTasksList" class="home-extra-tasks-list"></div>
+        </div>
+
+        <!-- 考試倒數與考科狀態 (各科倒數天數 + 本週已排任務數) -->
+        <section id="homeSubjectStatusSection" class="home-subject-status-block" aria-label="考試倒數與考科狀態">
+          <div class="home-tasks-head">
+            <h3 class="section-kicker">考試倒數與考科本週排程狀態</h3>
+            <span class="settings-note">點擊考科目標日可個別微調考期</span>
+          </div>
+          <div id="homeSubjectStatusGrid" class="subject-status-grid"></div>
+        </section>
 
         <div class="home-upcoming-block">
           <h3 class="section-kicker">近期重要檢核與模考</h3>
           <div id="homeUpcomingList" class="upcoming-list"></div>
         </div>
+      </section>
+
+      <!-- Tab 3: 備忘錄與目標 (階段性里程碑 Milestones + 分科備忘錄卡片牆 Study Notes) -->
+      <section id="tabMemoGoals" class="tab-pane" aria-label="備忘錄與目標">
+        <div class="canvas-header">
+          <div class="canvas-title-group">
+            <h2 id="subtitleMemoGoals" class="inline-editable canvas-title" data-inline-target="subtitleMemoGoals" tabindex="0" role="textbox" aria-label="編輯備忘錄與目標標題">備忘錄與目標</h2>
+            <span id="memoGoalsSummaryBadge" class="phase-tag mono-tabular">里程碑與筆記</span>
+          </div>
+        </div>
+
+        <!-- 第一部分：階段性里程碑 (Milestones) -->
+        <section id="milestonesSection" class="memo-goals-block" aria-label="階段性里程碑">
+          <div class="memo-block-header">
+            <div class="memo-block-title-wrap">
+              <h3 class="section-kicker">階段性里程碑 Milestones</h3>
+              <span id="milestoneOverallSummary" class="mono-tabular settings-note">總進度 0%</span>
+            </div>
+            <div id="milestoneSubjectFilterBar" class="subj-filter-pills" role="group" aria-label="篩選里程碑考科"></div>
+          </div>
+
+          <div class="milestone-add-bar">
+            <select id="milestoneSubjectSelect" class="select-hairline" aria-label="里程碑考科"></select>
+            <select id="milestonePhaseSelect" class="select-hairline" aria-label="所屬衝刺階段">
+              <option value="phase1">第一階段</option>
+              <option value="phase2">第二階段</option>
+              <option value="phase3">第三階段</option>
+            </select>
+            <input type="text" id="milestoneTitleInput" class="input-hairline milestone-title-inp" placeholder="新增階段大目標（例如：完成第一輪複習、刷完歷屆試題）..." aria-label="里程碑標題" />
+            <button type="button" id="addMilestoneBtn" class="btn-primary-solid">新增里程碑</button>
+          </div>
+
+          <div id="milestonesGrid" class="milestones-grid"></div>
+        </section>
+
+        <!-- 第二部分：分科備忘錄卡片牆 (Study Notes) -->
+        <section id="studyNotesSection" class="memo-goals-block" aria-label="分科備忘錄">
+          <div class="memo-block-header">
+            <div class="memo-block-title-wrap">
+              <h3 class="section-kicker">分科備忘錄卡片牆 Study Notes</h3>
+              <span id="studyNotesCountLabel" class="mono-tabular settings-note">0 則筆記</span>
+            </div>
+            <div class="notes-filter-toolbar">
+              <div id="notesCategoryFilterBar" class="subj-filter-pills" role="group" aria-label="篩選備忘錄分類"></div>
+              <input type="search" id="studyNotesSearchInput" class="input-hairline" placeholder="搜尋備忘錄標題或內容..." aria-label="搜尋備忘錄" />
+            </div>
+          </div>
+
+          <div class="study-note-composer">
+            <div class="composer-top-row">
+              <select id="noteCategorySelect" class="select-hairline" aria-label="筆記分類"></select>
+              <input type="text" id="noteTitleInput" class="input-hairline composer-title-inp" placeholder="輸入備忘錄標題（例如：個經 Slutsky 方程式易錯點、考場準備清單）..." aria-label="備忘錄標題" />
+              <label class="done-checkbox-label composer-pin-label">
+                <input type="checkbox" id="notePinCheckbox" class="done-checkbox" />
+                <span>釘選置頂</span>
+              </label>
+              <button type="button" id="addStudyNoteBtn" class="btn-primary-solid">新增筆記</button>
+            </div>
+            <textarea id="noteContentInput" class="goal-textarea composer-body-inp" rows="3" placeholder="輸入詳細筆記、公式推導重點或待辦細節..."></textarea>
+          </div>
+
+          <div id="studyNotesGrid" class="study-notes-wall"></div>
+        </section>
       </section>
 
       <!-- Tab 4: 統計分析報表 -->
@@ -520,6 +666,7 @@
           <input type="text" id="dailyCalendarInput" class="input-hairline-full" placeholder="輸入當日備忘錄或模考行程..." />
         </div>
         <div id="dailySlotsContainer" class="notion-slots-list"></div>
+        <div id="dailyExtraTasksContainer" class="notion-extra-tasks-wrap"></div>
       </div>
     </div>
   </div>
@@ -638,6 +785,6 @@
   <div id="toastContainer" class="toast-region" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261112_v17"></script>
+  <script src="app.js?v=20261117_v18"></script>
 </body>
 </html>

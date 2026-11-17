@@ -54,7 +54,7 @@ def main():
         os.makedirs(BACKUP_DIR, exist_ok=True)
 
         if latest_full:
-            # 🌸 關鍵自訂封面保護：若既有備份含有使用者上傳之封面，絕不被預設主題刷掉
+            # 🌸 關鍵自訂封面與擴充資料（里程碑 ms、備忘錄 sn、額外任務 et）防覆蓋保護
             if os.path.exists(BACKUP_FILE):
                 try:
                     with open(BACKUP_FILE, "r", encoding="utf-8") as exist_f:
@@ -69,8 +69,51 @@ def main():
                             new_compact["hcu"] = exist_compact.get("hcu", exist_compact.get("u", int(time.time() * 1000)))
                             new_compact["hcf"] = exist_compact.get("hcf", "contain")
                             new_compact["hcp"] = exist_compact.get("hcp", "center")
+
+                    # 合併陣列型擴充資料 (ms: milestones, sn: studyNotes)，依 id 與 updatedAt 保留最新狀態
+                    for list_key in ("ms", "sn"):
+                        exist_list = exist_compact.get(list_key)
+                        new_list = new_compact.get(list_key)
+                        if isinstance(exist_list, list) and len(exist_list) > 0:
+                            if not isinstance(new_list, list) or len(new_list) == 0:
+                                new_compact[list_key] = exist_list
+                            else:
+                                merged_map = {}
+                                for item in exist_list:
+                                    if isinstance(item, dict) and item.get("id"):
+                                        merged_map[item["id"]] = item
+                                for item in new_list:
+                                    if isinstance(item, dict) and item.get("id"):
+                                        item_id = item["id"]
+                                        prev = merged_map.get(item_id)
+                                        if not prev or (item.get("updatedAt") or 0) >= (prev.get("updatedAt") or 0):
+                                            merged_map[item_id] = item
+                                new_compact[list_key] = list(merged_map.values())
+
+                    # 合併單日額外待辦 (d / ex 內的 et 陣列)
+                    for dict_key in ("d", "ex"):
+                        exist_days = exist_compact.get(dict_key)
+                        new_days = new_compact.get(dict_key)
+                        if isinstance(exist_days, dict) and isinstance(new_days, dict):
+                            for d_key, exist_day in exist_days.items():
+                                if not isinstance(exist_day, dict):
+                                    continue
+                                exist_et = exist_day.get("et")
+                                if isinstance(exist_et, list) and len(exist_et) > 0:
+                                    target_day = new_days.setdefault(d_key, {})
+                                    new_et = target_day.get("et")
+                                    if not isinstance(new_et, list) or len(new_et) == 0:
+                                        target_day["et"] = exist_et
+                                    else:
+                                        et_map = {t["id"]: t for t in exist_et if isinstance(t, dict) and t.get("id")}
+                                        for t in new_et:
+                                            if isinstance(t, dict) and t.get("id"):
+                                                prev_t = et_map.get(t["id"])
+                                                if not prev_t or (t.get("updatedAt") or 0) >= (prev_t.get("updatedAt") or 0):
+                                                    et_map[t["id"]] = t
+                                        target_day["et"] = list(et_map.values())
                 except Exception as e:
-                    print(f"[Keepalive] Cover preserve notice: {e}", file=sys.stderr)
+                    print(f"[Keepalive] Cover/data preserve notice: {e}", file=sys.stderr)
 
             print(f"[Keepalive] Found latest FULL snapshot from: {latest_full.get('senderName', 'user')} at {latest_full.get('ts')}")
             with open(BACKUP_FILE, "w", encoding="utf-8") as f:
