@@ -39,7 +39,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=20261117_v18" />
+  <link rel="stylesheet" href="style.css?v=20261117_v19" />
 </head>
 <body>
   <canvas id="sakuraCanvas" class="petal-canvas" aria-hidden="true"></canvas>
@@ -65,22 +65,16 @@
         </nav>
       </div>
 
-      <!-- Compact Running Timer Banner (visible when navigating elsewhere on small viewports or when active) -->
-      <div id="activeTimerBanner" class="active-banner hidden" aria-live="polite">
-        <span id="bannerSubjectPill" class="banner-subject">專注</span>
-        <span id="bannerSlotLabel" class="banner-slot">上午</span>
-        <span id="bannerClock" class="banner-clock mono-tabular">00:00:00</span>
-        <button type="button" id="bannerToggleBtn" class="banner-btn">暫停</button>
-        <button type="button" id="bannerStopBtn" class="banner-btn banner-btn-stop">結束</button>
-        <button type="button" id="bannerJumpBtn" class="banner-btn banner-btn-quiet" aria-label="前往計時區">查看</button>
-      </div>
-
       <div class="topbar-right">
+        <a href="classic.html?room=sakura-study-2026" id="openClassicVersionLink" class="quiet-outline-btn" title="開啟含計時器與統計報表的經典版">經典計時版</a>
+
         <button type="button" id="roomSyncBtn" class="sync-status-btn" title="跨裝置同步狀態與分享">
           <span id="roomDot" class="sync-micro-dot" aria-hidden="true"></span>
           <span id="roomCloudIcon" class="visually-hidden">雲端連線</span>
           <span id="roomStatusText" class="sync-status-label">已連線</span>
         </button>
+
+        <span id="saveStatusText" class="sync-status-label">已儲存</span>
 
         <div id="themeSwatchSwitcher" class="theme-swatches" role="radiogroup" aria-label="服裝布料配色主題">
           <button type="button" class="theme-swatch-btn is-active" data-theme-choice="blush" role="radio" aria-checked="true" aria-label="霧粉生絲 Auralee Blush" title="霧粉生絲 Auralee Blush"></button>
@@ -110,166 +104,15 @@
     </div>
   </header>
 
-  <!-- Asymmetric Dual-Pane Editorial Workspace -->
-  <main id="appContainer" class="workspace-shell">
-    <!-- Left Rail: Countdown + Strict Real-Time Focus Timer + Subject Entities -->
-    <aside class="workspace-rail" aria-label="即時專注計時與科目管理">
-      <!-- Exam Countdown Hairline Block -->
-      <section class="rail-section rail-countdown">
-        <div class="rail-section-head">
-          <span id="subtitleCountdown" class="inline-editable section-kicker" data-inline-target="subtitleCountdown" tabindex="0" role="textbox" aria-label="編輯倒數副標題">衝刺倒數進度</span>
-          <span class="countdown-inline-metric">
-            <span id="homeExamCountdownNum" class="countdown-num mono-tabular">80</span>
-            <span class="countdown-unit">天</span>
-          </span>
-        </div>
-        <div class="hairline-progress" aria-hidden="true">
-          <div id="homeExamProgressBar" class="hairline-progress-fill"></div>
-        </div>
-        <p id="homeExamCountdownMeta" class="countdown-meta mono-tabular">Day 1 / 80</p>
-      </section>
-
-      <!-- Real-Time Focus Timer Panel -->
-      <section id="tabQuickTimer" class="rail-section rail-timer-section tab-pane" aria-label="即時專注計時器">
-        <div class="rail-section-head">
-          <span id="subtitleTimer" class="inline-editable section-kicker" data-inline-target="subtitleTimer" tabindex="0" role="textbox" aria-label="編輯計時器副標題">即時專注計時</span>
-          <div class="rail-day-meta">
-            <span id="quickDayBadge" class="day-tag mono-tabular">Day 1</span>
-            <span id="quickPhaseTag" class="phase-tag">第一階段</span>
-          </div>
-        </div>
-
-        <div class="timer-date-row">
-          <span id="quickDateTitle" class="timer-date-label">今日</span>
-          <span class="timer-today-total">累計 <strong id="quickTodayTotalTime" class="mono-tabular">00:00:00</strong></span>
-        </div>
-
-        <div class="timer-mode-row">
-          <div id="timerModeSelector" class="mode-switch" role="group" aria-label="計時模式">
-            <button type="button" class="mode-btn mode-chip active" data-mode="stopwatch">正計時</button>
-            <button type="button" class="mode-btn mode-chip" data-mode="pomodoro-25">番茄 25m</button>
-            <button type="button" class="mode-btn mode-chip" data-mode="pomodoro-50">深度 50m</button>
-          </div>
-          <div class="timer-quick-links">
-            <button type="button" id="quickSwitchDayBtn" class="quiet-text-btn" title="鎖定真實今天">切回今日</button>
-            <button type="button" id="quickJumpToDailyBtn" class="quiet-text-btn">展開大表</button>
-          </div>
-        </div>
-
-        <!-- Monospace Tabular Clock Readout -->
-        <div class="clock-stage">
-          <div class="clock-status-row">
-            <span id="quickStatusDot" class="status-dot" aria-hidden="true"></span>
-            <span id="quickStatusText" class="status-label">待機中</span>
-          </div>
-          <div id="quickClockDisplay" class="clock-display mono-tabular">00:00:00</div>
-          <p id="quickSlotHint" class="clock-hint">選擇科目後開始計時，依開始時間自動歸檔</p>
-        </div>
-
-        <div id="quickActionsRow" class="timer-actions">
-          <button type="button" id="quickPauseResumeBtn" class="btn-primary-solid" disabled>暫停</button>
-          <button type="button" id="quickStopBtn" class="btn-secondary-hairline" disabled>結束紀錄</button>
-        </div>
-
-        <!-- Rest Timer Strip -->
-        <div id="quickRestTimerPanel" class="rest-strip">
-          <div id="quickShortRestBox" class="rest-box">
-            <div class="rest-box-head">
-              <span class="rest-box-title">
-                <span id="quickShortRestDot" class="rest-dot" aria-hidden="true"></span>
-                <span>休息時間</span>
-              </span>
-              <span id="quickShortRestClock" class="rest-clock mono-tabular">00:00:00</span>
-            </div>
-            <p id="quickShortRestHint" class="rest-hint">專注暫停或結束後開始計算</p>
-          </div>
-        </div>
-
-        <!-- Subject Entities List (Global Inline Rename + 6 Textile Swatches) -->
-        <div class="subjects-block">
-          <div class="rail-section-head">
-            <span id="subtitleSubjects" class="inline-editable section-kicker" data-inline-target="subtitleSubjects" tabindex="0" role="textbox" aria-label="編輯科目清單副標題">科目清單</span>
-            <span class="subjects-hint">點擊色點換色，點擊名稱編輯</span>
-          </div>
-          <div id="quickSubjectsGrid" class="subject-entities-list" role="list"></div>
-        </div>
-
-        <!-- Compact Today Slots Preview inside Rail -->
-        <div class="rail-slots-block">
-          <div class="rail-section-head">
-            <span class="section-kicker">今日紀錄摘要</span>
-          </div>
-          <div id="quickSlotsGrid" class="rail-slots-list"></div>
-        </div>
-
-        <div class="rail-footer">
-          <div id="saveIndicator" class="save-indicator">
-            <span id="saveIndicatorDot" class="save-dot" aria-hidden="true"></span>
-            <span id="saveStatusText" class="save-label">本機與雲端同步就緒</span>
-          </div>
-        </div>
-      </section>
-    </aside>
-
-    <!-- Right Fluid Canvas: View Sub-Nav + Main Views -->
+  <!-- Pure Full-Width Editorial Calendar Workspace -->
+  <main id="appContainer" class="workspace-shell full-width-shell">
+    <!-- Full-Width Canvas: Pure Three-Page Sub-Nav + Main Views -->
     <section class="workspace-canvas" aria-label="計畫內容區">
       <nav id="mainTabsNav" class="subnav-tabs" aria-label="檢視切換">
         <button type="button" class="nav-tab tab-nav-btn active" data-tab="home">1. 今日總覽</button>
         <button type="button" class="nav-tab tab-nav-btn" data-tab="calendar-schedule">2. 專屬行事曆</button>
         <button type="button" class="nav-tab tab-nav-btn" data-tab="memo-goals">3. 備忘錄與目標</button>
-        <span class="subnav-divider" aria-hidden="true"></span>
-        <button type="button" class="nav-tab tab-nav-btn mobile-only-tab" data-tab="quick-timer">專注計時</button>
-        <button type="button" class="nav-tab tab-nav-btn" data-tab="daily-plan">每日專注大表</button>
-        <button type="button" class="nav-tab tab-nav-btn" data-tab="statistics-dashboard">統計分析</button>
       </nav>
-
-      <!-- Tab 2: 每日專注大表 (Woven Labels Grid) -->
-      <section id="tabDailyPlan" class="tab-pane" aria-label="每日專注大表">
-        <div class="canvas-header">
-          <div class="canvas-title-group">
-            <h2 id="subtitleDailyPlan" class="inline-editable canvas-title" data-inline-target="subtitleDailyPlan" tabindex="0" role="textbox" aria-label="編輯每日專注大表標題">每日專注大表</h2>
-          </div>
-
-          <div class="canvas-toolbar">
-            <button type="button" id="dailyJumpToTodayBtn" class="quiet-outline-btn">捲動至今日</button>
-          </div>
-        </div>
-
-        <div id="phaseWarning" class="warning-strip hidden"></div>
-
-        <div class="filter-strip">
-          <div id="dailyPhaseFilterTabs" class="phase-filter-group" role="tablist" aria-label="階段篩選">
-            <button type="button" class="filter-tab active" data-filter="all">全部 80 天</button>
-            <button type="button" id="dailyFilterTabPhase0" class="filter-tab" data-filter="phase-0">第一階段</button>
-            <button type="button" id="dailyFilterTabPhase1" class="filter-tab" data-filter="phase-1">第二階段</button>
-            <button type="button" id="dailyFilterTabPhase2" class="filter-tab" data-filter="phase-2">第三階段</button>
-            <button type="button" class="filter-tab" data-filter="has-record">已有紀錄</button>
-          </div>
-          <div class="filter-inputs-group">
-            <select id="dailySubjectFilterSelect" class="select-hairline" aria-label="依科目篩選">
-              <option value="">全部科目</option>
-            </select>
-            <input type="search" id="dailySearchScheduleInput" class="input-hairline" placeholder="搜尋日期或筆記..." aria-label="搜尋排程" />
-          </div>
-        </div>
-
-        <!-- Scannable Editorial Daily Focus Matrix -->
-        <div class="table-scroll-frame">
-          <table id="dailyFocusTable" class="daily-focus-table">
-            <thead>
-              <tr>
-                <th scope="col" class="col-day">日期</th>
-                <th scope="col" class="col-slot">早上 05:00 ~ 12:00</th>
-                <th scope="col" class="col-slot">下午 12:00 ~ 19:00</th>
-                <th scope="col" class="col-slot">晚上 19:00 ~ 05:00</th>
-                <th scope="col" class="col-total">當日總計</th>
-                <th scope="col" class="col-memo">備忘</th>
-              </tr>
-            </thead>
-            <tbody id="dailyFocusTableBody"></tbody>
-          </table>
-        </div>
-      </section>
 
       <!-- Tab 2: 專屬行事曆 (月視圖 / 週視圖切換 + 考科色標篩選 + 過期順延至今日) -->
       <section id="tabCalendarSchedule" class="tab-pane" aria-label="衝刺行事曆">
@@ -313,6 +156,16 @@
         <div class="cal-filter-bar" aria-label="考科篩選">
           <span class="section-kicker">考科篩選</span>
           <div id="calSubjectFilterBar" class="subj-filter-pills" role="group" aria-label="依考科篩選行事曆"></div>
+        </div>
+
+        <!-- 本週考科配比色條 -->
+        <div id="calWeeklySubjectRatioBand" class="cal-ratio-band" aria-label="本週考科排程配比">
+          <div class="cal-ratio-head">
+            <span id="calRatioTitle" class="section-kicker">本週考科排程配比</span>
+            <span id="calRatioTotalLabel" class="mono-tabular settings-note">本週共 0 項排程</span>
+          </div>
+          <div id="calWeeklyRatioTrack" class="cal-ratio-track" role="img" aria-label="本週各考科任務數量佔比色條"></div>
+          <div id="calWeeklyRatioLegend" class="cal-ratio-legend"></div>
         </div>
 
         <!-- 過期未完成排程貼心順延橫幅 -->
@@ -407,16 +260,16 @@
 
         <div class="home-kpi-strip">
           <div class="home-stat-cell">
-            <span class="stat-label">完成進度</span>
+            <span class="stat-label">今日完成進度</span>
             <span id="homeDoneCounter" class="stat-value mono-tabular">0 / 3</span>
           </div>
           <div class="home-stat-cell">
-            <span class="stat-label">當日專注</span>
-            <span id="homeStatFocusTime" class="stat-value mono-tabular">00:00:00</span>
+            <span class="stat-label">今日狀態標籤</span>
+            <div id="homeDayTagPills" class="day-tag-pills" role="group" aria-label="設定今日行程狀態標籤"></div>
           </div>
           <div class="home-stat-cell">
-            <span class="stat-label">當日休息</span>
-            <span id="homeStatShortRest" class="stat-value mono-tabular">00:00:00</span>
+            <span class="stat-label">距離正式考試</span>
+            <span id="homeExamCountdownInline" class="stat-value mono-tabular">Day 80 · 倒數 79 天</span>
           </div>
         </div>
 
@@ -474,7 +327,7 @@
         <section id="homeSubjectStatusSection" class="home-subject-status-block" aria-label="考試倒數與考科狀態">
           <div class="home-tasks-head">
             <h3 class="section-kicker">考試倒數與考科本週排程狀態</h3>
-            <span class="settings-note">點擊考科目標日可個別微調考期</span>
+            <span class="settings-note">點擊色點可換色、點擊名稱可改名、點擊考期可微調日期</span>
           </div>
           <div id="homeSubjectStatusGrid" class="subject-status-grid"></div>
         </section>
@@ -547,94 +400,6 @@
           <div id="studyNotesGrid" class="study-notes-wall"></div>
         </section>
       </section>
-
-      <!-- Tab 4: 統計分析報表 -->
-      <section id="tabStatisticsDashboard" class="tab-pane" aria-label="專注統計儀表板">
-        <div class="canvas-header">
-          <div class="canvas-title-group">
-            <h2 id="subtitleStats" class="inline-editable canvas-title" data-inline-target="subtitleStats" tabindex="0" role="textbox" aria-label="編輯統計報表標題">專注數據與達成統計</h2>
-          </div>
-        </div>
-
-        <div id="dashboardSection" class="dashboard-flow">
-          <div class="kpi-editorial-grid">
-            <div class="kpi-item">
-              <span class="kpi-label">總累積專注</span>
-              <strong id="kpiTotalStudyTime" class="kpi-value mono-tabular">0 小時 00 分</strong>
-            </div>
-            <div class="kpi-item">
-              <span class="kpi-label">活躍日均時數</span>
-              <strong id="kpiDailyMeanTime" class="kpi-value mono-tabular">0 小時 00 分</strong>
-              <span id="kpiActiveDaysSub" class="kpi-sub mono-tabular">0 天</span>
-            </div>
-            <div class="kpi-item">
-              <span class="kpi-label">日均中位數</span>
-              <strong id="kpiDailyMedianTime" class="kpi-value mono-tabular">0 小時 00 分</strong>
-            </div>
-            <div class="kpi-item">
-              <span class="kpi-label">計畫平均日專注</span>
-              <strong id="kpiDailyMeanAllSub" class="kpi-value mono-tabular">0 小時 00 分</strong>
-            </div>
-            <div class="kpi-item">
-              <span class="kpi-label">日均完成時段</span>
-              <strong id="kpiAvgSlotPerDay" class="kpi-value mono-tabular">0.0 格</strong>
-            </div>
-            <div class="kpi-item">
-              <span class="kpi-label">時段達成率</span>
-              <strong id="kpiTotalCompletion" class="kpi-value mono-tabular">0%</strong>
-            </div>
-          </div>
-
-          <section class="diagnostics-band" aria-label="讀書節奏診斷">
-            <div class="diag-head">
-              <span class="section-kicker">作息節奏與科目分佈</span>
-              <span id="diagPaceBadge" class="phase-tag">節奏評估中</span>
-            </div>
-            <p id="diagAdviceText" class="diag-advice">累計更多專注時段後將顯示作息分布解析。</p>
-            <div id="periodRatioBar" class="ratio-bar-track" role="img" aria-label="早中晚時段比例">
-              <div id="ratioMorningBar" class="ratio-segment ratio-morning"></div>
-              <div id="ratioNoonBar" class="ratio-segment ratio-noon"></div>
-              <div id="ratioNightBar" class="ratio-segment ratio-night"></div>
-            </div>
-            <div id="diagSubjectBalance" class="diag-balance-legend"></div>
-          </section>
-
-          <section class="stats-table-section">
-            <h3 class="section-kicker">各科目累積時數分佈</h3>
-            <div class="table-scroll-frame">
-              <table id="subjectTimeTable" class="stats-table"></table>
-            </div>
-          </section>
-
-          <section class="stats-table-section">
-            <h3 class="section-kicker">各科目完成時段次數</h3>
-            <div class="table-scroll-frame">
-              <table id="subjectCountTable" class="stats-table"></table>
-            </div>
-          </section>
-
-          <section class="stats-table-section">
-            <h3 class="section-kicker">階段計畫達成率</h3>
-            <div class="table-scroll-frame">
-              <table id="completionTable" class="stats-table"></table>
-            </div>
-          </section>
-
-          <section class="stats-table-section">
-            <h3 class="section-kicker">科目進度檢核明細</h3>
-            <div class="table-scroll-frame">
-              <table id="goalTable" class="stats-table"></table>
-            </div>
-          </section>
-
-          <section class="stats-table-section">
-            <h3 class="section-kicker">科目統計深度摘要</h3>
-            <div class="table-scroll-frame">
-              <table id="advancedStatTable" class="stats-table"></table>
-            </div>
-          </section>
-        </div>
-      </section>
     </section>
   </main>
 
@@ -662,11 +427,23 @@
       </div>
       <div class="notion-day-body">
         <div class="home-memo-block">
+          <span class="section-kicker">當日行程標籤 / 狀態小記</span>
+          <div id="dailyDayTagPills" class="day-tag-pills" role="group" aria-label="設定當日行程狀態標籤"></div>
+        </div>
+        <div class="home-memo-block">
           <label for="dailyCalendarInput" class="section-kicker">當日重要備忘錄</label>
           <input type="text" id="dailyCalendarInput" class="input-hairline-full" placeholder="輸入當日備忘錄或模考行程..." />
         </div>
         <div id="dailySlotsContainer" class="notion-slots-list"></div>
         <div id="dailyExtraTasksContainer" class="notion-extra-tasks-wrap"></div>
+        <div id="dailyDuplicateBar" class="duplicate-schedule-bar">
+          <span class="section-kicker">複製此日排程至指定日期</span>
+          <div class="duplicate-controls-row">
+            <input type="date" id="duplicateTargetDateInput" class="input-hairline mono-tabular" aria-label="複製目標日期" />
+            <button type="button" id="duplicateToNextDayBtn" class="quiet-outline-btn">複製至隔天</button>
+            <button type="button" id="duplicateToDateBtn" class="btn-primary-solid">套用複製</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -785,6 +562,6 @@
   <div id="toastContainer" class="toast-region" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261117_v18"></script>
+  <script src="app.js?v=20261117_v19"></script>
 </body>
 </html>

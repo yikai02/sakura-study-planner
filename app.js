@@ -464,6 +464,26 @@ const PDF_PREPLANNED_DATA = {
 
 const WEEKDAY_NAMES = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
 
+// 每日行程標籤 / 狀態小記預設選項
+const DAY_STATUS_PRESETS = [
+  { key: '', label: '無標籤', tone: 'none' },
+  { key: '衝刺日', label: '衝刺日', tone: 'sprint' },
+  { key: '上課日', label: '上課日', tone: 'class' },
+  { key: '模擬考', label: '模擬考', tone: 'exam' },
+  { key: '複習日', label: '複習日', tone: 'review' },
+  { key: '休息日', label: '休息日', tone: 'rest' },
+  { key: '外務日', label: '外務日', tone: 'errand' }
+];
+
+function getDayStatusTone(tagStr) {
+  const found = DAY_STATUS_PRESETS.find(p => p.key === (tagStr || ''));
+  return found ? found.tone : (tagStr ? 'custom' : 'none');
+}
+
+function isClassicTimerLayout() {
+  return typeof document !== 'undefined' && Boolean(document.querySelector('.workspace-rail'));
+}
+
 // 全域狀態
 let appState = null;
 let currentPhaseFilter = 'all'; // 純粹行事曆階段篩選
@@ -535,6 +555,8 @@ function generate80DaysSchedule(withPreplanned = true) {
       dayCountdown,
       calendar: calNote,
       calendarUpdatedAt: 0,
+      dayTag: '',
+      dayTagUpdatedAt: 0,
       extraTasks: [],
       morning: createEmptySlot(pre && pre.morning ? pre.morning[0] : '', pre && pre.morning ? pre.morning[1] : ''),
       afternoon: createEmptySlot(pre && pre.afternoon ? pre.afternoon[0] : '', pre && pre.afternoon ? pre.afternoon[1] : ''),
@@ -578,6 +600,8 @@ function createExtraDayObject(isoDate, withPreplanned = true) {
     dayCountdown: isoDate, // 非倒數區間使用 isoDate 作為唯一識別碼
     calendar: pre ? (pre.calendar || '') : '',
     calendarUpdatedAt: 0,
+    dayTag: '',
+    dayTagUpdatedAt: 0,
     extraTasks: [],
     morning: createEmptySlot(pre && pre.morning ? pre.morning[0] : '', pre && pre.morning ? pre.morning[1] : ''),
     afternoon: createEmptySlot(pre && pre.afternoon ? pre.afternoon[0] : '', pre && pre.afternoon ? pre.afternoon[1] : ''),
@@ -881,6 +905,8 @@ function normalizeState(raw) {
       ...tpl,
       calendar: typeof src.calendar === 'string' ? src.calendar : tpl.calendar,
       calendarUpdatedAt: Number(src.calendarUpdatedAt) || 0,
+      dayTag: typeof src.dayTag === 'string' ? src.dayTag.trim() : '',
+      dayTagUpdatedAt: Number(src.dayTagUpdatedAt) || 0,
       extraTasks: normalizeExtraTasksList(src.extraTasks)
     };
     SLOT_KEYS.forEach(({ key }) => {
@@ -971,6 +997,8 @@ function normalizeState(raw) {
       const baseExtra = extraDays[iso] || createExtraDayObject(iso, true);
       if (typeof src.calendar === 'string') baseExtra.calendar = src.calendar;
       baseExtra.calendarUpdatedAt = Number(src.calendarUpdatedAt) || 0;
+      if (typeof src.dayTag === 'string') baseExtra.dayTag = src.dayTag.trim();
+      baseExtra.dayTagUpdatedAt = Number(src.dayTagUpdatedAt) || 0;
       baseExtra.extraTasks = normalizeExtraTasksList(src.extraTasks);
       SLOT_KEYS.forEach(({ key }) => {
         if (src[key] && typeof src[key] === 'object') {
@@ -2280,6 +2308,7 @@ let currentCalendarWeekStartIso = '';        // 週視圖起始週一 ISO 日期
 let currentMilestoneSubjectFilter = '';      // '' (全部) 或考科名稱
 let currentNoteCategoryFilter = '';          // '' (全部) | '__pinned__' | '一般事項' | 考科名稱
 let currentNoteSearchQuery = '';             // 備忘錄搜尋關鍵字
+let openSwatchPickerSubjectId = null;        // 考科代表色票選擇器展開目標 ID
 
 /**
  * 取得任一日期或 ISO 字串所屬週的「週一」ISO 日期字串 (YYYY-MM-DD)
@@ -2667,11 +2696,14 @@ function renderHomeView() {
     todayTagEl.textContent = day.isoDate === todayIso ? '今日' : (isNumericCountdown ? `Day ${day.dayCountdown}` : '行事曆');
   }
 
+  const classicMode = isClassicTimerLayout();
   const slotsListEl = document.getElementById('homeSlotsList');
   const extraTasksListEl = document.getElementById('homeExtraTasksList');
   const doneCounterEl = document.getElementById('homeDoneCounter');
   const pctLabelEl = document.getElementById('homeCompletionPctLabel');
   const progressBarEl = document.getElementById('homeCompletionProgressBar');
+  const examInlineEl = document.getElementById('homeExamCountdownInline');
+  const dayTagPillsEl = document.getElementById('homeDayTagPills');
 
   const activeExtraTasks = Array.isArray(day.extraTasks) ? day.extraTasks.filter(t => t && !t.deleted) : [];
   const doneSlotCount = SLOT_KEYS.filter(({ key }) => day[key].completed).length;
@@ -2684,6 +2716,17 @@ function renderHomeView() {
   if (pctLabelEl) pctLabelEl.textContent = `${completionPct}% (${totalDoneCount}/${totalTaskCount})`;
   if (progressBarEl) {
     progressBarEl.style.setProperty('--progress-scale', String((completionPct / 100).toFixed(3)));
+  }
+  if (examInlineEl) {
+    const examDate = new Date(2027, 0, 26);
+    const effDate = getEffectiveStudyDate(new Date());
+    const todayMidnight = new Date(effDate.getFullYear(), effDate.getMonth(), effDate.getDate());
+    const realDaysLeft = Math.max(0, Math.round((examDate - todayMidnight) / 86400000));
+    const cdText = typeof day.dayCountdown === 'number' ? `Day ${day.dayCountdown}` : '暖身期';
+    examInlineEl.textContent = `${cdText} · 倒數 ${realDaysLeft} 天`;
+  }
+  if (dayTagPillsEl) {
+    dayTagPillsEl.innerHTML = buildDayTagPillsHtml(day.dayTag || '', day.dayCountdown);
   }
 
   // 同步更新快速排程 (Quick Add) 預設日期與考科選單
@@ -2706,8 +2749,8 @@ function renderHomeView() {
     slotsListEl.innerHTML = SLOT_KEYS.map(({ key, label, timeRange }) => {
       const s = day[key];
       const effMins = getSlotEffectiveMinutes(s);
-      const isRunning = s.timerStatus === 'running';
-      const isPaused = s.timerStatus === 'paused';
+      const isRunning = classicMode && s.timerStatus === 'running';
+      const isPaused = classicMode && s.timerStatus === 'paused';
       const swatch = getSubjectSwatchKey(s.subject);
       const allOpts = s.subject && !subjectOptionsList.includes(s.subject)
         ? [...subjectOptionsList, s.subject]
@@ -2735,7 +2778,7 @@ function renderHomeView() {
             <div class="rail-day-meta">
               ${canRollover ? `<button type="button" class="rollover-action-btn" data-rollover-day="${day.dayCountdown}" data-rollover-slot="${key}">順延至今日</button>` : ''}
               ${stateTag ? `<span class="phase-tag">${stateTag}</span>` : ''}
-              <span class="stat-sub-val mono-tabular">${effMins > 0 ? formatMinutesToHM(effMins) : '0分'}</span>
+              ${classicMode ? `<span class="stat-sub-val mono-tabular">${effMins > 0 ? formatMinutesToHM(effMins) : '0分'}</span>` : ''}
             </div>
           </div>
           <div class="home-slot-controls-row">
@@ -2836,11 +2879,140 @@ function buildDayExtraTasksHtml(day, todayIso = getTodayIsoString()) {
 }
 
 /**
- * 渲染第一頁「考試倒數與考科本週排程狀態」卡片網格
+ * 建立每日行程狀態標籤按鈕群 HTML
+ */
+function buildDayTagPillsHtml(currentTag, dayKey) {
+  return DAY_STATUS_PRESETS.map(preset => {
+    const active = (currentTag || '') === preset.key;
+    return `
+      <button
+        type="button"
+        class="day-tag-pill ${active ? 'active' : ''}"
+        data-set-day-tag="${escapeHtml(preset.key)}"
+        data-day="${escapeHtml(dayKey)}"
+        data-tone="${escapeHtml(preset.tone)}"
+      >${escapeHtml(preset.label)}</button>
+    `;
+  }).join('');
+}
+
+/**
+ * 取得指定 ISO 日期的隔天 ISO 日期字串
+ */
+function getNextIsoDate(isoDate) {
+  const parts = String(isoDate || getTodayIsoString()).split('-').map(Number);
+  const dt = new Date(parts[0] || 2026, (parts[1] || 11) - 1, (parts[2] || 1) + 1);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * 更新單日行程標籤 / 狀態小記
+ */
+function updateDayStatusTag(dayKey, newTag) {
+  const day = findDayByKey(dayKey);
+  if (!day) return false;
+  const cleanTag = String(newTag || '').trim();
+  const nowTs = Date.now();
+  day.dayTag = cleanTag;
+  day.dayTagUpdatedAt = nowTs;
+  appState.updatedAt = nowTs;
+  saveState();
+  renderHomeView();
+  renderMainScheduleTable();
+  renderDailyPlanView();
+  if (currentRoomId && !isReceivingRemoteUpdate) {
+    broadcastRoomDelta({ kind: 'dayTag', day: day.dayCountdown, val: cleanTag, updatedAt: nowTs });
+  }
+  showToast(cleanTag ? `已設定 ${day.dateDisplay} 狀態為「${cleanTag}」` : `已清除 ${day.dateDisplay} 狀態標籤`);
+  return true;
+}
+
+/**
+ * 快速複製指定日期的讀書排程（早／午／晚與額外待辦）到另一指定日期
+ * 原則：絕不清除或覆蓋目標日期任何既有歷史專注秒數 (`durationMinutes` / `accumulatedMs`)
+ */
+function duplicateDayScheduleToDate(sourceDayKey, targetDateOrKey) {
+  const srcDay = findDayByKey(sourceDayKey);
+  const targetDay = findDayByKey(targetDateOrKey);
+  if (!srcDay || !targetDay) {
+    showToast('請選擇有效的目標日期');
+    return false;
+  }
+  if (srcDay.isoDate === targetDay.isoDate) {
+    showToast('目標日期與來源日期相同，請選擇其他日期');
+    return false;
+  }
+
+  const nowTs = Date.now();
+  let copiedCount = 0;
+
+  SLOT_KEYS.forEach(({ key }) => {
+    const srcSlot = srcDay[key];
+    const dstSlot = targetDay[key];
+    if (!srcSlot || !dstSlot) return;
+    if (srcSlot.subject || (srcSlot.task && srcSlot.task.trim())) {
+      dstSlot.subject = srcSlot.subject || '';
+      dstSlot.task = srcSlot.task || '';
+      dstSlot.completed = false;
+      dstSlot.rolledOverTo = '';
+      dstSlot.updatedAt = nowTs;
+      // 注意：故意不動 dstSlot.durationMinutes 與 accumulatedMs，完整保留歷史紀錄
+      copiedCount += 1;
+    }
+  });
+
+  if (Array.isArray(srcDay.extraTasks)) {
+    const srcExtras = srcDay.extraTasks.filter(t => t && !t.deleted);
+    if (srcExtras.length > 0) {
+      if (!Array.isArray(targetDay.extraTasks)) targetDay.extraTasks = [];
+      srcExtras.forEach((t, idx) => {
+        const cleanSubj = t.subject || '';
+        const cleanTask = t.task || '';
+        const alreadyExists = targetDay.extraTasks.some(
+          et => et && !et.deleted && (et.subject || '') === cleanSubj && (et.task || '') === cleanTask
+        );
+        if (!alreadyExists) {
+          targetDay.extraTasks.push({
+            id: `et_dup_${nowTs}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+            subject: cleanSubj,
+            task: cleanTask,
+            completed: false,
+            fromDate: '',
+            fromSlot: '',
+            updatedAt: nowTs,
+            deleted: false
+          });
+          copiedCount += 1;
+        }
+      });
+    }
+  }
+
+  if (srcDay.dayTag && !targetDay.dayTag) {
+    targetDay.dayTag = srcDay.dayTag;
+    targetDay.dayTagUpdatedAt = nowTs;
+  }
+
+  if (copiedCount === 0) {
+    showToast(`${srcDay.dateDisplay} 目前沒有可複製的排程項目`);
+    return false;
+  }
+
+  appState.updatedAt = nowTs;
+  saveState();
+  renderHomeView();
+  renderMainScheduleTable();
+  renderDailyPlanView();
+  showToast(`已將 ${srcDay.dateDisplay} 的 ${copiedCount} 項排程複製到 ${targetDay.dateDisplay}`);
+  return true;
+}
+
+/**
+ * 渲染第一頁「考試倒數與考科本週排程狀態」卡片網格（含考科換色與原地改名）
  */
 function renderHomeSubjectStatusGrid() {
   const gridEl = document.getElementById('homeSubjectStatusGrid');
-  if (!gridEl || !appState) return;
+  if (!gridEl || !appState || gridEl.querySelector('.inline-edit-input')) return;
 
   const effDate = getEffectiveStudyDate(new Date());
   const todayMidnight = new Date(effDate.getFullYear(), effDate.getMonth(), effDate.getDate());
@@ -2852,6 +3024,7 @@ function renderHomeSubjectStatusGrid() {
     const [ey, em, ed] = examIso.split('-').map(Number);
     const examDt = new Date(ey, em - 1, ed);
     const diffDays = Math.max(0, Math.round((examDt - todayMidnight) / 86400000));
+    const isPaletteOpen = openSwatchPickerSubjectId === entity.id;
 
     let weekScheduled = 0;
     let weekCompleted = 0;
@@ -2876,12 +3049,45 @@ function renderHomeSubjectStatusGrid() {
       }
     });
 
+    const paletteHtml = isPaletteOpen ? `
+      <div class="subj-swatch-palette" role="group" aria-label="選擇${escapeHtml(entity.name)}代表色票">
+        ${SUBJECT_FASHION_SWATCHES.map(sw => `
+          <button
+            type="button"
+            class="swatch-choice-dot ${entity.swatch === sw.key ? 'is-selected' : ''}"
+            data-swatch="${sw.key}"
+            data-set-swatch-subject="${escapeHtml(entity.id)}"
+            data-swatch-choice="${sw.key}"
+            title="${escapeHtml(sw.label)}"
+            aria-label="${escapeHtml(sw.label)}"
+          ></button>
+        `).join('')}
+      </div>
+    ` : '';
+
     return `
       <div class="subject-status-card" data-swatch="${escapeHtml(entity.swatch)}">
         <div class="subject-status-top">
-          <span class="subj-pill" data-swatch="${escapeHtml(entity.swatch)}">${escapeHtml(entity.name)}</span>
+          <div class="subject-entity-left">
+            <button
+              type="button"
+              class="subj-swatch-trigger"
+              data-toggle-swatch-picker="${escapeHtml(entity.id)}"
+              title="點擊切換代表色票"
+              aria-label="切換${escapeHtml(entity.name)}代表色"
+              aria-expanded="${isPaletteOpen ? 'true' : 'false'}"
+            ></button>
+            <span
+              class="subj-entity-name inline-editable"
+              data-subject-id="${escapeHtml(entity.id)}"
+              tabindex="0"
+              role="textbox"
+              title="點擊編輯科目名稱"
+            >${escapeHtml(entity.name)}</span>
+          </div>
           <span class="subject-countdown-badge mono-tabular">${diffDays > 0 ? `倒數 ${diffDays} 天` : '考試當日'}</span>
         </div>
+        ${paletteHtml}
         <div class="subject-status-metrics">
           <span>本週已排 <strong class="mono-tabular">${weekScheduled}</strong> 項</span>
           <span>已完成 <strong class="mono-tabular">${weekCompleted}</strong> 項</span>
@@ -2988,8 +3194,6 @@ function getDayTotalEffectiveMinutes(day) {
   if (!day) return 0;
   return SLOT_KEYS.reduce((acc, { key }) => acc + getSlotEffectiveMinutes(day[key]), 0);
 }
-
-let openSwatchPickerSubjectId = null;
 
 function renderQuickTimerView() {
   const day = getTimerTargetDay();
@@ -3290,6 +3494,15 @@ function renderDailyPlanView(optionalDayKey) {
     calendarInput.value = day.calendar || '';
   }
 
+  const dailyTagPillsEl = document.getElementById('dailyDayTagPills');
+  if (dailyTagPillsEl) {
+    dailyTagPillsEl.innerHTML = buildDayTagPillsHtml(day.dayTag || '', day.dayCountdown);
+  }
+  const dupTargetInp = document.getElementById('duplicateTargetDateInput');
+  if (dupTargetInp && document.activeElement !== dupTargetInp) {
+    dupTargetInp.value = getNextIsoDate(day.isoDate);
+  }
+
   if (selectEl) {
     const extraOpts = appState.extraDays
       ? Object.keys(appState.extraDays).sort().map(iso => {
@@ -3327,6 +3540,7 @@ function renderDailySlotsDetailed(day) {
   const container = document.getElementById('dailySlotsContainer');
   if (!container) return;
 
+  const classicMode = isClassicTimerLayout();
   const subjectOptionsList = getSubjectOptionsList();
   container.innerHTML = SLOT_KEYS.map(({ key, label, timeRange }) => {
     const s = day[key];
@@ -3342,48 +3556,7 @@ function renderDailySlotsDetailed(day) {
       <option value="${escapeHtml(opt)}" ${s.subject === opt ? 'selected' : ''}>${escapeHtml(opt || '— 選擇科目 —')}</option>
     `).join('');
 
-    return `
-      <div class="daily-slot-card ${s.completed ? 'completed' : ''}" id="daily-card-${day.dayCountdown}-${key}" data-swatch="${escapeHtml(swatch)}">
-        <div class="daily-slot-card-header">
-          <div class="daily-slot-card-title">
-            <span>${label}時段</span>
-            <span class="daily-slot-time-range">${timeRange}</span>
-          </div>
-          <div class="slot-done-wrap">
-            <label class="done-checkbox-label">
-              <input
-                type="checkbox"
-                class="done-checkbox daily-done-checkbox"
-                data-day="${day.dayCountdown}"
-                data-slot="${key}"
-                ${s.completed ? 'checked' : ''}
-              />
-              <span class="done-text">${s.completed ? '已完成' : '標記完成'}</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="daily-slot-card-body">
-          <div class="daily-field-group">
-            <label class="daily-field-label">讀書科目</label>
-            <select class="subject-select daily-subject-select" data-day="${day.dayCountdown}" data-slot="${key}">
-              ${subjectOptionsHtml}
-            </select>
-          </div>
-
-          <div class="daily-field-group">
-            <label class="daily-field-label">範圍 / 任務目標</label>
-            <input
-              type="text"
-              class="task-input daily-task-input"
-              data-day="${day.dayCountdown}"
-              data-slot="${key}"
-              value="${escapeHtml(s.task)}"
-              placeholder="例如：Ch14 複習、700 題與計量..."
-            />
-          </div>
-        </div>
-
+    const timeFieldsHtml = classicMode ? `
         <div class="notion-slot-fields">
           <input
             type="text"
@@ -3434,6 +3607,51 @@ function renderDailySlotsDetailed(day) {
           />
           <span class="daily-field-label">分</span>
         </div>
+    ` : '';
+
+    return `
+      <div class="daily-slot-card ${s.completed ? 'completed' : ''}" id="daily-card-${day.dayCountdown}-${key}" data-swatch="${escapeHtml(swatch)}">
+        <div class="daily-slot-card-header">
+          <div class="daily-slot-card-title">
+            <span>${label}時段</span>
+            <span class="daily-slot-time-range">${timeRange}</span>
+          </div>
+          <div class="slot-done-wrap">
+            <label class="done-checkbox-label">
+              <input
+                type="checkbox"
+                class="done-checkbox daily-done-checkbox"
+                data-day="${day.dayCountdown}"
+                data-slot="${key}"
+                ${s.completed ? 'checked' : ''}
+              />
+              <span class="done-text">${s.completed ? '已完成' : '標記完成'}</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="daily-slot-card-body">
+          <div class="daily-field-group">
+            <label class="daily-field-label">讀書科目</label>
+            <select class="subject-select daily-subject-select" data-day="${day.dayCountdown}" data-slot="${key}">
+              ${subjectOptionsHtml}
+            </select>
+          </div>
+
+          <div class="daily-field-group">
+            <label class="daily-field-label">範圍 / 任務目標</label>
+            <input
+              type="text"
+              class="task-input daily-task-input"
+              data-day="${day.dayCountdown}"
+              data-slot="${key}"
+              value="${escapeHtml(s.task)}"
+              placeholder="例如：Ch14 複習、700 題與計量..."
+            />
+          </div>
+        </div>
+
+        ${timeFieldsHtml}
       </div>
     `;
   }).join('');
@@ -3714,8 +3932,95 @@ function setCalendarViewMode(mode) {
   renderCalendarWeekView();
 }
 
+/**
+ * 渲染專屬行事曆頂部「本週考科配比色條」（依本週各考科已安排任務數呈現佔比）
+ */
+function renderCalendarWeeklyRatioBar() {
+  const trackEl = document.getElementById('calWeeklyRatioTrack');
+  const legendEl = document.getElementById('calWeeklyRatioLegend');
+  const totalLabelEl = document.getElementById('calRatioTotalLabel');
+  const titleEl = document.getElementById('calRatioTitle');
+  if (!trackEl || !legendEl || !appState) return;
+
+  const baseMonday = currentCalendarWeekStartIso || getMondayIsoForDate(getEffectiveStudyDate());
+  const weekDays = getWeekDaysFromMondayIso(baseMonday);
+  const firstDay = weekDays[0] && weekDays[0].dayObj;
+  const lastDay = weekDays[6] && weekDays[6].dayObj;
+  if (titleEl && firstDay && lastDay) {
+    titleEl.textContent = `本週考科排程配比（${firstDay.dateDisplay} ~ ${lastDay.dateDisplay}）`;
+  }
+
+  const entities = getSubjectEntities();
+  const counts = {};
+  entities.forEach(e => { counts[e.name] = 0; });
+  let totalScheduled = 0;
+
+  weekDays.forEach(({ dayObj }) => {
+    if (!dayObj) return;
+    SLOT_KEYS.forEach(({ key }) => {
+      const s = dayObj[key];
+      if (!s || (!s.subject && !(s.task && s.task.trim()))) return;
+      const matched = entities.find(e => e.name === s.subject || (e.id === 'subj_micro' && s.subject === '經濟'));
+      const targetName = matched ? matched.name : (entities[entities.length - 1] ? entities[entities.length - 1].name : '其他');
+      counts[targetName] = (counts[targetName] || 0) + 1;
+      totalScheduled += 1;
+    });
+    if (Array.isArray(dayObj.extraTasks)) {
+      dayObj.extraTasks.forEach(t => {
+        if (!t || t.deleted) return;
+        const matched = entities.find(e => e.name === t.subject || (e.id === 'subj_micro' && t.subject === '經濟'));
+        const targetName = matched ? matched.name : (entities[entities.length - 1] ? entities[entities.length - 1].name : '其他');
+        counts[targetName] = (counts[targetName] || 0) + 1;
+        totalScheduled += 1;
+      });
+    }
+  });
+
+  if (totalLabelEl) {
+    totalLabelEl.textContent = `本週共 ${totalScheduled} 項排程`;
+  }
+
+  if (totalScheduled === 0) {
+    trackEl.innerHTML = `<div class="cal-ratio-empty">本週尚未安排讀書任務</div>`;
+    legendEl.innerHTML = entities.map(e => `
+      <span class="cal-ratio-legend-item">
+        <span class="subj-filter-dot" data-swatch="${escapeHtml(e.swatch)}"></span>
+        <span>${escapeHtml(e.name)} 0%</span>
+      </span>
+    `).join('');
+    return;
+  }
+
+  const activeEntities = entities.filter(e => (counts[e.name] || 0) > 0);
+  trackEl.innerHTML = activeEntities.map(e => {
+    const cnt = counts[e.name] || 0;
+    const pct = Math.round((cnt / totalScheduled) * 100);
+    return `
+      <div
+        class="cal-ratio-segment"
+        data-swatch="${escapeHtml(e.swatch)}"
+        style="flex: ${cnt} 1 0%;"
+        title="${escapeHtml(e.name)}：${cnt} 項 (${pct}%)"
+      ></div>
+    `;
+  }).join('');
+
+  legendEl.innerHTML = entities.map(e => {
+    const cnt = counts[e.name] || 0;
+    const pct = totalScheduled > 0 ? Math.round((cnt / totalScheduled) * 100) : 0;
+    return `
+      <span class="cal-ratio-legend-item ${cnt === 0 ? 'is-zero' : ''}">
+        <span class="subj-filter-dot" data-swatch="${escapeHtml(e.swatch)}"></span>
+        <span>${escapeHtml(e.name)}</span>
+        <strong class="mono-tabular">${cnt}項 (${pct}%)</strong>
+      </span>
+    `;
+  }).join('');
+}
+
 function renderPureCalendarTable() {
   renderCalendarSubjectFilterBar();
+  renderCalendarWeeklyRatioBar();
   renderOverdueRolloverBanner();
 
   const gridEl = document.getElementById('notionCalendarGrid');
@@ -3741,6 +4046,7 @@ function renderPureCalendarTable() {
   const startCellDate = new Date(year, month - 1, 1 - firstWeekdayMon0);
 
   const todayIso = getTodayIsoString();
+  const classicMode = isClassicTimerLayout();
   const q = (currentSearchQuery || '').trim().toLowerCase();
 
   const cellsHtml = [];
@@ -3765,6 +4071,7 @@ function renderPureCalendarTable() {
       const extraHay = activeExtras.map(t => `${t.subject} ${t.task}`).join(' ');
       const hay = [
         dayObj.dateDisplay,
+        dayObj.dayTag || '',
         dayObj.calendar || '',
         dayObj.morning.subject, dayObj.morning.task,
         dayObj.afternoon.subject, dayObj.afternoon.task,
@@ -3829,6 +4136,13 @@ function renderPureCalendarTable() {
       `;
     }).join('');
 
+    const statusBadgeHtml = dayObj && dayObj.dayTag
+      ? `<span class="cal-status-badge" data-tone="${escapeHtml(getDayStatusTone(dayObj.dayTag))}" title="行程狀態：${escapeHtml(dayObj.dayTag)}">${escapeHtml(dayObj.dayTag)}</span>`
+      : '';
+    const memoBannerHtml = dayObj && dayObj.calendar
+      ? `<div class="cal-memo-banner" data-open-day-editor="${dayKey}" title="${escapeHtml(dayObj.calendar)}">${escapeHtml(dayObj.calendar)}</div>`
+      : '';
+
     const isSelected = String(dayKey) === String(calendarEditorDayKey);
 
     cellsHtml.push(`
@@ -3840,13 +4154,14 @@ function renderPureCalendarTable() {
         <div class="cal-cell-date-row" data-open-day-editor="${dayKey}" title="點擊開啟 ${cM}月${cD}日 快捷編輯頁面">
           <div class="cal-date-left-meta">
             ${isNumericCountdown ? `<span class="cal-countdown-mini mono-tabular">D-${dayObj.dayCountdown}</span>` : ''}
-            ${dayObj && dayObj.calendar ? `<span class="cal-memo-pill" title="${escapeHtml(dayObj.calendar)}">${escapeHtml(dayObj.calendar)}</span>` : ''}
+            ${statusBadgeHtml}
             ${activeExtras.length > 0 ? `<span class="cal-countdown-mini mono-tabular">+${activeExtras.length}待辦</span>` : ''}
-            ${totalMins > 0 ? `<span class="cal-countdown-mini mono-tabular">${formatMinutesToHM(totalMins)}</span>` : ''}
+            ${classicMode && totalMins > 0 ? `<span class="cal-countdown-mini mono-tabular">${formatMinutesToHM(totalMins)}</span>` : ''}
           </div>
           <span class="cal-date-num ${isToday ? 'today-circle' : ''}">${dateLabel}</span>
         </div>
 
+        ${memoBannerHtml}
         ${slotRowsHtml}
         ${extraRowsHtml}
       </div>
@@ -3857,9 +4172,10 @@ function renderPureCalendarTable() {
 }
 
 /**
- * 渲染專屬行事曆「週視圖 (Week View)」：展開單週 7 天每日排程細節與順延操作
+ * 渲染專屬行事曆「週視圖 (Week View)」：展開單週 7 天每日排程細節、狀態標籤與快速複製
  */
 function renderCalendarWeekView() {
+  renderCalendarWeeklyRatioBar();
   const weekGridEl = document.getElementById('calendarWeekGrid');
   const rangeLabelEl = document.getElementById('calWeekRangeLabel');
   if (!weekGridEl || !appState) return;
@@ -3875,6 +4191,7 @@ function renderCalendarWeekView() {
   }
 
   const todayIso = getTodayIsoString();
+  const classicMode = isClassicTimerLayout();
   const q = (currentSearchQuery || '').trim().toLowerCase();
 
   weekGridEl.innerHTML = weekDays.map(({ isoDate, dayObj }) => {
@@ -3892,7 +4209,7 @@ function renderCalendarWeekView() {
         return '';
       }
       if (q) {
-        const hay = `${dayObj.dateDisplay} ${dayObj.calendar || ''} ${s.subject || ''} ${s.task || ''}`.toLowerCase();
+        const hay = `${dayObj.dateDisplay} ${dayObj.dayTag || ''} ${dayObj.calendar || ''} ${s.subject || ''} ${s.task || ''}`.toLowerCase();
         if (!hay.includes(q)) return '';
       }
       const swatch = getSubjectSwatchKey(s.subject);
@@ -3923,7 +4240,7 @@ function renderCalendarWeekView() {
             value="${escapeHtml(s.task || '')}"
             placeholder="輸入${label}排程任務..."
           />
-          ${effMins > 0 ? `<span class="stat-sub-val mono-tabular">${formatMinutesToHM(effMins)}</span>` : ''}
+          ${classicMode && effMins > 0 ? `<span class="stat-sub-val mono-tabular">${formatMinutesToHM(effMins)}</span>` : ''}
           ${canRollover ? `<button type="button" class="rollover-action-btn" data-rollover-day="${dayKey}" data-rollover-slot="${key}">順延至今日</button>` : ''}
         </div>
       `;
@@ -3958,6 +4275,10 @@ function renderCalendarWeekView() {
       `;
     }).join('');
 
+    const tagSelectOpts = DAY_STATUS_PRESETS.map(p => `
+      <option value="${escapeHtml(p.key)}" ${(dayObj.dayTag || '') === p.key ? 'selected' : ''}>${escapeHtml(p.label)}</option>
+    `).join('');
+
     return `
       <div class="week-day-card ${isToday ? 'is-today' : ''}" data-week-day="${dayKey}">
         <div class="week-day-head">
@@ -3965,9 +4286,14 @@ function renderCalendarWeekView() {
             <span>${dayObj.dateDisplay} ${dayObj.weekdayDisplay}</span>
             ${isNumeric ? `<span class="day-tag mono-tabular">D-${dayObj.dayCountdown}</span>` : ''}
             ${isToday ? `<span class="phase-tag">今日</span>` : ''}
+            ${dayObj.dayTag ? `<span class="cal-status-badge" data-tone="${escapeHtml(getDayStatusTone(dayObj.dayTag))}">${escapeHtml(dayObj.dayTag)}</span>` : ''}
           </div>
           <div class="rail-day-meta">
-            ${totalMins > 0 ? `<span class="stat-sub-val mono-tabular">${formatMinutesToHM(totalMins)}</span>` : ''}
+            <select class="select-hairline week-day-tag-select" data-day-tag-select="${dayKey}" aria-label="設定${dayObj.dateDisplay}狀態標籤">
+              ${tagSelectOpts}
+            </select>
+            ${classicMode && totalMins > 0 ? `<span class="stat-sub-val mono-tabular">${formatMinutesToHM(totalMins)}</span>` : ''}
+            <button type="button" class="quiet-text-btn" data-dup-next-day="${dayKey}" title="複製此日排程至隔天">複製隔天</button>
             <button type="button" class="quiet-text-btn" data-open-day-editor="${dayKey}">詳細</button>
           </div>
         </div>
@@ -5527,6 +5853,7 @@ function setupEventListeners() {
     if (openSwatchPickerSubjectId && !e.target.closest('.subj-swatch-trigger, .subj-swatch-palette')) {
       openSwatchPickerSubjectId = null;
       renderQuickSubjectsGrid(getTimerTargetDay());
+      renderHomeSubjectStatusGrid();
     }
   });
 
@@ -5904,6 +6231,24 @@ function setupEventListeners() {
 
   const homeSubjectStatusGrid = document.getElementById('homeSubjectStatusGrid');
   if (homeSubjectStatusGrid) {
+    homeSubjectStatusGrid.addEventListener('click', (e) => {
+      const choiceDot = e.target.closest('[data-set-swatch-subject]');
+      if (choiceDot) {
+        e.stopPropagation();
+        const subjId = choiceDot.dataset.setSwatchSubject;
+        const swatchChoice = choiceDot.dataset.swatchChoice;
+        openSwatchPickerSubjectId = null;
+        setSubjectEntitySwatch(subjId, swatchChoice);
+        return;
+      }
+      const swatchTrigger = e.target.closest('[data-toggle-swatch-picker]');
+      if (swatchTrigger) {
+        e.stopPropagation();
+        const targetId = swatchTrigger.dataset.toggleSwatchPicker;
+        openSwatchPickerSubjectId = (openSwatchPickerSubjectId === targetId) ? null : targetId;
+        renderHomeSubjectStatusGrid();
+      }
+    });
     homeSubjectStatusGrid.addEventListener('change', (e) => {
       const inp = e.target.closest('input[data-subject-exam-id]');
       if (!inp) return;
@@ -5926,6 +6271,31 @@ function setupEventListeners() {
     });
   }
 
+  // 第一頁與彈窗「每日行程狀態標籤」與「快速複製排程」監聽
+  const duplicateToNextDayBtn = document.getElementById('duplicateToNextDayBtn');
+  const duplicateToDateBtn = document.getElementById('duplicateToDateBtn');
+  const duplicateTargetDateInput = document.getElementById('duplicateTargetDateInput');
+
+  if (duplicateToNextDayBtn) {
+    duplicateToNextDayBtn.addEventListener('click', () => {
+      const srcDay = getCalendarEditorDay();
+      if (srcDay) {
+        duplicateDayScheduleToDate(srcDay.dayCountdown, getNextIsoDate(srcDay.isoDate));
+      }
+    });
+  }
+  if (duplicateToDateBtn) {
+    duplicateToDateBtn.addEventListener('click', () => {
+      const srcDay = getCalendarEditorDay();
+      const targetIso = duplicateTargetDateInput ? duplicateTargetDateInput.value : '';
+      if (srcDay && targetIso) {
+        duplicateDayScheduleToDate(srcDay.dayCountdown, targetIso);
+      } else {
+        showToast('請先選擇要複製前往的目標日期');
+      }
+    });
+  }
+
   const homeOverdueQuickHint = document.getElementById('homeOverdueQuickHint');
   if (homeOverdueQuickHint) {
     homeOverdueQuickHint.addEventListener('click', (e) => {
@@ -5935,8 +6305,23 @@ function setupEventListeners() {
     });
   }
 
-  // 全域委派：順延至今日按鈕 (data-rollover-day / data-rollover-all) 與額外待辦 (extra-task) 操作
+  // 全域委派：順延至今日按鈕、設定行程狀態標籤 (data-set-day-tag)、複製隔天 (data-dup-next-day) 與額外待辦操作
   document.addEventListener('click', (e) => {
+    const dayTagBtn = e.target.closest('[data-set-day-tag]');
+    if (dayTagBtn) {
+      e.preventDefault();
+      updateDayStatusTag(dayTagBtn.dataset.day, dayTagBtn.dataset.setDayTag || '');
+      return;
+    }
+    const dupNextBtn = e.target.closest('[data-dup-next-day]');
+    if (dupNextBtn) {
+      e.preventDefault();
+      const srcDay = findDayByKey(dupNextBtn.dataset.dupNextDay);
+      if (srcDay) {
+        duplicateDayScheduleToDate(srcDay.dayCountdown, getNextIsoDate(srcDay.isoDate));
+      }
+      return;
+    }
     const rollAllBtn = e.target.closest('[data-rollover-all]');
     if (rollAllBtn) {
       e.preventDefault();
@@ -5982,6 +6367,10 @@ function setupEventListeners() {
 
   document.addEventListener('change', (e) => {
     const target = e.target;
+    if (target.classList && target.classList.contains('week-day-tag-select')) {
+      updateDayStatusTag(target.dataset.dayTagSelect, target.value);
+      return;
+    }
     if (target.classList && target.classList.contains('extra-task-checkbox')) {
       const dayKey = target.dataset.day;
       const extraId = target.dataset.extraTaskId;
@@ -7002,6 +7391,12 @@ function compactState(st) {
       dayEntry.c = '';
     }
     if (d.calendarUpdatedAt) dayEntry.cu = d.calendarUpdatedAt;
+    if (d.dayTag && d.dayTag.trim()) {
+      dayEntry.tg = d.dayTag.trim();
+    } else if (d.dayTagUpdatedAt) {
+      dayEntry.tg = '';
+    }
+    if (d.dayTagUpdatedAt) dayEntry.tgu = d.dayTagUpdatedAt;
     if (Array.isArray(d.extraTasks) && d.extraTasks.length > 0) {
       dayEntry.et = d.extraTasks;
     }
@@ -7076,6 +7471,12 @@ function compactState(st) {
         entry.c = '';
       }
       if (ed.calendarUpdatedAt) entry.cu = ed.calendarUpdatedAt;
+      if (ed.dayTag && ed.dayTag.trim()) {
+        entry.tg = ed.dayTag.trim();
+      } else if (ed.dayTagUpdatedAt) {
+        entry.tg = '';
+      }
+      if (ed.dayTagUpdatedAt) entry.tgu = ed.dayTagUpdatedAt;
       if (Array.isArray(ed.extraTasks) && ed.extraTasks.length > 0) {
         entry.et = ed.extraTasks;
       }
@@ -7144,6 +7545,12 @@ function unpackCompactState(compact) {
         day.calendar = '';
       }
       if (saved.cu) day.calendarUpdatedAt = Number(saved.cu) || 0;
+      if (typeof saved.tg === 'string') {
+        day.dayTag = saved.tg.trim();
+      } else if (saved.tgu) {
+        day.dayTag = '';
+      }
+      if (saved.tgu) day.dayTagUpdatedAt = Number(saved.tgu) || 0;
       if (Array.isArray(saved.et)) {
         day.extraTasks = normalizeExtraTasksList(saved.et);
       }
@@ -7211,6 +7618,12 @@ function unpackCompactState(compact) {
         ed.calendar = '';
       }
       if (saved.cu) ed.calendarUpdatedAt = Number(saved.cu) || 0;
+      if (typeof saved.tg === 'string') {
+        ed.dayTag = saved.tg.trim();
+      } else if (saved.tgu) {
+        ed.dayTag = '';
+      }
+      if (saved.tgu) ed.dayTagUpdatedAt = Number(saved.tgu) || 0;
       if (Array.isArray(saved.et)) {
         ed.extraTasks = normalizeExtraTasksList(saved.et);
       }
@@ -7365,6 +7778,13 @@ function mergeRemoteState(remote) {
     return rCalTs > lCalTs || (rCalTs === lCalTs && lCalTs === 0 && !localEntry.calendar && Boolean(remoteEntry.calendar));
   };
 
+  /** Return true when remote day status tag supersedes local without letting old snapshots clear tags. */
+  const shouldAdoptRemoteDayTag = (localEntry, remoteEntry) => {
+    const rTgTs = Number(remoteEntry.dayTagUpdatedAt) || 0;
+    const lTgTs = Number(localEntry.dayTagUpdatedAt) || 0;
+    return rTgTs > lTgTs || (rTgTs === lTgTs && lTgTs === 0 && !localEntry.dayTag && Boolean(remoteEntry.dayTag));
+  };
+
   if (remote.extraDays && typeof remote.extraDays === 'object') {
     if (!appState.extraDays) appState.extraDays = generateInitialExtraDays(true);
     Object.keys(remote.extraDays).forEach(iso => {
@@ -7373,6 +7793,10 @@ function mergeRemoteState(remote) {
       if (shouldAdoptRemoteCalendar(lExtra, rExtra)) {
         lExtra.calendar = rExtra.calendar || '';
         lExtra.calendarUpdatedAt = Number(rExtra.calendarUpdatedAt) || 0;
+      }
+      if (shouldAdoptRemoteDayTag(lExtra, rExtra)) {
+        lExtra.dayTag = typeof rExtra.dayTag === 'string' ? rExtra.dayTag.trim() : '';
+        lExtra.dayTagUpdatedAt = Number(rExtra.dayTagUpdatedAt) || 0;
       }
       lExtra.extraTasks = mergeTimestampedIdArray(lExtra.extraTasks, rExtra.extraTasks);
       SLOT_KEYS.forEach(({ key }) => {
@@ -7400,6 +7824,10 @@ function mergeRemoteState(remote) {
     if (shouldAdoptRemoteCalendar(localDay, remoteDay)) {
       localDay.calendar = remoteDay.calendar || '';
       localDay.calendarUpdatedAt = Number(remoteDay.calendarUpdatedAt) || 0;
+    }
+    if (shouldAdoptRemoteDayTag(localDay, remoteDay)) {
+      localDay.dayTag = typeof remoteDay.dayTag === 'string' ? remoteDay.dayTag.trim() : '';
+      localDay.dayTagUpdatedAt = Number(remoteDay.dayTagUpdatedAt) || 0;
     }
 
     localDay.extraTasks = mergeTimestampedIdArray(localDay.extraTasks, remoteDay.extraTasks);
@@ -7913,27 +8341,30 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
             const homeInp = document.getElementById('homeCalendarMemoInput');
             if (homeInp && document.activeElement !== homeInp) homeInp.value = day.calendar;
           }
-          // 同步更新 Notion 日曆格子上的備忘標籤
-          const calCell = document.querySelector(`[data-cal-cell-day="${p.day}"]`);
-          if (calCell) {
-            const dateMeta = calCell.querySelector('.cal-date-left-meta');
-            if (dateMeta) {
-              let memoPill = dateMeta.querySelector('.cal-memo-pill');
-              if (day.calendar) {
-                if (!memoPill) {
-                  memoPill = document.createElement('span');
-                  memoPill.className = 'cal-memo-pill';
-                  dateMeta.appendChild(memoPill);
-                }
-                memoPill.title = day.calendar;
-                memoPill.textContent = day.calendar;
-              } else if (memoPill) {
-                memoPill.remove();
-              }
-            }
-          }
+          // 同步更新 Notion 日曆格子與週視圖上的備忘展示
+          renderPureCalendarTable();
+          renderCalendarWeekView();
           renderHomeUpcomingList();
           renderDailyFocusScheduleTable();
+          saveState(false, false);
+        }
+      }
+    } else if (p.kind === 'dayTag') {
+      const day = findDayByKey(p.day);
+      if (day) {
+        if (eventTs >= (day.dayTagUpdatedAt || 0)) {
+          day.dayTag = typeof p.val === 'string' ? p.val.trim() : '';
+          day.dayTagUpdatedAt = eventTs;
+          appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
+          renderHomeView();
+          renderPureCalendarTable();
+          renderCalendarWeekView();
+          if (String(currentActiveDayCountdown) === String(day.dayCountdown)) {
+            const dailyTagPillsEl = document.getElementById('dailyDayTagPills');
+            if (dailyTagPillsEl) {
+              dailyTagPillsEl.innerHTML = buildDayTagPillsHtml(day.dayTag || '', day.dayCountdown);
+            }
+          }
           saveState(false, false);
         }
       }
@@ -8223,6 +8654,11 @@ function setRoomNavbarStatus(status) {
   if (roomText) {
     roomText.textContent = currentRoomId || 'local';
   }
+  const roomQuery = currentRoomId ? `?room=${encodeURIComponent(currentRoomId)}` : '';
+  const classicLink = document.getElementById('openClassicVersionLink');
+  if (classicLink) classicLink.href = `classic.html${roomQuery}`;
+  const modernLink = document.getElementById('switchToModernBtn');
+  if (modernLink) modernLink.href = `index.html${roomQuery}`;
 }
 
 /**
@@ -8560,7 +8996,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261117_v18').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261117_v19').then((reg) => {
         console.log('PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);

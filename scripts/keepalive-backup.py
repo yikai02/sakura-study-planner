@@ -90,7 +90,7 @@ def main():
                                             merged_map[item_id] = item
                                 new_compact[list_key] = list(merged_map.values())
 
-                    # 合併單日額外待辦 (d / ex 內的 et 陣列)
+                    # 合併單日額外待辦 (et) 與每日行程狀態標籤 (tg / tgu)
                     for dict_key in ("d", "ex"):
                         exist_days = exist_compact.get(dict_key)
                         new_days = new_compact.get(dict_key)
@@ -98,6 +98,20 @@ def main():
                             for d_key, exist_day in exist_days.items():
                                 if not isinstance(exist_day, dict):
                                     continue
+                                exist_tg = exist_day.get("tg")
+                                exist_tgu = exist_day.get("tgu") or 0
+                                if exist_tg is not None or exist_tgu:
+                                    target_day = new_days.setdefault(d_key, {})
+                                    new_tgu = target_day.get("tgu") or 0
+                                    if "tg" not in target_day and not new_tgu:
+                                        if isinstance(exist_tg, str):
+                                            target_day["tg"] = exist_tg
+                                        if exist_tgu:
+                                            target_day["tgu"] = exist_tgu
+                                    elif exist_tgu > new_tgu:
+                                        if isinstance(exist_tg, str):
+                                            target_day["tg"] = exist_tg
+                                        target_day["tgu"] = exist_tgu
                                 exist_et = exist_day.get("et")
                                 if isinstance(exist_et, list) and len(exist_et) > 0:
                                     target_day = new_days.setdefault(d_key, {})
