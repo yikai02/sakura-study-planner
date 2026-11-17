@@ -39,7 +39,7 @@
       } catch (e) {}
     })();
   </script>
-  <link rel="stylesheet" href="style.css?v=20261117_v19" />
+  <link rel="stylesheet" href="style.css?v=20261117_v20" />
 </head>
 <body>
   <canvas id="sakuraCanvas" class="petal-canvas" aria-hidden="true"></canvas>
@@ -338,63 +338,89 @@
         </div>
       </section>
 
-      <!-- Tab 3: 備忘錄與目標 (階段性里程碑 Milestones + 分科備忘錄卡片牆 Study Notes) -->
+      <!-- Tab 3: 備忘錄與目標 (35天以前 / 35天以後 雙階段目標 + Notion 快捷跳轉 + 精簡備忘錄) -->
       <section id="tabMemoGoals" class="tab-pane" aria-label="備忘錄與目標">
         <div class="canvas-header">
           <div class="canvas-title-group">
             <h2 id="subtitleMemoGoals" class="inline-editable canvas-title" data-inline-target="subtitleMemoGoals" tabindex="0" role="textbox" aria-label="編輯備忘錄與目標標題">備忘錄與目標</h2>
-            <span id="memoGoalsSummaryBadge" class="phase-tag mono-tabular">里程碑與筆記</span>
+            <span id="memoGoalsSummaryBadge" class="phase-tag mono-tabular">35天雙階段 (跳轉 Notion)</span>
+          </div>
+          <div id="milestoneStageFilterBar" class="mode-switch cal-view-switcher" role="group" aria-label="篩選衝刺階段">
+            <button type="button" class="mode-btn mode-chip active" data-ms-stage="">全部階段</button>
+            <button type="button" class="mode-btn mode-chip" data-ms-stage="pre35">35天以前 (Day 80~36)</button>
+            <button type="button" class="mode-btn mode-chip" data-ms-stage="post35">35天以後 (Day 35~1)</button>
           </div>
         </div>
 
-        <!-- 第一部分：階段性里程碑 (Milestones) -->
-        <section id="milestonesSection" class="memo-goals-block" aria-label="階段性里程碑">
+        <!-- Notion 快捷跳轉工作區 + 行事曆重點直達列 -->
+        <section id="notionQuickLinksSection" class="notion-hub-band" aria-label="Notion 快捷跳轉">
+          <div class="notion-hub-row">
+            <span class="section-kicker">Notion 快捷跳轉</span>
+            <div id="notionQuickLinksBar" class="notion-quicklinks-bar"></div>
+          </div>
+          <div id="notionLinkEditorBar" class="notion-link-edit-bar hidden" role="region" aria-label="設定 Notion 連結">
+            <span id="notionLinkTargetLabel" class="phase-tag">設定連結</span>
+            <input type="url" id="notionLinkUrlInput" class="input-hairline notion-link-url-inp" placeholder="貼上 Notion 頁面網址（例如 https://www.notion.so/... 或 notion://...）" aria-label="Notion 頁面網址" />
+            <button type="button" id="saveNotionLinkBtn" class="btn-primary-solid">儲存連結</button>
+            <button type="button" id="clearNotionLinkBtn" class="quiet-outline-btn">清除</button>
+            <button type="button" id="cancelNotionLinkBtn" class="quiet-text-btn">取消</button>
+          </div>
+          <div class="notion-hub-row">
+            <span class="section-kicker">行事曆死線速跳</span>
+            <div id="memoCalendarDeadlinesStrip" class="memo-deadlines-strip"></div>
+          </div>
+        </section>
+
+        <!-- 第一部分：雙階段目標里程碑 (35天以前 Day 80–36 vs 35天以後 Day 35–1) -->
+        <section id="milestonesSection" class="memo-goals-block" aria-label="雙階段目標里程碑">
           <div class="memo-block-header">
             <div class="memo-block-title-wrap">
-              <h3 class="section-kicker">階段性里程碑 Milestones</h3>
+              <h3 class="section-kicker">雙階段大目標 Milestones</h3>
               <span id="milestoneOverallSummary" class="mono-tabular settings-note">總進度 0%</span>
             </div>
-            <div id="milestoneSubjectFilterBar" class="subj-filter-pills" role="group" aria-label="篩選里程碑考科"></div>
+            <div id="milestoneSubjectFilterBar" class="subj-filter-pills" role="group" aria-label="篩選目標考科"></div>
           </div>
 
           <div class="milestone-add-bar">
-            <select id="milestoneSubjectSelect" class="select-hairline" aria-label="里程碑考科"></select>
+            <select id="milestoneSubjectSelect" class="select-hairline" aria-label="目標考科"></select>
             <select id="milestonePhaseSelect" class="select-hairline" aria-label="所屬衝刺階段">
-              <option value="phase1">第一階段</option>
-              <option value="phase2">第二階段</option>
-              <option value="phase3">第三階段</option>
+              <option value="pre35">35天以前 (Day 80~36 打底強化)</option>
+              <option value="post35">35天以後 (Day 35~1 歷屆衝刺)</option>
             </select>
-            <input type="text" id="milestoneTitleInput" class="input-hairline milestone-title-inp" placeholder="新增階段大目標（例如：完成第一輪複習、刷完歷屆試題）..." aria-label="里程碑標題" />
-            <button type="button" id="addMilestoneBtn" class="btn-primary-solid">新增里程碑</button>
+            <input type="text" id="milestoneTitleInput" class="input-hairline milestone-title-inp" placeholder="新增階段大目標（例如：完成第一輪複習、刷完歷屆試題）..." aria-label="目標標題" />
+            <input type="url" id="milestoneNotionUrlInput" class="input-hairline milestone-notion-inp" placeholder="綁定 Notion 網址 (選填)..." aria-label="目標綁定 Notion 網址" />
+            <button type="button" id="addMilestoneBtn" class="btn-primary-solid">新增目標</button>
           </div>
 
-          <div id="milestonesGrid" class="milestones-grid"></div>
+          <div id="milestonesGrid" class="milestones-two-stage-board"></div>
         </section>
 
-        <!-- 第二部分：分科備忘錄卡片牆 (Study Notes) -->
+        <!-- 第二部分：精簡分科備忘錄牆 (點擊卡片展開 Notion 風格詳情彈窗) -->
         <section id="studyNotesSection" class="memo-goals-block" aria-label="分科備忘錄">
           <div class="memo-block-header">
             <div class="memo-block-title-wrap">
-              <h3 class="section-kicker">分科備忘錄卡片牆 Study Notes</h3>
+              <h3 class="section-kicker">分科備忘錄 Study Notes</h3>
               <span id="studyNotesCountLabel" class="mono-tabular settings-note">0 則筆記</span>
             </div>
             <div class="notes-filter-toolbar">
               <div id="notesCategoryFilterBar" class="subj-filter-pills" role="group" aria-label="篩選備忘錄分類"></div>
-              <input type="search" id="studyNotesSearchInput" class="input-hairline" placeholder="搜尋備忘錄標題或內容..." aria-label="搜尋備忘錄" />
+              <input type="search" id="studyNotesSearchInput" class="input-hairline" placeholder="搜尋筆記..." aria-label="搜尋備忘錄" />
             </div>
           </div>
 
           <div class="study-note-composer">
             <div class="composer-top-row">
               <select id="noteCategorySelect" class="select-hairline" aria-label="筆記分類"></select>
-              <input type="text" id="noteTitleInput" class="input-hairline composer-title-inp" placeholder="輸入備忘錄標題（例如：個經 Slutsky 方程式易錯點、考場準備清單）..." aria-label="備忘錄標題" />
+              <input type="text" id="noteTitleInput" class="input-hairline composer-title-inp" placeholder="備忘錄標題（例如：個經 Slutsky 重點、考場攜帶清單）..." aria-label="備忘錄標題" />
+              <input type="url" id="noteNotionUrlInput" class="input-hairline composer-notion-inp" placeholder="Notion 頁面連結 (選填)..." aria-label="筆記綁定 Notion 網址" />
+              <select id="noteLinkedDaySelect" class="select-hairline" aria-label="關聯行事曆日期"></select>
               <label class="done-checkbox-label composer-pin-label">
                 <input type="checkbox" id="notePinCheckbox" class="done-checkbox" />
-                <span>釘選置頂</span>
+                <span>釘選</span>
               </label>
               <button type="button" id="addStudyNoteBtn" class="btn-primary-solid">新增筆記</button>
             </div>
-            <textarea id="noteContentInput" class="goal-textarea composer-body-inp" rows="3" placeholder="輸入詳細筆記、公式推導重點或待辦細節..."></textarea>
+            <textarea id="noteContentInput" class="goal-textarea composer-body-inp" rows="2" placeholder="補充筆記重點，或直接於卡片點擊「開啟頁面」檢視與跳轉 Notion / 行事曆..."></textarea>
           </div>
 
           <div id="studyNotesGrid" class="study-notes-wall"></div>
@@ -443,6 +469,49 @@
             <button type="button" id="duplicateToNextDayBtn" class="quiet-outline-btn">複製至隔天</button>
             <button type="button" id="duplicateToDateBtn" class="btn-primary-solid">套用複製</button>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notion-Style Note Page Modal -->
+  <div id="notionNoteModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="noteModalHeading">
+    <div class="modal-sheet">
+      <div class="modal-sheet-head">
+        <div class="canvas-title-group">
+          <span id="noteModalSubjectBadge" class="subj-pill" data-swatch="cement">一般事項</span>
+          <span id="noteModalHeading" class="modal-title">筆記詳情頁</span>
+          <span id="noteModalUpdatedLabel" class="phase-tag mono-tabular">剛剛</span>
+        </div>
+        <div class="canvas-toolbar">
+          <button type="button" id="noteModalPinBtn" class="quiet-outline-btn">釘選置頂</button>
+          <a id="noteModalOpenNotionBtn" class="quiet-outline-btn hidden" href="#" target="_blank" rel="noopener noreferrer">↗ 跳轉 Notion</a>
+          <button type="button" id="noteModalJumpDayBtn" class="quiet-outline-btn hidden">跳轉行事曆當日</button>
+          <button type="button" id="closeNotionNoteModalBtn" class="icon-close-btn" aria-label="關閉筆記詳情頁">關閉</button>
+        </div>
+      </div>
+      <div class="notion-day-body">
+        <div class="home-memo-block">
+          <label for="noteModalTitleInput" class="section-kicker">筆記標題</label>
+          <input type="text" id="noteModalTitleInput" class="input-hairline-full" placeholder="輸入筆記標題..." />
+        </div>
+        <div class="settings-grid-two">
+          <div class="field-col">
+            <label for="noteModalNotionUrlInput">Notion 頁面連結</label>
+            <input type="url" id="noteModalNotionUrlInput" class="input-hairline" placeholder="https://www.notion.so/..." />
+          </div>
+          <div class="field-col">
+            <label for="noteModalLinkedDaySelect">關聯行事曆日期（點擊可直達當日彈窗）</label>
+            <select id="noteModalLinkedDaySelect" class="select-hairline"></select>
+          </div>
+        </div>
+        <div class="home-memo-block">
+          <label for="noteModalBodyTextarea" class="section-kicker">筆記內容與細節</label>
+          <textarea id="noteModalBodyTextarea" class="goal-textarea" rows="8" placeholder="寫下詳細公式推導、錯題重點或複習思路..."></textarea>
+        </div>
+        <div class="modal-foot-actions">
+          <button type="button" id="noteModalDeleteBtn" class="quiet-text-btn">刪除此筆記</button>
+          <button type="button" id="noteModalDoneBtn" class="btn-primary-solid">完成</button>
         </div>
       </div>
     </div>
@@ -562,6 +631,6 @@
   <div id="toastContainer" class="toast-region" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" defer></script>
-  <script src="app.js?v=20261117_v19"></script>
+  <script src="app.js?v=20261117_v20"></script>
 </body>
 </html>

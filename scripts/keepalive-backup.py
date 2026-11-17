@@ -70,6 +70,17 @@ def main():
                             new_compact["hcf"] = exist_compact.get("hcf", "contain")
                             new_compact["hcp"] = exist_compact.get("hcp", "center")
 
+                    # 保留較新的 Notion 總部連結設定 (nhu / nhuu)
+                    exist_nhu = exist_compact.get("nhu", "")
+                    exist_nhuu = exist_compact.get("nhuu") or 0
+                    new_nhuu = new_compact.get("nhuu") or 0
+                    if ("nhu" in exist_compact or exist_nhuu) and (
+                        ("nhu" not in new_compact and not new_nhuu) or exist_nhuu > new_nhuu
+                    ):
+                        new_compact["nhu"] = exist_nhu
+                        if exist_nhuu:
+                            new_compact["nhuu"] = exist_nhuu
+
                     # 合併陣列型擴充資料 (ms: milestones, sn: studyNotes)，依 id 與 updatedAt 保留最新狀態
                     for list_key in ("ms", "sn"):
                         exist_list = exist_compact.get(list_key)

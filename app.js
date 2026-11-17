@@ -298,12 +298,12 @@ const SUBJECT_FASHION_SWATCHES = [
 ];
 
 const DEFAULT_SUBJECTS = [
-  { id: 'subj_micro', name: '個經', swatch: 'rose', statGroup: '經濟', examDate: '2027-01-26', updatedAt: 0 },
-  { id: 'subj_macro', name: '總經', swatch: 'denim', statGroup: '經濟', examDate: '2027-01-26', updatedAt: 0 },
-  { id: 'subj_stat', name: '統計', swatch: 'olive', statGroup: '統計', examDate: '2027-01-26', updatedAt: 0 },
-  { id: 'subj_fin', name: '財管', swatch: 'suede', statGroup: '財管', examDate: '2027-01-26', updatedAt: 0 },
-  { id: 'subj_class', name: '上課', swatch: 'cocoa', statGroup: '上課', examDate: '2027-01-26', updatedAt: 0 },
-  { id: 'subj_other', name: '其他', swatch: 'cement', statGroup: '其他', examDate: '2027-01-26', updatedAt: 0 }
+  { id: 'subj_micro', name: '個經', swatch: 'rose', statGroup: '經濟', examDate: '2027-01-26', notionUrl: '', updatedAt: 0 },
+  { id: 'subj_macro', name: '總經', swatch: 'denim', statGroup: '經濟', examDate: '2027-01-26', notionUrl: '', updatedAt: 0 },
+  { id: 'subj_stat', name: '統計', swatch: 'olive', statGroup: '統計', examDate: '2027-01-26', notionUrl: '', updatedAt: 0 },
+  { id: 'subj_fin', name: '財管', swatch: 'suede', statGroup: '財管', examDate: '2027-01-26', notionUrl: '', updatedAt: 0 },
+  { id: 'subj_class', name: '上課', swatch: 'cocoa', statGroup: '上課', examDate: '2027-01-26', notionUrl: '', updatedAt: 0 },
+  { id: 'subj_other', name: '其他', swatch: 'cement', statGroup: '其他', examDate: '2027-01-26', notionUrl: '', updatedAt: 0 }
 ];
 
 const DEFAULT_PLAN_TITLE = '2026 衝刺讀書計畫';
@@ -659,43 +659,113 @@ function normalizeExtraTasksList(rawList) {
     }));
 }
 
+// 目標與里程碑雙階段定義：35 天以前 (Day 80–36) vs 35 天以後 (Day 35–1)
+const MILESTONE_STAGES = [
+  { id: 'pre35', name: '35天以前', rangeLabel: 'Day 80~36', subtitle: '觀念打底與題庫強化' },
+  { id: 'post35', name: '35天以後', rangeLabel: 'Day 35~1', subtitle: '歷屆實戰與考前衝刺' }
+];
+
+function normalizeMilestoneStageId(rawPhaseId) {
+  if (rawPhaseId === 'post35' || rawPhaseId === 'phase3') return 'post35';
+  return 'pre35';
+}
+
+function getTwoStageLabelForDay(dayCountdown) {
+  const num = Number(dayCountdown);
+  if (!Number.isNaN(num) && num <= 35 && num >= 1) return '35天以後 (Day 35~1)';
+  return '35天以前 (Day 80~36)';
+}
+
+function resolveSafeNotionUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  const trimmed = rawUrl.trim();
+  if (!trimmed || /^(javascript|data|vbscript):/i.test(trimmed)) return '';
+  if (/^(https?:\/\/|notion:\/\/)[^\s"'<>]+$/i.test(trimmed)) return trimmed;
+  if (/^(?:www\.)?notion\.(?:so|site)\/[^\s"'<>]+$/i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return '';
+}
+
+function extractFirstNotionUrl(text) {
+  if (!text || typeof text !== 'string') return '';
+  const match = text.match(/https?:\/\/(?:www\.)?notion\.(?:so|site)\/[^\s"'<>)\]]+/i);
+  return match ? resolveSafeNotionUrl(match[0]) : '';
+}
+
 /**
- * 由舊版 goals (經濟/統計/財管/其他 × 三階段) 自動無損轉換為初始階段性里程碑
+ * 由舊版 goals (經濟/統計/財管/其他 × 三階段) 自動無損整併為雙階段里程碑：
+ * - phase1 + phase2 -> pre35 (35天以前 · Day 80–36)
+ * - phase3 -> post35 (35天以後 · Day 35–1)
  */
 function createInitialMilestonesFromGoals(goalsObj = DEFAULT_GOALS, phasesArr = DEFAULT_PHASES) {
   const milestones = [];
   const safeGoals = (goalsObj && typeof goalsObj === 'object') ? goalsObj : DEFAULT_GOALS;
-  const safePhases = (Array.isArray(phasesArr) && phasesArr.length === 3) ? phasesArr : DEFAULT_PHASES;
 
   GOAL_SUBJECTS.forEach(subj => {
     const g = safeGoals[subj];
     if (!g || typeof g !== 'object') return;
-    ['phase1', 'phase2', 'phase3'].forEach((phaseKey, idx) => {
+    const mappedSubj = subj === '經濟' ? '個經' : subj;
+
+    // 1. 35天以前 (整併 phase1 + phase2，去重並完整保留項目)
+    const preSubItems = [];
+    const seenPreText = new Set();
+    ['phase1', 'phase2'].forEach(phaseKey => {
       const rawText = typeof g[phaseKey] === 'string' ? g[phaseKey].trim() : '';
       if (!rawText) return;
-      const lines = rawText.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-      if (lines.length === 0) return;
-      const phaseName = (safePhases[idx] && safePhases[idx].name) ? safePhases[idx].name : `階段 ${idx + 1}`;
+      rawText.split(/\r?\n/).map(s => s.trim()).filter(Boolean).forEach((line, lineIdx) => {
+        if (!seenPreText.has(line)) {
+          seenPreText.add(line);
+          preSubItems.push({
+            id: `sub_${subj}_${phaseKey}_${lineIdx}`,
+            text: line,
+            done: false
+          });
+        }
+      });
+    });
+    if (preSubItems.length > 0) {
       milestones.push({
-        id: `ms_seed_${subj}_${phaseKey}`,
-        subject: subj === '經濟' ? '個經' : subj,
-        phaseId: phaseKey,
-        title: `${subj} · ${phaseName}核心目標`,
-        subItems: lines.map((line, lineIdx) => ({
-          id: `sub_${subj}_${phaseKey}_${lineIdx}`,
-          text: line,
-          done: false
-        })),
+        id: `ms_seed_${subj}_pre35`,
+        subject: mappedSubj,
+        phaseId: 'pre35',
+        title: `${subj} · 35天以前目標`,
+        subItems: preSubItems,
+        notionUrl: '',
+        linkedDay: '',
         updatedAt: 0,
         deleted: false
       });
-    });
+    }
+
+    // 2. 35天以後 (由 phase3 無損轉換)
+    const rawPost = typeof g.phase3 === 'string' ? g.phase3.trim() : '';
+    if (rawPost) {
+      const postLines = rawPost.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (postLines.length > 0) {
+        milestones.push({
+          id: `ms_seed_${subj}_post35`,
+          subject: mappedSubj,
+          phaseId: 'post35',
+          title: `${subj} · 35天以後目標`,
+          subItems: postLines.map((line, lineIdx) => ({
+            id: `sub_${subj}_phase3_${lineIdx}`,
+            text: line,
+            done: false
+          })),
+          notionUrl: '',
+          linkedDay: '',
+          updatedAt: 0,
+          deleted: false
+        });
+      }
+    }
   });
   return milestones;
 }
 
 /**
- * 正規化階段性里程碑清單 (milestones)，向下相容舊資料與獨立備份 Key
+ * 正規化階段性里程碑清單 (milestones)，向下相容舊三階段種子並無損收斂至雙階段 (pre35 / post35)
  */
 function normalizeMilestonesList(rawList, goalsFallback = DEFAULT_GOALS, phasesFallback = DEFAULT_PHASES) {
   let source = Array.isArray(rawList) ? rawList : null;
@@ -711,29 +781,115 @@ function normalizeMilestonesList(rawList, goalsFallback = DEFAULT_GOALS, phasesF
   if (!source || source.length === 0) {
     return createInitialMilestonesFromGoals(goalsFallback, phasesFallback);
   }
-  return source
-    .filter(m => m && typeof m === 'object' && m.id)
-    .map(m => ({
-      id: String(m.id),
+
+  const normalized = [];
+  const legacyPreBuckets = new Map(); // subj -> { items: [], notionUrls: [] }
+
+  const normalizeSubItems = (rawSubs) => Array.isArray(rawSubs)
+    ? rawSubs
+        .filter(sub => sub && typeof sub === 'object' && sub.id)
+        .map(sub => ({
+          id: String(sub.id),
+          text: typeof sub.text === 'string' ? sub.text : '',
+          done: Boolean(sub.done)
+        }))
+    : [];
+
+  source.forEach(m => {
+    if (!m || typeof m !== 'object' || !m.id) return;
+    const rawId = String(m.id);
+
+    // 偵測舊版 ms_seed_<subj>_phase1 / phase2 -> 暫存並無損整併成 ms_seed_<subj>_pre35
+    const preMatch = rawId.match(/^ms_seed_(.+)_(phase1|phase2)$/);
+    if (preMatch) {
+      const subjKey = preMatch[1];
+      if (!legacyPreBuckets.has(subjKey)) legacyPreBuckets.set(subjKey, []);
+      legacyPreBuckets.get(subjKey).push(m);
+      return;
+    }
+
+    // 偵測舊版 ms_seed_<subj>_phase3 -> 轉為 ms_seed_<subj>_post35
+    const postMatch = rawId.match(/^ms_seed_(.+)_phase3$/);
+    const resolvedId = postMatch ? `ms_seed_${postMatch[1]}_post35` : rawId;
+    let resolvedTitle = typeof m.title === 'string' && m.title.trim() ? m.title.trim() : '未命名目標';
+    if (postMatch && /第三階段核心目標$/.test(resolvedTitle)) {
+      resolvedTitle = `${postMatch[1]} · 35天以後目標`;
+    }
+
+    normalized.push({
+      id: resolvedId,
       subject: typeof m.subject === 'string' && m.subject.trim() ? m.subject.trim() : '其他',
-      phaseId: ['phase1', 'phase2', 'phase3'].includes(m.phaseId) ? m.phaseId : 'phase1',
-      title: typeof m.title === 'string' && m.title.trim() ? m.title.trim() : '未命名里程碑',
-      subItems: Array.isArray(m.subItems)
-        ? m.subItems
-            .filter(sub => sub && typeof sub === 'object' && sub.id)
-            .map(sub => ({
-              id: String(sub.id),
-              text: typeof sub.text === 'string' ? sub.text : '',
-              done: Boolean(sub.done)
-            }))
-        : [],
+      phaseId: normalizeMilestoneStageId(m.phaseId),
+      title: resolvedTitle,
+      subItems: normalizeSubItems(m.subItems),
+      notionUrl: typeof m.notionUrl === 'string' ? m.notionUrl.trim() : '',
+      linkedDay: (typeof m.linkedDay === 'string' || typeof m.linkedDay === 'number') ? String(m.linkedDay).trim() : '',
       updatedAt: Number(m.updatedAt) || 0,
       deleted: Boolean(m.deleted)
-    }));
+    });
+  });
+
+  // 將舊版 phase1 + phase2 種子合併為單一 pre35 目標卡片
+  legacyPreBuckets.forEach((bucketList, subjKey) => {
+    const newId = `ms_seed_${subjKey}_pre35`;
+    if (normalized.some(item => item.id === newId)) return;
+
+    // 排序讓 phase1 在 phase2 前面
+    bucketList.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const activeEntries = bucketList.filter(item => !item.deleted);
+    const chosenSource = activeEntries.length > 0 ? activeEntries : bucketList;
+
+    const mergedSubs = [];
+    const seenSubIds = new Set();
+    const seenTexts = new Set();
+    let maxTs = 0;
+    let pickedNotionUrl = '';
+    let pickedLinkedDay = '';
+    let customTitle = '';
+    let resolvedSubj = subjKey === '經濟' ? '個經' : subjKey;
+
+    bucketList.forEach(item => {
+      maxTs = Math.max(maxTs, Number(item.updatedAt) || 0);
+      if (item.subject && typeof item.subject === 'string') resolvedSubj = item.subject.trim();
+      if (!pickedNotionUrl && typeof item.notionUrl === 'string' && item.notionUrl.trim()) {
+        pickedNotionUrl = item.notionUrl.trim();
+      }
+      if (!pickedLinkedDay && (typeof item.linkedDay === 'string' || typeof item.linkedDay === 'number')) {
+        const dStr = String(item.linkedDay).trim();
+        if (dStr) pickedLinkedDay = dStr;
+      }
+      if (item.title && !/第[一二三]階段核心目標$/.test(item.title.trim()) && !customTitle) {
+        customTitle = item.title.trim();
+      }
+    });
+
+    chosenSource.forEach(item => {
+      normalizeSubItems(item.subItems).forEach(sub => {
+        if (seenSubIds.has(sub.id) || (sub.text && seenTexts.has(sub.text))) return;
+        seenSubIds.add(sub.id);
+        if (sub.text) seenTexts.add(sub.text);
+        mergedSubs.push(sub);
+      });
+    });
+
+    normalized.push({
+      id: newId,
+      subject: resolvedSubj,
+      phaseId: 'pre35',
+      title: customTitle || `${subjKey} · 35天以前目標`,
+      subItems: mergedSubs,
+      notionUrl: pickedNotionUrl,
+      linkedDay: pickedLinkedDay,
+      updatedAt: maxTs,
+      deleted: activeEntries.length === 0
+    });
+  });
+
+  return normalized;
 }
 
 /**
- * 正規化分科備忘錄清單 (studyNotes)，向下相容舊資料與獨立備份 Key
+ * 正規化分科備忘錄清單 (studyNotes)，保留 notionUrl 與關聯日期 linkedDay
  */
 function normalizeStudyNotesList(rawList) {
   let source = Array.isArray(rawList) ? rawList : null;
@@ -754,6 +910,8 @@ function normalizeStudyNotesList(rawList) {
       subject: typeof n.subject === 'string' && n.subject.trim() ? n.subject.trim() : '一般事項',
       title: typeof n.title === 'string' ? n.title : '',
       content: typeof n.content === 'string' ? n.content : '',
+      notionUrl: typeof n.notionUrl === 'string' ? n.notionUrl.trim() : '',
+      linkedDay: (typeof n.linkedDay === 'string' || typeof n.linkedDay === 'number') ? String(n.linkedDay).trim() : '',
       pinned: Boolean(n.pinned),
       createdAt: Number(n.createdAt) || Number(n.updatedAt) || 0,
       updatedAt: Number(n.updatedAt) || 0,
@@ -779,6 +937,8 @@ function createDefaultState(withPreplanned = true) {
     subtitlesUpdatedAt: 0,
     subjects: JSON.parse(JSON.stringify(DEFAULT_SUBJECTS)),
     homeCover: normalizeThemeKey(appSettings.theme) === 'ink' ? 'cover-antigravity' : 'cover-sakura',
+    notionHubUrl: '',
+    notionHubUrlUpdatedAt: 0,
     phases: defaultPhases,
     goals: defaultGoals,
     milestones: createInitialMilestonesFromGoals(defaultGoals, defaultPhases),
@@ -1024,6 +1184,7 @@ function normalizeState(raw) {
         swatch: validSwatchKeys.includes(match.swatch) ? match.swatch : def.swatch,
         statGroup: def.statGroup,
         examDate: /^\d{4}-\d{2}-\d{2}$/.test(rawExamDate) ? rawExamDate : (def.examDate || PLAN_END_DATE_STR),
+        notionUrl: typeof match.notionUrl === 'string' ? match.notionUrl.trim() : (def.notionUrl || ''),
         updatedAt: Number(match.updatedAt) || 0
       };
     });
@@ -1062,6 +1223,8 @@ function normalizeState(raw) {
     homeCoverUpdatedAt,
     homeCoverFit,
     homeCoverPosition,
+    notionHubUrl: typeof raw.notionHubUrl === 'string' ? raw.notionHubUrl.trim() : '',
+    notionHubUrlUpdatedAt: Number(raw.notionHubUrlUpdatedAt) || 0,
     phases,
     goals,
     milestones,
@@ -2306,8 +2469,12 @@ let currentCalendarViewMode = 'month';       // 'month' | 'week'
 let currentCalendarSubjectFilter = '';       // '' (全部) 或考科名稱
 let currentCalendarWeekStartIso = '';        // 週視圖起始週一 ISO 日期
 let currentMilestoneSubjectFilter = '';      // '' (全部) 或考科名稱
+let currentMilestoneStageFilter = '';        // '' (全部階段) | 'pre35' | 'post35'
+let openSubAddMilestoneId = null;            // 展開子項目輸入列之里程碑 ID
 let currentNoteCategoryFilter = '';          // '' (全部) | '__pinned__' | '一般事項' | 考科名稱
 let currentNoteSearchQuery = '';             // 備忘錄搜尋關鍵字
+let editingNotionLinkTarget = null;          // null | 'hub' | subjectId
+let currentEditingNoteModalId = null;        // 目前開啟 Notion 筆記編輯彈窗之 ID
 let openSwatchPickerSubjectId = null;        // 考科代表色票選擇器展開目標 ID
 
 /**
@@ -2498,6 +2665,9 @@ function closeCalendarDayEditor() {
     modal.classList.add('hidden');
   }
   renderPureCalendarTable();
+  if (currentActiveTab === 'memo-goals') {
+    renderMemoGoalsView();
+  }
 }
 
 /* ==========================================================================
@@ -3483,11 +3653,15 @@ function renderDailyPlanView(optionalDayKey) {
   if (headingEl) headingEl.textContent = `${day.dateDisplay}（${day.weekdayDisplay}）`;
   if (phaseBadgeEl) {
     if (isNumeric) {
-      const phaseIdx = getPhaseIndexForDay(day.dayCountdown);
-      const p = appState.phases[phaseIdx] || DEFAULT_PHASES[phaseIdx] || { name: '衝刺階段' };
-      phaseBadgeEl.textContent = p.name;
+      if (!isClassicTimerLayout()) {
+        phaseBadgeEl.textContent = getTwoStageLabelForDay(day.dayCountdown);
+      } else {
+        const phaseIdx = getPhaseIndexForDay(day.dayCountdown);
+        const p = appState.phases[phaseIdx] || DEFAULT_PHASES[phaseIdx] || { name: '衝刺階段' };
+        phaseBadgeEl.textContent = p.name;
+      }
     } else {
-      phaseBadgeEl.textContent = '月曆自訂日';
+      phaseBadgeEl.textContent = !isClassicTimerLayout() ? '35天以前 (課前預排)' : '月曆自訂日';
     }
   }
   if (calendarInput && document.activeElement !== calendarInput) {
@@ -4314,23 +4488,145 @@ function renderCalendarWeekView() {
 }
 
 /* ==========================================================================
-   第 3 頁：備忘錄與目標（階段性里程碑 Milestones + 分科備忘錄卡片牆 Study Notes）
+   第 3 頁：備忘錄與目標（35天雙階段目標 + Notion 快捷跳轉 + 精簡備忘錄牆）
    ========================================================================== */
+
+function getLinkedDayShortLabel(dayKey) {
+  if (!dayKey) return '';
+  const day = findDayByKey(dayKey);
+  if (!day) return String(dayKey);
+  return typeof day.dayCountdown === 'number'
+    ? `D${day.dayCountdown} · ${day.dateDisplay}`
+    : day.dateDisplay;
+}
+
+function populateLinkedDaySelectOptions(selectEl, selectedVal = '') {
+  if (!selectEl || !appState) return;
+  const allDays = getAllDaysList();
+  const optionsHtml = [`<option value="">不關聯特定日期</option>`];
+  allDays.forEach(d => {
+    const val = String(d.dayCountdown);
+    const labelPrefix = typeof d.dayCountdown === 'number' ? `Day ${d.dayCountdown} · ` : '';
+    const memoHint = d.calendar && d.calendar.trim() ? `（${d.calendar.trim().slice(0, 14)}）` : '';
+    optionsHtml.push(
+      `<option value="${escapeHtml(val)}" ${String(selectedVal) === val ? 'selected' : ''}>${escapeHtml(labelPrefix + d.dateDisplay + memoHint)}</option>`
+    );
+  });
+  selectEl.innerHTML = optionsHtml.join('');
+}
 
 function renderMemoGoalsView() {
   if (typeof document === 'undefined' || !appState) return;
   renderEditableMetadataDom();
+  renderNotionQuickLinksBar();
+  renderMemoCalendarDeadlinesStrip();
   renderMilestonesSection();
   renderStudyNotesSection();
 }
 
+function renderNotionQuickLinksBar() {
+  const barEl = document.getElementById('notionQuickLinksBar');
+  const editBarEl = document.getElementById('notionLinkEditorBar');
+  const labelEl = document.getElementById('notionLinkTargetLabel');
+  const urlInpEl = document.getElementById('notionLinkUrlInput');
+  if (!barEl || !appState) return;
+
+  const hubSafeUrl = resolveSafeNotionUrl(appState.notionHubUrl || '');
+  const hubHtml = hubSafeUrl
+    ? `
+      <span class="notion-pill-group">
+        <a href="${escapeHtml(hubSafeUrl)}" target="_blank" rel="noopener noreferrer" class="notion-link-pill is-linked">
+          <span>↗ Notion 讀書總部</span>
+        </a>
+        <button type="button" class="notion-link-edit-btn" data-edit-notion-target="hub" title="編輯讀書總部 Notion 網址" aria-label="編輯讀書總部 Notion 網址">✎</button>
+      </span>
+    `
+    : `<button type="button" class="notion-link-pill is-unset" data-edit-notion-target="hub">+ 綁定總部 Notion</button>`;
+
+  const entities = getSubjectEntities();
+  const subjHtml = entities.map(entity => {
+    const safeUrl = resolveSafeNotionUrl(entity.notionUrl || '');
+    if (safeUrl) {
+      return `
+        <span class="notion-pill-group" data-swatch="${escapeHtml(entity.swatch)}">
+          <a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="notion-link-pill is-linked" data-swatch="${escapeHtml(entity.swatch)}">
+            <span class="subj-filter-dot" data-swatch="${escapeHtml(entity.swatch)}"></span>
+            <span>↗ ${escapeHtml(entity.name)}</span>
+          </a>
+          <button type="button" class="notion-link-edit-btn" data-edit-notion-target="${escapeHtml(entity.id)}" title="編輯${escapeHtml(entity.name)} Notion 連結" aria-label="編輯${escapeHtml(entity.name)} Notion 連結">✎</button>
+        </span>
+      `;
+    }
+    return `
+      <button type="button" class="notion-link-pill is-unset" data-edit-notion-target="${escapeHtml(entity.id)}" data-swatch="${escapeHtml(entity.swatch)}">
+        <span class="subj-filter-dot" data-swatch="${escapeHtml(entity.swatch)}"></span>
+        <span>+ ${escapeHtml(entity.name)}</span>
+      </button>
+    `;
+  }).join('');
+
+  barEl.innerHTML = hubHtml + subjHtml;
+
+  if (editBarEl) {
+    if (!editingNotionLinkTarget) {
+      editBarEl.classList.add('hidden');
+    } else {
+      editBarEl.classList.remove('hidden');
+      if (editingNotionLinkTarget === 'hub') {
+        if (labelEl) labelEl.textContent = 'Notion 讀書總部';
+        if (urlInpEl && document.activeElement !== urlInpEl) urlInpEl.value = appState.notionHubUrl || '';
+      } else {
+        const targetSubj = entities.find(s => s.id === editingNotionLinkTarget);
+        if (labelEl) labelEl.textContent = targetSubj ? `${targetSubj.name} 專屬 Notion` : 'Notion 連結';
+        if (urlInpEl && document.activeElement !== urlInpEl) urlInpEl.value = (targetSubj && targetSubj.notionUrl) || '';
+      }
+    }
+  }
+}
+
+function renderMemoCalendarDeadlinesStrip() {
+  const stripEl = document.getElementById('memoCalendarDeadlinesStrip');
+  if (!stripEl || !appState) return;
+
+  const flaggedDays = getAllDaysList()
+    .filter(d => (d.calendar && d.calendar.trim()) || (d.dayTag && d.dayTag.trim()))
+    .sort((a, b) => String(a.isoDate).localeCompare(String(b.isoDate)));
+
+  if (flaggedDays.length === 0) {
+    stripEl.innerHTML = `<span class="settings-note">行事曆尚無死線備忘，可點選</span><button type="button" class="quiet-text-btn" data-jump-calendar-tab="true">前往行事曆標記 ↗</button>`;
+    return;
+  }
+
+  const chipsHtml = flaggedDays.map(d => {
+    const dayKey = String(d.dayCountdown);
+    const tagPrefix = d.dayTag ? `[${d.dayTag}] ` : '';
+    const memoText = d.calendar && d.calendar.trim() ? d.calendar.trim() : d.dayTag;
+    const dayNumText = typeof d.dayCountdown === 'number' ? `D${d.dayCountdown} · ` : '';
+    return `
+      <button type="button" class="deadline-jump-chip" data-jump-cal-day="${escapeHtml(dayKey)}" title="點擊開啟 ${escapeHtml(d.dateDisplay)} Notion 詳細頁面">
+        <span class="deadline-chip-date mono-tabular">${escapeHtml(dayNumText + d.dateDisplay)}</span>
+        <span class="deadline-chip-text">${escapeHtml(tagPrefix + memoText)}</span>
+      </button>
+    `;
+  }).join('');
+
+  stripEl.innerHTML = chipsHtml + `<button type="button" class="quiet-text-btn" data-jump-calendar-tab="true">行事曆總覽 →</button>`;
+}
+
 function renderMilestonesSection() {
+  const stageBarEl = document.getElementById('milestoneStageFilterBar');
   const filterBarEl = document.getElementById('milestoneSubjectFilterBar');
   const subjSelectEl = document.getElementById('milestoneSubjectSelect');
   const phaseSelectEl = document.getElementById('milestonePhaseSelect');
   const summaryEl = document.getElementById('milestoneOverallSummary');
   const gridEl = document.getElementById('milestonesGrid');
   if (!gridEl || !appState) return;
+
+  if (stageBarEl) {
+    stageBarEl.querySelectorAll('[data-ms-stage]').forEach(btn => {
+      btn.classList.toggle('active', (btn.dataset.msStage || '') === currentMilestoneStageFilter);
+    });
+  }
 
   const entities = getSubjectEntities();
   if (subjSelectEl) {
@@ -4339,12 +4635,11 @@ function renderMilestonesSection() {
       <option value="${escapeHtml(s.name)}" ${prev === s.name ? 'selected' : ''}>${escapeHtml(s.name)}</option>
     `).join('');
   }
-  if (phaseSelectEl && Array.isArray(appState.phases) && appState.phases.length === 3) {
-    const prevP = phaseSelectEl.value || 'phase1';
-    phaseSelectEl.innerHTML = appState.phases.map((p, idx) => {
-      const pKey = `phase${idx + 1}`;
-      return `<option value="${pKey}" ${prevP === pKey ? 'selected' : ''}>${escapeHtml(p.name)} (Day ${p.startDay}-${p.endDay})</option>`;
-    }).join('');
+  if (phaseSelectEl) {
+    const prevP = normalizeMilestoneStageId(phaseSelectEl.value || 'pre35');
+    phaseSelectEl.innerHTML = MILESTONE_STAGES.map(st => `
+      <option value="${st.id}" ${prevP === st.id ? 'selected' : ''}>${escapeHtml(st.name)} (${escapeHtml(st.rangeLabel)} ${escapeHtml(st.subtitle)})</option>
+    `).join('');
   }
 
   if (filterBarEl) {
@@ -4368,31 +4663,27 @@ function renderMilestonesSection() {
   });
   const overallPct = totalSubsAll > 0 ? Math.round((doneSubsAll / totalSubsAll) * 100) : 0;
   if (summaryEl) {
-    summaryEl.textContent = `總進度 ${overallPct}% (${doneSubsAll}/${totalSubsAll} 子目標完成)`;
+    summaryEl.textContent = `總進度 ${overallPct}% (${doneSubsAll}/${totalSubsAll})`;
   }
 
   const filteredMs = allActiveMs.filter(m => doesSubjectMatchFilter(m.subject, currentMilestoneSubjectFilter));
-  if (filteredMs.length === 0) {
-    gridEl.innerHTML = `<div class="settings-note">尚無符合條件的階段性里程碑，可於上方新增目標。</div>`;
-    return;
-  }
+  const stagesToRender = currentMilestoneStageFilter
+    ? MILESTONE_STAGES.filter(st => st.id === currentMilestoneStageFilter)
+    : MILESTONE_STAGES;
 
-  const phaseNameMap = {
-    phase1: (appState.phases[0] && appState.phases[0].name) || '第一階段',
-    phase2: (appState.phases[1] && appState.phases[1].name) || '第二階段',
-    phase3: (appState.phases[2] && appState.phases[2].name) || '第三階段'
-  };
+  gridEl.classList.toggle('is-single-stage', Boolean(currentMilestoneStageFilter));
 
-  gridEl.innerHTML = filteredMs.map(ms => {
+  const renderSingleMilestoneCard = (ms) => {
     const swatch = getSubjectSwatchKey(ms.subject);
     const subs = Array.isArray(ms.subItems) ? ms.subItems : [];
     const doneCnt = subs.filter(s => s.done).length;
     const pct = subs.length > 0 ? Math.round((doneCnt / subs.length) * 100) : 0;
-    const pLabel = phaseNameMap[ms.phaseId] || '衝刺階段';
+    const resolvedNotion = resolveSafeNotionUrl(ms.notionUrl || '') || extractFirstNotionUrl(ms.title || '');
+    const isSubAddOpen = openSubAddMilestoneId === ms.id;
 
     const subRowsHtml = subs.map(sub => `
       <div class="milestone-subitem-row ${sub.done ? 'is-done' : ''}">
-        <label class="done-checkbox-label" style="flex: 1 1 auto;">
+        <label class="done-checkbox-label milestone-subcheck-label">
           <input
             type="checkbox"
             class="done-checkbox ms-subitem-checkbox"
@@ -4404,22 +4695,20 @@ function renderMilestonesSection() {
         </label>
         <button
           type="button"
-          class="quiet-text-btn"
+          class="ms-sub-del-btn"
           data-del-sub-ms-id="${escapeHtml(ms.id)}"
           data-del-sub-id="${escapeHtml(sub.id)}"
           title="刪除此子項目"
-        >刪除</button>
+          aria-label="刪除此子項目"
+        >×</button>
       </div>
     `).join('');
 
     return `
       <div class="milestone-card" data-swatch="${escapeHtml(swatch)}">
         <div class="milestone-card-head">
-          <div class="milestone-title-group">
-            <div class="study-note-badges">
-              <span class="subj-pill" data-swatch="${escapeHtml(swatch)}">${escapeHtml(ms.subject)}</span>
-              <span class="phase-tag">${escapeHtml(pLabel)}</span>
-            </div>
+          <div class="milestone-card-title-row">
+            <span class="subj-pill" data-swatch="${escapeHtml(swatch)}">${escapeHtml(ms.subject)}</span>
             <input
               type="text"
               class="study-note-title-input ms-title-input"
@@ -4428,13 +4717,14 @@ function renderMilestonesSection() {
               aria-label="里程碑標題"
             />
           </div>
-          <button type="button" class="quiet-text-btn" data-del-ms-id="${escapeHtml(ms.id)}" title="刪除此里程碑">刪除</button>
+          <div class="milestone-card-actions">
+            ${resolvedNotion ? `<a href="${escapeHtml(resolvedNotion)}" target="_blank" rel="noopener noreferrer" class="notion-jump-pill" title="開啟綁定之 Notion 頁面">↗ Notion</a>` : ''}
+            <span class="milestone-pct-chip mono-tabular">${doneCnt}/${subs.length}</span>
+            <button type="button" class="quiet-text-btn" data-toggle-subadd-ms="${escapeHtml(ms.id)}" title="新增子項目">+ 子項</button>
+            <button type="button" class="quiet-text-btn" data-del-ms-id="${escapeHtml(ms.id)}" title="刪除此目標">刪除</button>
+          </div>
         </div>
 
-        <div class="milestone-progress-row">
-          <span>完成度</span>
-          <span class="mono-tabular">${doneCnt} / ${subs.length} (${pct}%)</span>
-        </div>
         <div class="hairline-progress" aria-hidden="true">
           <div class="hairline-progress-fill" style="--progress-scale: ${(pct / 100).toFixed(3)};"></div>
         </div>
@@ -4443,16 +4733,46 @@ function renderMilestonesSection() {
           ${subRowsHtml}
         </div>
 
-        <div class="milestone-subadd-row">
+        <div class="milestone-subadd-row ${isSubAddOpen ? '' : 'hidden'}">
           <input
             type="text"
             class="input-hairline milestone-subadd-inp"
             data-subadd-input-ms="${escapeHtml(ms.id)}"
             placeholder="新增子目標項目 (按 Enter 新增)..."
           />
-          <button type="button" class="quiet-outline-btn" data-add-sub-ms-id="${escapeHtml(ms.id)}">+ 子項目</button>
+          <button type="button" class="quiet-outline-btn" data-add-sub-ms-id="${escapeHtml(ms.id)}">新增</button>
         </div>
       </div>
+    `;
+  };
+
+  gridEl.innerHTML = stagesToRender.map(stage => {
+    const stageCards = filteredMs.filter(m => normalizeMilestoneStageId(m.phaseId) === stage.id);
+    let stageDone = 0;
+    let stageTotal = 0;
+    stageCards.forEach(m => {
+      const subs = Array.isArray(m.subItems) ? m.subItems : [];
+      stageTotal += subs.length;
+      stageDone += subs.filter(s => s.done).length;
+    });
+    const stagePct = stageTotal > 0 ? Math.round((stageDone / stageTotal) * 100) : 0;
+
+    return `
+      <section class="milestone-stage-col" data-stage="${stage.id}" aria-label="${escapeHtml(stage.name)}">
+        <header class="milestone-stage-head">
+          <div class="milestone-stage-title-wrap">
+            <h4 class="milestone-stage-title">${escapeHtml(stage.name)}</h4>
+            <span class="milestone-stage-range mono-tabular">${escapeHtml(stage.rangeLabel)}</span>
+            <span class="settings-note">${escapeHtml(stage.subtitle)}</span>
+          </div>
+          <span class="phase-tag mono-tabular">${stageDone}/${stageTotal} (${stagePct}%)</span>
+        </header>
+        <div class="milestone-stage-cards ${currentMilestoneStageFilter ? 'is-expanded-grid' : ''}">
+          ${stageCards.length > 0
+            ? stageCards.map(renderSingleMilestoneCard).join('')
+            : `<div class="settings-note">此階段尚無符合考科之目標，可由上方欄位快速新增。</div>`}
+        </div>
+      </section>
     `;
   }).join('');
 }
@@ -4460,6 +4780,7 @@ function renderMilestonesSection() {
 function renderStudyNotesSection() {
   const filterBarEl = document.getElementById('notesCategoryFilterBar');
   const catSelectEl = document.getElementById('noteCategorySelect');
+  const daySelectEl = document.getElementById('noteLinkedDaySelect');
   const countLabelEl = document.getElementById('studyNotesCountLabel');
   const gridEl = document.getElementById('studyNotesGrid');
   if (!gridEl || !appState) return;
@@ -4472,6 +4793,10 @@ function renderStudyNotesSection() {
     catSelectEl.innerHTML = categories.map(cat => `
       <option value="${escapeHtml(cat)}" ${prev === cat ? 'selected' : ''}>${escapeHtml(cat)}</option>
     `).join('');
+  }
+  if (daySelectEl) {
+    const prevDay = daySelectEl.value;
+    populateLinkedDaySelectOptions(daySelectEl, prevDay);
   }
 
   if (filterBarEl) {
@@ -4491,7 +4816,7 @@ function renderStudyNotesSection() {
 
   const activeNotes = (appState.studyNotes || []).filter(n => n && !n.deleted);
   if (countLabelEl) {
-    countLabelEl.textContent = `共 ${activeNotes.length} 則筆記`;
+    countLabelEl.textContent = `共 ${activeNotes.length} 則`;
   }
 
   const q = (currentNoteSearchQuery || '').trim().toLowerCase();
@@ -4515,7 +4840,7 @@ function renderStudyNotesSection() {
     });
 
   if (filteredNotes.length === 0) {
-    gridEl.innerHTML = `<div class="settings-note">尚無符合條件的備忘錄卡片，可於上方輸入框快速建立分科筆記或重要提醒。</div>`;
+    gridEl.innerHTML = `<div class="settings-note">尚無符合條件的備忘錄筆記，可於上方列快速新增並綁定 Notion 或行事曆日期。</div>`;
     return;
   }
 
@@ -4525,38 +4850,106 @@ function renderStudyNotesSection() {
     const timeStr = dt && !Number.isNaN(dt.getTime())
       ? `${dt.getMonth() + 1}/${dt.getDate()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
       : '剛剛';
+    const resolvedNotion = resolveSafeNotionUrl(note.notionUrl || '') || extractFirstNotionUrl(`${note.title || ''} ${note.content || ''}`);
+    const linkedDayLabel = note.linkedDay ? getLinkedDayShortLabel(note.linkedDay) : '';
 
     return `
-      <article class="study-note-card ${note.pinned ? 'is-pinned' : ''}" data-swatch="${escapeHtml(swatch)}" data-note-card-id="${escapeHtml(note.id)}">
+      <article class="study-note-card ${note.pinned ? 'is-pinned' : ''}" data-swatch="${escapeHtml(swatch)}" data-note-card-id="${escapeHtml(note.id)}" data-open-note-modal="${escapeHtml(note.id)}" tabindex="0" role="button" aria-label="開啟筆記：${escapeHtml(note.title || '重點備忘')}">
         <div class="study-note-head">
           <div class="study-note-badges">
             <span class="subj-pill" data-swatch="${escapeHtml(swatch)}">${escapeHtml(note.subject || '一般事項')}</span>
             ${note.pinned ? `<span class="pin-badge">已釘選</span>` : ''}
           </div>
-          <div class="rail-day-meta">
-            <button type="button" class="quiet-text-btn" data-pin-note-id="${escapeHtml(note.id)}">${note.pinned ? '取消釘選' : '釘選置頂'}</button>
-            <button type="button" class="quiet-text-btn" data-del-note-id="${escapeHtml(note.id)}">刪除</button>
+          <div class="study-note-quick-actions">
+            ${resolvedNotion ? `<a href="${escapeHtml(resolvedNotion)}" target="_blank" rel="noopener noreferrer" class="notion-jump-pill" title="開啟此筆記綁定之 Notion 頁面">↗ Notion</a>` : ''}
+            ${linkedDayLabel ? `<button type="button" class="notion-jump-pill" data-jump-cal-day="${escapeHtml(note.linkedDay)}" title="跳轉至行事曆當日詳情">${escapeHtml(linkedDayLabel)}</button>` : ''}
           </div>
         </div>
-        <input
-          type="text"
-          class="study-note-title-input"
-          data-note-title-id="${escapeHtml(note.id)}"
-          value="${escapeHtml(note.title || '')}"
-          placeholder="備忘錄標題..."
-        />
-        <textarea
-          class="study-note-body-textarea"
-          data-note-body-id="${escapeHtml(note.id)}"
-          rows="4"
-          placeholder="輸入筆記內容..."
-        >${escapeHtml(note.content || '')}</textarea>
+        <h4 class="study-note-card-title">${escapeHtml(note.title || '未命名筆記')}</h4>
+        <p class="study-note-preview ${note.content && note.content.trim() ? '' : 'is-empty'}">${escapeHtml(note.content && note.content.trim() ? note.content.trim() : '點擊開啟筆記詳情頁進行編輯或綁定 Notion 連結...')}</p>
         <div class="study-note-foot">
-          <span class="mono-tabular">最後更新 ${escapeHtml(timeStr)}</span>
+          <span class="mono-tabular">${escapeHtml(timeStr)}</span>
+          <div class="study-note-foot-actions">
+            <button type="button" class="quiet-text-btn" data-open-note-modal="${escapeHtml(note.id)}">開啟頁面</button>
+            <button type="button" class="quiet-text-btn" data-pin-note-id="${escapeHtml(note.id)}">${note.pinned ? '取消釘選' : '釘選'}</button>
+            <button type="button" class="quiet-text-btn" data-del-note-id="${escapeHtml(note.id)}">刪除</button>
+          </div>
         </div>
       </article>
     `;
   }).join('');
+}
+
+function syncNotionNoteModalButtons(note) {
+  const pinBtn = document.getElementById('noteModalPinBtn');
+  const openNotionBtn = document.getElementById('noteModalOpenNotionBtn');
+  const jumpDayBtn = document.getElementById('noteModalJumpDayBtn');
+  const updatedLabelEl = document.getElementById('noteModalUpdatedLabel');
+  if (!note) return;
+
+  if (pinBtn) pinBtn.textContent = note.pinned ? '取消釘選' : '釘選置頂';
+  if (openNotionBtn) {
+    const safeUrl = resolveSafeNotionUrl(note.notionUrl || '') || extractFirstNotionUrl(`${note.title || ''} ${note.content || ''}`);
+    if (safeUrl) {
+      openNotionBtn.href = safeUrl;
+      openNotionBtn.classList.remove('hidden');
+    } else {
+      openNotionBtn.href = '#';
+      openNotionBtn.classList.add('hidden');
+    }
+  }
+  if (jumpDayBtn) {
+    if (note.linkedDay) {
+      jumpDayBtn.dataset.jumpCalDay = note.linkedDay;
+      jumpDayBtn.textContent = `跳轉行事曆 (${getLinkedDayShortLabel(note.linkedDay)})`;
+      jumpDayBtn.classList.remove('hidden');
+    } else {
+      jumpDayBtn.dataset.jumpCalDay = '';
+      jumpDayBtn.classList.add('hidden');
+    }
+  }
+  if (updatedLabelEl) {
+    const dt = note.updatedAt ? new Date(note.updatedAt) : null;
+    updatedLabelEl.textContent = dt && !Number.isNaN(dt.getTime())
+      ? `${dt.getMonth() + 1}/${dt.getDate()} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`
+      : '剛剛';
+  }
+}
+
+function openNotionNoteModal(noteId) {
+  const note = (appState && appState.studyNotes || []).find(n => n && n.id === noteId && !n.deleted);
+  const modal = document.getElementById('notionNoteModal');
+  if (!note || !modal) return;
+
+  currentEditingNoteModalId = noteId;
+  const badgeEl = document.getElementById('noteModalSubjectBadge');
+  const headingEl = document.getElementById('noteModalHeading');
+  const titleInp = document.getElementById('noteModalTitleInput');
+  const urlInp = document.getElementById('noteModalNotionUrlInput');
+  const daySel = document.getElementById('noteModalLinkedDaySelect');
+  const bodyTa = document.getElementById('noteModalBodyTextarea');
+
+  const swatch = getSubjectSwatchKey(note.subject);
+  if (badgeEl) {
+    badgeEl.dataset.swatch = swatch;
+    badgeEl.textContent = note.subject || '一般事項';
+  }
+  if (headingEl) headingEl.textContent = note.title || '筆記詳情頁';
+  if (titleInp) titleInp.value = note.title || '';
+  if (urlInp) urlInp.value = note.notionUrl || '';
+  if (daySel) populateLinkedDaySelectOptions(daySel, note.linkedDay || '');
+  if (bodyTa) bodyTa.value = note.content || '';
+  syncNotionNoteModalButtons(note);
+
+  modal.classList.remove('hidden');
+  if (titleInp) setTimeout(() => titleInp.focus(), 60);
+}
+
+function closeNotionNoteModal() {
+  const modal = document.getElementById('notionNoteModal');
+  if (modal) modal.classList.add('hidden');
+  currentEditingNoteModalId = null;
+  renderStudyNotesSection();
 }
 
 
@@ -6849,6 +7242,10 @@ function setupEventListeners() {
       if (dayModal && !dayModal.classList.contains('hidden')) {
         closeCalendarDayEditor();
       }
+      const noteModal = document.getElementById('notionNoteModal');
+      if (noteModal && !noteModal.classList.contains('hidden')) {
+        closeNotionNoteModal();
+      }
       const setModal = document.getElementById('settingsModal');
       if (setModal && !setModal.classList.contains('hidden')) {
         setModal.classList.add('hidden');
@@ -6947,6 +7344,119 @@ function setupEventListeners() {
   }
 
   // 17. 第三頁：備忘錄與目標 (Milestones & Study Notes) 互動處理
+  const milestoneStageFilterBar = document.getElementById('milestoneStageFilterBar');
+  if (milestoneStageFilterBar) {
+    milestoneStageFilterBar.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-ms-stage]');
+      if (!btn) return;
+      currentMilestoneStageFilter = btn.dataset.msStage || '';
+      renderMilestonesSection();
+    });
+  }
+
+  const notionQuickLinksSection = document.getElementById('notionQuickLinksSection');
+  const notionLinkUrlInput = document.getElementById('notionLinkUrlInput');
+  const saveNotionLinkTarget = (rawUrl) => {
+    if (!editingNotionLinkTarget || !appState) return;
+    const trimmed = String(rawUrl || '').trim();
+    const safeUrl = trimmed ? resolveSafeNotionUrl(trimmed) : '';
+    if (trimmed && !safeUrl) {
+      showToast('請輸入有效的 https:// 或 notion:// 網址');
+      return;
+    }
+    const nowTs = Date.now();
+    if (editingNotionLinkTarget === 'hub') {
+      appState.notionHubUrl = safeUrl;
+      appState.notionHubUrlUpdatedAt = nowTs;
+      appState.updatedAt = nowTs;
+      saveState();
+      if (currentRoomId && !isReceivingRemoteUpdate) {
+        broadcastRoomDelta({ kind: 'notionHubUrl', val: safeUrl, updatedAt: nowTs });
+      }
+      showToast(safeUrl ? '已綁定 Notion 讀書總部連結！' : '已清除 Notion 讀書總部連結');
+    } else {
+      const entity = (appState.subjects || []).find(s => s.id === editingNotionLinkTarget);
+      if (entity) {
+        entity.notionUrl = safeUrl;
+        entity.updatedAt = nowTs;
+        appState.updatedAt = nowTs;
+        saveState();
+        if (currentRoomId && !isReceivingRemoteUpdate) {
+          broadcastRoomDelta({
+            kind: 'subjectEntity',
+            id: entity.id,
+            name: entity.name,
+            swatch: entity.swatch,
+            examDate: entity.examDate,
+            notionUrl: safeUrl,
+            updatedAt: nowTs
+          });
+        }
+        showToast(safeUrl ? `已更新「${entity.name}」Notion 連結！` : `已清除「${entity.name}」Notion 連結`);
+      }
+    }
+    editingNotionLinkTarget = null;
+    renderNotionQuickLinksBar();
+  };
+
+  if (notionQuickLinksSection) {
+    notionQuickLinksSection.addEventListener('click', (e) => {
+      const editBtn = e.target.closest('[data-edit-notion-target]');
+      if (editBtn) {
+        const targetKey = editBtn.dataset.editNotionTarget;
+        editingNotionLinkTarget = editingNotionLinkTarget === targetKey ? null : targetKey;
+        renderNotionQuickLinksBar();
+        if (editingNotionLinkTarget && notionLinkUrlInput) {
+          setTimeout(() => {
+            notionLinkUrlInput.focus();
+            notionLinkUrlInput.select();
+          }, 30);
+        }
+        return;
+      }
+      const jumpDayBtn = e.target.closest('[data-jump-cal-day]');
+      if (jumpDayBtn && jumpDayBtn.dataset.jumpCalDay) {
+        openCalendarDayEditor(jumpDayBtn.dataset.jumpCalDay);
+        return;
+      }
+      const jumpCalTabBtn = e.target.closest('[data-jump-calendar-tab]');
+      if (jumpCalTabBtn) {
+        switchMainTab('calendar-schedule');
+      }
+    });
+  }
+
+  const saveNotionLinkBtn = document.getElementById('saveNotionLinkBtn');
+  const clearNotionLinkBtn = document.getElementById('clearNotionLinkBtn');
+  const cancelNotionLinkBtn = document.getElementById('cancelNotionLinkBtn');
+  if (saveNotionLinkBtn) {
+    saveNotionLinkBtn.addEventListener('click', () => {
+      saveNotionLinkTarget(notionLinkUrlInput ? notionLinkUrlInput.value : '');
+    });
+  }
+  if (clearNotionLinkBtn) {
+    clearNotionLinkBtn.addEventListener('click', () => {
+      saveNotionLinkTarget('');
+    });
+  }
+  if (cancelNotionLinkBtn) {
+    cancelNotionLinkBtn.addEventListener('click', () => {
+      editingNotionLinkTarget = null;
+      renderNotionQuickLinksBar();
+    });
+  }
+  if (notionLinkUrlInput) {
+    notionLinkUrlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveNotionLinkTarget(notionLinkUrlInput.value);
+      } else if (e.key === 'Escape') {
+        editingNotionLinkTarget = null;
+        renderNotionQuickLinksBar();
+      }
+    });
+  }
+
   const milestoneSubjectFilterBar = document.getElementById('milestoneSubjectFilterBar');
   if (milestoneSubjectFilterBar) {
     milestoneSubjectFilterBar.addEventListener('click', (e) => {
@@ -6962,6 +7472,7 @@ function setupEventListeners() {
   const milestoneTitleInput = document.getElementById('milestoneTitleInput');
   const milestoneSubjectSelect = document.getElementById('milestoneSubjectSelect');
   const milestonePhaseSelect = document.getElementById('milestonePhaseSelect');
+  const milestoneNotionUrlInput = document.getElementById('milestoneNotionUrlInput');
 
   const handleCreateMilestone = () => {
     const titleVal = milestoneTitleInput ? milestoneTitleInput.value.trim() : '';
@@ -6970,7 +7481,13 @@ function setupEventListeners() {
       return;
     }
     const subj = (milestoneSubjectSelect && milestoneSubjectSelect.value) ? milestoneSubjectSelect.value : (getSubjectEntities()[0] ? getSubjectEntities()[0].name : '其他');
-    const phaseId = (milestonePhaseSelect && milestonePhaseSelect.value) ? milestonePhaseSelect.value : 'phase1';
+    const phaseId = normalizeMilestoneStageId((milestonePhaseSelect && milestonePhaseSelect.value) ? milestonePhaseSelect.value : 'pre35');
+    const rawNotion = milestoneNotionUrlInput ? milestoneNotionUrlInput.value.trim() : '';
+    const safeNotion = rawNotion ? resolveSafeNotionUrl(rawNotion) : '';
+    if (rawNotion && !safeNotion) {
+      showToast('Notion 網址格式不支援，請以 https:// 或 notion:// 開頭');
+      return;
+    }
     const nowTs = Date.now();
     if (!Array.isArray(appState.milestones)) appState.milestones = [];
     appState.milestones.push({
@@ -6979,14 +7496,18 @@ function setupEventListeners() {
       phaseId,
       title: titleVal,
       subItems: [],
+      notionUrl: safeNotion,
+      linkedDay: '',
       updatedAt: nowTs,
       deleted: false
     });
     appState.updatedAt = nowTs;
     if (milestoneTitleInput) milestoneTitleInput.value = '';
+    if (milestoneNotionUrlInput) milestoneNotionUrlInput.value = '';
     saveState();
     renderMilestonesSection();
-    showToast(`已新增里程碑：${subj} — ${titleVal}`);
+    const stageName = phaseId === 'post35' ? '35天以後' : '35天以前';
+    showToast(`已新增 ${stageName} 目標：${subj} — ${titleVal}`);
   };
 
   if (addMilestoneBtn) {
@@ -7004,6 +7525,18 @@ function setupEventListeners() {
   const milestonesGrid = document.getElementById('milestonesGrid');
   if (milestonesGrid) {
     milestonesGrid.addEventListener('click', (e) => {
+      const toggleSubBtn = e.target.closest('[data-toggle-subadd-ms]');
+      if (toggleSubBtn) {
+        const msId = toggleSubBtn.dataset.toggleSubaddMs;
+        openSubAddMilestoneId = (openSubAddMilestoneId === msId) ? null : msId;
+        renderMilestonesSection();
+        if (openSubAddMilestoneId) {
+          const inp = milestonesGrid.querySelector(`input[data-subadd-input-ms="${CSS.escape(msId)}"]`);
+          if (inp) setTimeout(() => inp.focus(), 20);
+        }
+        return;
+      }
+
       const delMsBtn = e.target.closest('[data-del-ms-id]');
       if (delMsBtn) {
         const msId = delMsBtn.dataset.delMsId;
@@ -7015,7 +7548,7 @@ function setupEventListeners() {
           appState.updatedAt = nowTs;
           saveState();
           renderMilestonesSection();
-          showToast('已刪除里程碑');
+          showToast('已刪除目標');
         }
         return;
       }
@@ -7145,6 +7678,8 @@ function setupEventListeners() {
   const addStudyNoteBtn = document.getElementById('addStudyNoteBtn');
   const noteCategorySelect = document.getElementById('noteCategorySelect');
   const noteTitleInput = document.getElementById('noteTitleInput');
+  const noteNotionUrlInput = document.getElementById('noteNotionUrlInput');
+  const noteLinkedDaySelect = document.getElementById('noteLinkedDaySelect');
   const noteContentInput = document.getElementById('noteContentInput');
   const notePinCheckbox = document.getElementById('notePinCheckbox');
 
@@ -7152,19 +7687,28 @@ function setupEventListeners() {
     addStudyNoteBtn.addEventListener('click', () => {
       const titleVal = noteTitleInput ? noteTitleInput.value.trim() : '';
       const contentVal = noteContentInput ? noteContentInput.value.trim() : '';
-      if (!titleVal && !contentVal) {
-        showToast('請輸入備忘錄標題或內容');
+      const rawNotion = noteNotionUrlInput ? noteNotionUrlInput.value.trim() : '';
+      const safeNotion = rawNotion ? resolveSafeNotionUrl(rawNotion) : '';
+      if (rawNotion && !safeNotion) {
+        showToast('Notion 網址格式不支援，請以 https:// 或 notion:// 開頭');
+        return;
+      }
+      if (!titleVal && !contentVal && !safeNotion) {
+        showToast('請輸入備忘錄標題、內容或 Notion 連結');
         return;
       }
       const cat = (noteCategorySelect && noteCategorySelect.value) ? noteCategorySelect.value : '一般事項';
+      const linkedDay = (noteLinkedDaySelect && noteLinkedDaySelect.value) ? noteLinkedDaySelect.value : '';
       const pinned = Boolean(notePinCheckbox && notePinCheckbox.checked);
       const nowTs = Date.now();
       if (!Array.isArray(appState.studyNotes)) appState.studyNotes = [];
       appState.studyNotes.unshift({
         id: `sn_${nowTs}_${Math.random().toString(36).slice(2, 7)}`,
         subject: cat,
-        title: titleVal || '重點備忘',
+        title: titleVal || (safeNotion ? 'Notion 連結筆記' : '重點備忘'),
         content: contentVal,
+        notionUrl: safeNotion,
+        linkedDay,
         pinned,
         createdAt: nowTs,
         updatedAt: nowTs,
@@ -7172,17 +7716,29 @@ function setupEventListeners() {
       });
       appState.updatedAt = nowTs;
       if (noteTitleInput) noteTitleInput.value = '';
+      if (noteNotionUrlInput) noteNotionUrlInput.value = '';
+      if (noteLinkedDaySelect) noteLinkedDaySelect.value = '';
       if (noteContentInput) noteContentInput.value = '';
       if (notePinCheckbox) notePinCheckbox.checked = false;
       saveState();
       renderStudyNotesSection();
-      showToast(`已新增「${cat}」備忘錄筆記！`);
+      showToast(`已新增「${cat}」備忘錄！`);
     });
   }
 
   const studyNotesGrid = document.getElementById('studyNotesGrid');
   if (studyNotesGrid) {
     studyNotesGrid.addEventListener('click', (e) => {
+      if (e.target.closest('a.notion-jump-pill')) {
+        return; // 讓瀏覽器直接開啟外部 Notion 分頁，不觸發卡片彈窗
+      }
+
+      const jumpDayBtn = e.target.closest('[data-jump-cal-day]');
+      if (jumpDayBtn && jumpDayBtn.dataset.jumpCalDay) {
+        openCalendarDayEditor(jumpDayBtn.dataset.jumpCalDay);
+        return;
+      }
+
       const pinBtn = e.target.closest('[data-pin-note-id]');
       if (pinBtn) {
         const noteId = pinBtn.dataset.pinNoteId;
@@ -7212,35 +7768,112 @@ function setupEventListeners() {
           renderStudyNotesSection();
           showToast('已刪除此則備忘錄');
         }
+        return;
+      }
+
+      const openTrigger = e.target.closest('[data-open-note-modal]');
+      if (openTrigger && openTrigger.dataset.openNoteModal) {
+        openNotionNoteModal(openTrigger.dataset.openNoteModal);
       }
     });
 
-    studyNotesGrid.addEventListener('input', (e) => {
-      const titleInp = e.target.closest('[data-note-title-id]');
-      if (titleInp) {
-        const noteId = titleInp.dataset.noteTitleId;
-        const note = (appState.studyNotes || []).find(n => n && n.id === noteId && !n.deleted);
-        if (note) {
-          const nowTs = Date.now();
-          note.title = titleInp.value;
-          note.updatedAt = nowTs;
-          appState.updatedAt = nowTs;
-          saveState();
-        }
-        return;
+    studyNotesGrid.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset && e.target.dataset.openNoteModal) {
+        e.preventDefault();
+        openNotionNoteModal(e.target.dataset.openNoteModal);
       }
-      const bodyInp = e.target.closest('[data-note-body-id]');
-      if (bodyInp) {
-        const noteId = bodyInp.dataset.noteBodyId;
-        const note = (appState.studyNotes || []).find(n => n && n.id === noteId && !n.deleted);
-        if (note) {
-          const nowTs = Date.now();
-          note.content = bodyInp.value;
-          note.updatedAt = nowTs;
-          appState.updatedAt = nowTs;
-          saveState();
-        }
-      }
+    });
+  }
+
+  // Notion 風格筆記詳情彈窗事件
+  const notionNoteModal = document.getElementById('notionNoteModal');
+  const closeNotionNoteModalBtn = document.getElementById('closeNotionNoteModalBtn');
+  const noteModalDoneBtn = document.getElementById('noteModalDoneBtn');
+  const noteModalPinBtn = document.getElementById('noteModalPinBtn');
+  const noteModalJumpDayBtn = document.getElementById('noteModalJumpDayBtn');
+  const noteModalDeleteBtn = document.getElementById('noteModalDeleteBtn');
+  const noteModalTitleInput = document.getElementById('noteModalTitleInput');
+  const noteModalNotionUrlInput = document.getElementById('noteModalNotionUrlInput');
+  const noteModalLinkedDaySelect = document.getElementById('noteModalLinkedDaySelect');
+  const noteModalBodyTextarea = document.getElementById('noteModalBodyTextarea');
+
+  if (closeNotionNoteModalBtn) {
+    closeNotionNoteModalBtn.addEventListener('click', closeNotionNoteModal);
+  }
+  if (noteModalDoneBtn) {
+    noteModalDoneBtn.addEventListener('click', closeNotionNoteModal);
+  }
+  if (notionNoteModal) {
+    notionNoteModal.addEventListener('click', (e) => {
+      if (e.target === notionNoteModal) closeNotionNoteModal();
+    });
+  }
+  if (noteModalPinBtn) {
+    noteModalPinBtn.addEventListener('click', () => {
+      const note = (appState.studyNotes || []).find(n => n && n.id === currentEditingNoteModalId && !n.deleted);
+      if (!note) return;
+      const nowTs = Date.now();
+      note.pinned = !note.pinned;
+      note.updatedAt = nowTs;
+      appState.updatedAt = nowTs;
+      syncNotionNoteModalButtons(note);
+      saveState();
+      renderStudyNotesSection();
+    });
+  }
+  if (noteModalJumpDayBtn) {
+    noteModalJumpDayBtn.addEventListener('click', () => {
+      const dayKey = noteModalJumpDayBtn.dataset.jumpCalDay;
+      if (!dayKey) return;
+      closeNotionNoteModal();
+      openCalendarDayEditor(dayKey);
+    });
+  }
+  if (noteModalDeleteBtn) {
+    noteModalDeleteBtn.addEventListener('click', () => {
+      const note = (appState.studyNotes || []).find(n => n && n.id === currentEditingNoteModalId && !n.deleted);
+      if (!note) return;
+      const nowTs = Date.now();
+      note.deleted = true;
+      note.updatedAt = nowTs;
+      appState.updatedAt = nowTs;
+      saveState();
+      closeNotionNoteModal();
+      showToast('已刪除此則備忘錄');
+    });
+  }
+  const updateModalNoteField = (updater) => {
+    const note = (appState.studyNotes || []).find(n => n && n.id === currentEditingNoteModalId && !n.deleted);
+    if (!note) return;
+    const nowTs = Date.now();
+    updater(note);
+    note.updatedAt = nowTs;
+    appState.updatedAt = nowTs;
+    syncNotionNoteModalButtons(note);
+    saveState();
+  };
+  if (noteModalTitleInput) {
+    noteModalTitleInput.addEventListener('input', (e) => {
+      updateModalNoteField(n => { n.title = e.target.value; });
+      const headingEl = document.getElementById('noteModalHeading');
+      if (headingEl) headingEl.textContent = e.target.value || '筆記詳情頁';
+    });
+  }
+  if (noteModalNotionUrlInput) {
+    noteModalNotionUrlInput.addEventListener('input', (e) => {
+      const raw = e.target.value.trim();
+      const safe = raw ? resolveSafeNotionUrl(raw) : '';
+      updateModalNoteField(n => { n.notionUrl = safe || raw; });
+    });
+  }
+  if (noteModalLinkedDaySelect) {
+    noteModalLinkedDaySelect.addEventListener('change', (e) => {
+      updateModalNoteField(n => { n.linkedDay = e.target.value; });
+    });
+  }
+  if (noteModalBodyTextarea) {
+    noteModalBodyTextarea.addEventListener('input', (e) => {
+      updateModalNoteField(n => { n.content = e.target.value; });
     });
   }
 }
@@ -7521,6 +8154,8 @@ function compactState(st) {
     sub: st.sectionSubtitles || null,
     subu: st.subtitlesUpdatedAt || 0,
     sbj: Array.isArray(st.subjects) ? st.subjects : null,
+    nhu: st.notionHubUrl || '',
+    nhuu: st.notionHubUrlUpdatedAt || 0,
     ms: Array.isArray(st.milestones) ? st.milestones : [],
     sn: Array.isArray(st.studyNotes) ? st.studyNotes : [],
     u: st.updatedAt || Date.now()
@@ -7597,6 +8232,8 @@ function unpackCompactState(compact) {
     planTitleUpdatedAt: Number(compact.ptu) || 0,
     sectionSubtitles: compact.sub || undefined,
     subtitlesUpdatedAt: Number(compact.subu) || 0,
+    notionHubUrl: typeof compact.nhu === 'string' ? compact.nhu.trim() : '',
+    notionHubUrlUpdatedAt: Number(compact.nhuu) || 0,
     subjects: Array.isArray(compact.sbj) ? compact.sbj : undefined,
     milestones: Array.isArray(compact.ms) ? compact.ms : undefined,
     studyNotes: Array.isArray(compact.sn) ? compact.sn : undefined,
@@ -7724,15 +8361,30 @@ function mergeRemoteState(remote) {
           if (rSubj.examDate && (rSubjTs > lSubjTs || !localSubj.examDate)) {
             localSubj.examDate = rSubj.examDate;
           }
+          if (typeof rSubj.notionUrl === 'string' && (rSubjTs > lSubjTs || !localSubj.notionUrl)) {
+            localSubj.notionUrl = rSubj.notionUrl.trim();
+          }
           localSubj.updatedAt = rSubjTs || lSubjTs;
         }
       }
     });
   }
 
-  // 合併階段性里程碑 (milestones) 與分科備忘錄 (studyNotes)
+  const rNhuTs = Number(remote.notionHubUrlUpdatedAt) || 0;
+  const lNhuTs = Number(appState.notionHubUrlUpdatedAt) || 0;
+  if (rNhuTs > lNhuTs || (rNhuTs === lNhuTs && lNhuTs === 0 && !appState.notionHubUrl && Boolean(remote.notionHubUrl))) {
+    appState.notionHubUrl = typeof remote.notionHubUrl === 'string' ? remote.notionHubUrl.trim() : '';
+    appState.notionHubUrlUpdatedAt = rNhuTs;
+  }
+
+  // 合併階段性里程碑 (milestones) 與分科備忘錄 (studyNotes)（先經正規化確保舊三階段無損對應雙階段）
   if (Array.isArray(remote.milestones)) {
-    appState.milestones = mergeTimestampedIdArray(appState.milestones, remote.milestones);
+    const normalizedRemoteMs = normalizeMilestonesList(remote.milestones, appState.goals, appState.phases);
+    appState.milestones = normalizeMilestonesList(
+      mergeTimestampedIdArray(appState.milestones, normalizedRemoteMs),
+      appState.goals,
+      appState.phases
+    );
   }
   if (Array.isArray(remote.studyNotes)) {
     appState.studyNotes = mergeTimestampedIdArray(appState.studyNotes, remote.studyNotes);
@@ -8477,6 +9129,9 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
         if (typeof p.examDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.examDate.trim())) {
           entity.examDate = p.examDate.trim();
         }
+        if (typeof p.notionUrl === 'string') {
+          entity.notionUrl = p.notionUrl.trim();
+        }
         entity.updatedAt = eventTs;
         appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
         renderEditableMetadataDom();
@@ -8485,6 +9140,14 @@ function handleRoomIncomingMessage(msg, isHistoryReplay = false) {
         renderMemoGoalsView();
         renderFullDashboard();
         updateActiveTimerBanner();
+        saveState(false, false);
+      }
+    } else if (p.kind === 'notionHubUrl') {
+      if (eventTs >= (appState.notionHubUrlUpdatedAt || 0)) {
+        appState.notionHubUrl = typeof p.val === 'string' ? p.val.trim() : '';
+        appState.notionHubUrlUpdatedAt = eventTs;
+        appState.updatedAt = Math.max(appState.updatedAt || 0, eventTs);
+        renderMemoGoalsView();
         saveState(false, false);
       }
     }
@@ -8996,7 +9659,7 @@ if (typeof document !== 'undefined') {
   // 註冊 PWA Service Worker (支援離線秒開與快取)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js?v=20261117_v19').then((reg) => {
+      navigator.serviceWorker.register('sw.js?v=20261117_v20').then((reg) => {
         console.log('PWA ServiceWorker registered:', reg.scope);
       }).catch((err) => {
         console.warn('PWA registration warning:', err);
