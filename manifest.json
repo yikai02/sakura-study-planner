@@ -1,13 +1,13 @@
 {
-  "name": "小櫻讀書計劃表 🌸",
+  "name": "小櫻讀書計劃表",
   "short_name": "小櫻讀書",
   "description": "85天衝刺讀書計劃與 YPT 專注計時儀表板",
   "start_url": "./?room=sakura-study-2026",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#FAF7F5",
-  "theme_color": "#DF768B",
+  "background_color": "#F4F1EA",
+  "theme_color": "#1E2D40",
   "icons": [
     {
       "src": "icons/icon-192.png",

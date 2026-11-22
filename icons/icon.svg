@@ -1,29 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FFF0F3"/>
-      <stop offset="100%" stop-color="#FCECEF"/>
-    </linearGradient>
-    <linearGradient id="petalGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FF9EAF"/>
-      <stop offset="100%" stop-color="#DF768B"/>
-    </linearGradient>
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#A64458" flood-opacity="0.2"/>
-    </filter>
-  </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="#F7D6DD" stroke-width="6"/>
-  <g transform="translate(256, 245)" filter="url(#shadow)">
-    <!-- 5 Sakura Petals -->
-    <path d="M 0 -130 C 35 -145, 60 -110, 35 -70 C 20 -40, 0 0, 0 0 C 0 0, -20 -40, -35 -70 C -60 -110, -35 -145, 0 -130 Z" fill="url(#petalGrad)"/>
-    <path d="M 0 -130 C 35 -145, 60 -110, 35 -70 C 20 -40, 0 0, 0 0 C 0 0, -20 -40, -35 -70 C -60 -110, -35 -145, 0 -130 Z" fill="url(#petalGrad)" transform="rotate(72)"/>
-    <path d="M 0 -130 C 35 -145, 60 -110, 35 -70 C 20 -40, 0 0, 0 0 C 0 0, -20 -40, -35 -70 C -60 -110, -35 -145, 0 -130 Z" fill="url(#petalGrad)" transform="rotate(144)"/>
-    <path d="M 0 -130 C 35 -145, 60 -110, 35 -70 C 20 -40, 0 0, 0 0 C 0 0, -20 -40, -35 -70 C -60 -110, -35 -145, 0 -130 Z" fill="url(#petalGrad)" transform="rotate(216)"/>
-    <path d="M 0 -130 C 35 -145, 60 -110, 35 -70 C 20 -40, 0 0, 0 0 C 0 0, -20 -40, -35 -70 C -60 -110, -35 -145, 0 -130 Z" fill="url(#petalGrad)" transform="rotate(288)"/>
-    <!-- Blossom Center Pistil -->
-    <circle cx="0" cy="0" r="28" fill="#FFF8F9"/>
-    <circle cx="0" cy="0" r="16" fill="#FCECEF" stroke="#DF768B" stroke-width="3"/>
-  </g>
-  <text x="256" y="445" font-family="-apple-system, sans-serif" font-weight="bold" font-size="38" text-anchor="middle" fill="#A64458" letter-spacing="4">小櫻讀書</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#F4F1EA"/>
+  <rect x="208" y="168" width="608" height="688" rx="48" fill="#1E2D40"/>
+  <path d="M256,168 H320 V856 H256 A48,48 0 0 1 208,808 V216 A48,48 0 0 1 256,168 Z" fill="#131F2E"/>
+  <rect x="320" y="168" width="10" height="688" fill="#324761"/>
+  <polygon points="672,168 748,168 748,344 710,304 672,344" fill="#C06C47"/>
+  <circle cx="568" cy="444" r="118" fill="none" stroke="#F7F4EE" stroke-width="32" stroke-dasharray="586 156" transform="rotate(-90 568 444)"/>
+  <circle cx="568" cy="444" r="118" fill="none" stroke="#C06C47" stroke-width="32" stroke-dasharray="156 586" stroke-dashoffset="-586" transform="rotate(-90 568 444)"/>
+  <line x1="568" y1="444" x2="568" y2="380" stroke="#F7F4EE" stroke-width="22" stroke-linecap="round"/>
+  <line x1="568" y1="444" x2="614" y2="408" stroke="#C06C47" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="568" cy="444" r="16" fill="#F7F4EE"/>
+  <rect x="404" y="646" width="38" height="38" rx="8" fill="#C06C47"/>
+  <rect x="470" y="650" width="262" height="30" rx="8" fill="#F7F4EE"/>
+  <rect x="404" y="720" width="38" height="38" rx="8" fill="#324761"/>
+  <rect x="470" y="724" width="208" height="30" rx="8" fill="#B6C0CC"/>
 </svg>
